@@ -10,7 +10,7 @@ def test_hello(capsys) -> None:  # type: ignore[no-untyped-def]
     assert main(["hello"]) == 0
     output = capsys.readouterr().out
     assert "Synthetic Data Agent" in output
-    assert "built article by article" in output
+    assert "orchestrates" in output
 
 
 def test_version(capsys) -> None:  # type: ignore[no-untyped-def]
@@ -22,3 +22,14 @@ def test_config(capsys) -> None:  # type: ignore[no-untyped-def]
     assert main(["config"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["environment"] == "dev"
+
+
+def test_design_demo(capsys) -> None:  # type: ignore[no-untyped-def]
+    assert main(["design-demo"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["stage"] == "plan_drafted"
+    assert payload["request"]["source"]["tables"] == [
+        "customers",
+        "accounts",
+        "transactions",
+    ]

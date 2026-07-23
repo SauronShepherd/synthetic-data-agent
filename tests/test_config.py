@@ -27,10 +27,10 @@ def test_environment_overrides() -> None:
     }
 
 
-@pytest.mark.parametrize("value", ["local", "production", ""])
-def test_invalid_environment(value: str) -> None:
-    with pytest.raises(ValueError, match="SDA_ENVIRONMENT"):
-        Settings.from_env({"SDA_ENVIRONMENT": value})
+def test_invalid_environment() -> None:
+    for value in ("local", "production", ""):
+        with pytest.raises(ValueError, match="SDA_ENVIRONMENT"):
+            Settings.from_env({"SDA_ENVIRONMENT": value})
 
 
 def test_invalid_log_level() -> None:

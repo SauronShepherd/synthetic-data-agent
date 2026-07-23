@@ -1,26 +1,55 @@
-# Architecture baseline — Article 01
+# Architecture — Article 02
 
-Article 01 establishes the mission and the repository baseline. It does not implement the future Databricks system yet.
+Article 02 turns the mission from Article 01 into explicit software boundaries. The central rule is:
 
-## Intended system direction
+> The agent orchestrates. Deterministic tools calculate facts and execute work.
 
-The completed Synthetic Data Agent will coordinate deterministic tools that:
+The implementation in this branch is intentionally a **design executable**, not a data generator. It introduces typed contracts, tool protocols, an auditable state object, and a guarded orchestration sequence. It does not connect to Databricks or inspect real data yet.
 
-1. discover governed source assets through Unity Catalog;
-2. profile distributions, nulls, formats, and outliers;
-3. validate keys and table relationships;
-4. capture cross-column patterns and business rules;
-5. build an approved generation plan;
-6. generate synthetic tables;
-7. validate usefulness, integrity, and safety;
-8. publish approved outputs into governed destinations.
+## Responsibility map
 
-The agent will orchestrate and explain. Deterministic tools will calculate and execute. Governance, state, validation, and explicit approvals will remain first-class concerns.
+| Component | Owns | Does not own |
+|---|---|---|
+| Agent/orchestrator | Request normalization, routing, state transitions, explanations | Statistics, Spark execution, governance enforcement |
+| Deterministic tools | Metadata reads, profiling, relationship checks, planning, generation, validation, publishing | User-facing reasoning or silent policy decisions |
+| Unity Catalog | Governed source and destination boundaries | Operational conversation memory |
+| Lakebase / metadata stores | Requests, run state, checkpoints, approvals, artifact references | Large analytical profiles or generated tables |
+| Validator | Measurable quality gates before publication | Optimistic approval because a job completed |
 
-## Scope in this branch
+## Designed workflow
 
-This branch contains only an installable Python package, configuration, logging, a CLI, tests, static analysis, and CI. Databricks SDKs, Spark, Unity Catalog access, agents, generation, and validation are intentionally deferred.
+```text
+Request
+  -> Metadata discovery
+  -> Profiling
+  -> Relationship mapping
+  -> Generation plan
+  -> Generation
+  -> Validation
+  -> Publication
+  -> Explanation
+```
+
+This branch executes only through `PLAN_DRAFTED`. Later article branches replace each design stub with its actual deterministic implementation.
+
+## Core contracts
+
+- `GenerationRequest`: normalized intent, source scope, scale, privacy mode, and destination.
+- `AgentState`: current stage, artifact references, warnings, and completed tools.
+- `AgentTool`: protocol for deterministic tools.
+- `ToolResult`: auditable output with artifacts, metrics, and warnings.
+- `SyntheticDataAgent`: validates transitions and coordinates tools.
+
+## Safety properties already enforced
+
+- A request requires an explicit catalog, schema, and table list.
+- Scale factors must be positive.
+- Target catalog and schema are configured together.
+- Workflow stages cannot be skipped.
+- Only the expected tool may produce a protected stage.
+- Intermediate artifacts and warnings remain attached to state.
+- Generation does not occur in Article 02.
 
 ## Article reference
 
-[SDA 01: Why Build a Synthetic Data Agent on Databricks?](https://medium.com/towards-data-engineering/sda-01-why-build-a-synthetic-data-agent-on-databricks-1c1b4e0738b7)
+This implementation follows **SDA 02: Designing the Synthetic Data Agent**, especially its separation of agent reasoning, deterministic tools, persistent state, validation, and governed publication.

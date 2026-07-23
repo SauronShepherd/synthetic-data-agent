@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synthetic-data-agent"
-version = "0.1.1"
-description = "Article-by-article foundation for a governed Synthetic Data Agent on Databricks."
+version = "0.2.0"
+description = "Architecture contracts and orchestration foundation for a governed Synthetic Data Agent on Databricks."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -33,11 +33,16 @@ pythonpath = ["src"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sda"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 files = ["src", "tests"]
+follow_imports = "skip"
