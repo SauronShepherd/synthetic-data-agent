@@ -9,3 +9,6 @@ build/
 dist/
 .idea/
 .vscode/
+.databricks/
+*.log
+.env

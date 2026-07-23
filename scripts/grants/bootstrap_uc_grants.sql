@@ -1,0 +1,21 @@
+-- Optional reference only.
+--
+-- The dev bootstrap job now prepares its own catalog, schemas, and sample table
+-- automatically when the run identity has the required Unity Catalog privileges.
+-- You do not need to run this file manually for the normal dev smoke test.
+--
+-- Keep this file as a reference for staging/prod platform setup, where catalog and
+-- schema ownership should usually be provisioned through your approved platform
+-- process rather than by the bootstrap job.
+
+-- Example controlled setup:
+-- CREATE CATALOG IF NOT EXISTS sda_dev;
+-- CREATE SCHEMA IF NOT EXISTS sda_dev.sample_source;
+-- CREATE SCHEMA IF NOT EXISTS sda_dev.sandbox;
+--
+-- GRANT USE CATALOG ON CATALOG sda_dev TO `sda-runtime-sp`;
+-- GRANT USE SCHEMA ON SCHEMA sda_dev.sample_source TO `sda-runtime-sp`;
+-- GRANT SELECT ON SCHEMA sda_dev.sample_source TO `sda-runtime-sp`;
+-- GRANT USE SCHEMA ON SCHEMA sda_dev.sandbox TO `sda-runtime-sp`;
+-- GRANT CREATE TABLE ON SCHEMA sda_dev.sandbox TO `sda-runtime-sp`;
+-- GRANT MODIFY ON SCHEMA sda_dev.sandbox TO `sda-runtime-sp`;

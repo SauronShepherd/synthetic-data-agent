@@ -1,0 +1,42 @@
+bundle:
+  name: synthetic-data-agent
+  databricks_cli_version: ">= 0.250.0"
+
+include:
+  - bundle/resources.yml
+  - bundle/targets/*.yml
+
+variables:
+  catalog_name:
+    description: Unity Catalog catalog used by the bootstrap workflow.
+    default: sda_dev
+  source_schema_name:
+    description: Source schema inspected by the bootstrap workflow.
+    default: sample_source
+  output_schema_name:
+    description: Output schema reserved for future synthetic assets.
+    default: sandbox
+  auto_create_uc_objects:
+    description: Create the bootstrap catalog, schemas, and sample source table automatically when the run identity has privileges.
+    default: "true"
+  seed_sample_data:
+    description: Create a tiny sample source table for the first discovery run.
+    default: "true"
+  allow_catalog_fallback:
+    description: In dev, fall back to the first visible catalog/schema if automatic creation is not permitted.
+    default: "true"
+  developer_group_name:
+    description: Group that can manage development bundle resources.
+    default: users
+  platform_admin_group_name:
+    description: Group that can manage staging and production bundle resources.
+    default: users
+  operator_group_name:
+    description: Group allowed to run controlled staging and production workflows.
+    default: users
+  observer_group_name:
+    description: Group allowed to view controlled staging and production workflows.
+    default: users
+  runtime_service_principal_name:
+    description: Service principal application ID used as the staging/prod run identity.
+    default: dummy-service-principal-for-dev

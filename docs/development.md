@@ -1,6 +1,8 @@
-# Development guide — Article 02
+# Development guide — Article 03
 
-## Windows PowerShell
+Article 03 adds the Databricks bootstrap layer while keeping local development simple. Local checks validate the Python contracts. Databricks checks validate the real workspace path.
+
+## Local development
 
 ```powershell
 python -m venv .venv
@@ -12,7 +14,7 @@ mypy src tests
 pytest
 ```
 
-## Commands
+## Local CLI commands
 
 ```powershell
 sda hello
@@ -21,23 +23,33 @@ sda config
 sda design-demo
 ```
 
-`design-demo` runs a deterministic architecture simulation for:
+`design-demo` still runs the Article 02 in-memory orchestration simulation and stops at `plan_drafted`.
 
-```text
-customers -> accounts -> transactions
+## Databricks development loop
+
+From the repository root:
+
+```powershell
+databricks bundle validate -t dev
+databricks bundle plan -t dev
+databricks bundle deploy -t dev
+databricks bundle run bootstrap_check -t dev
+databricks bundle summary -t dev
 ```
 
-It stops at `plan_drafted`. No Databricks connection is made and no synthetic rows are generated.
+Use the explicit `-t` target flag even when `dev` is the default. The habit matters once staging and production exist. The development job prepares its own Unity Catalog bootstrap objects when your run identity has the required privileges; otherwise it falls back to a visible catalog/schema for the smoke test.
 
 ## Branch milestone
 
-Suggested branch: `feature/article-02-agent-design`  
-Suggested tag after merge: `article-02`
-## Type-checking third-party packages
+Suggested branch: `feature/article-03-databricks-bootstrap`
+Suggested tag after merge: `article-03`
 
-The project type-checks its own `src` and `tests` trees. Mypy is configured with
-`follow_imports = "skip"` so it does not recursively parse unrelated typed packages
-from the active virtual environment. This prevents environment-specific packages
-(such as NumPy pulled in by another tool) from breaking SDA checks while the SDA
-source itself remains checked in strict mode.
+## What belongs where
 
+- `src/sda/`: reusable, testable Python logic.
+- `notebooks/`: thin Databricks job entry points.
+- `bundle/`: Databricks resource and target declarations.
+- `scripts/grants/`: optional reference SQL for controlled staging/prod setup.
+- `docs/`: architecture and operational notes.
+
+Do not put long-term business logic directly in notebooks. The bootstrap notebook is a wrapper around small Python contracts and the first Unity Catalog metadata check.

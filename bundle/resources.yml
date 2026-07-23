@@ -1,0 +1,36 @@
+resources:
+  jobs:
+    bootstrap_check:
+      name: sda-${bundle.target}-bootstrap-check
+      max_concurrent_runs: 1
+      tags:
+        project: synthetic-data-agent
+        article: sda-03
+        target: ${bundle.target}
+      parameters:
+        - name: catalog_name
+          default: ${var.catalog_name}
+        - name: schema_name
+          default: ${var.output_schema_name}
+        - name: source_schema_name
+          default: ${var.source_schema_name}
+        - name: target_environment
+          default: ${bundle.target}
+        - name: auto_create_uc_objects
+          default: ${var.auto_create_uc_objects}
+        - name: seed_sample_data
+          default: ${var.seed_sample_data}
+        - name: allow_catalog_fallback
+          default: ${var.allow_catalog_fallback}
+      tasks:
+        - task_key: bootstrap_check
+          notebook_task:
+            notebook_path: ../notebooks/00_bootstrap_check.py
+            base_parameters:
+              catalog_name: ${var.catalog_name}
+              schema_name: ${var.output_schema_name}
+              source_schema_name: ${var.source_schema_name}
+              target_environment: ${bundle.target}
+              auto_create_uc_objects: ${var.auto_create_uc_objects}
+              seed_sample_data: ${var.seed_sample_data}
+              allow_catalog_fallback: ${var.allow_catalog_fallback}

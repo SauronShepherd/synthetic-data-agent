@@ -1,55 +1,68 @@
-# Architecture — Article 02
+# Architecture — Article 03
 
-Article 02 turns the mission from Article 01 into explicit software boundaries. The central rule is:
+Article 03 gives the Synthetic Data Agent a deployable Databricks home. The project still follows the Article 02 design principle:
 
 > The agent orchestrates. Deterministic tools calculate facts and execute work.
 
-The implementation in this branch is intentionally a **design executable**, not a data generator. It introduces typed contracts, tool protocols, an auditable state object, and a guarded orchestration sequence. It does not connect to Databricks or inspect real data yet.
+This milestone adds the delivery layer that future deterministic tools will use.
 
-## Responsibility map
-
-| Component | Owns | Does not own |
-|---|---|---|
-| Agent/orchestrator | Request normalization, routing, state transitions, explanations | Statistics, Spark execution, governance enforcement |
-| Deterministic tools | Metadata reads, profiling, relationship checks, planning, generation, validation, publishing | User-facing reasoning or silent policy decisions |
-| Unity Catalog | Governed source and destination boundaries | Operational conversation memory |
-| Lakebase / metadata stores | Requests, run state, checkpoints, approvals, artifact references | Large analytical profiles or generated tables |
-| Validator | Measurable quality gates before publication | Optimistic approval because a job completed |
-
-## Designed workflow
+## Runtime path
 
 ```text
-Request
-  -> Metadata discovery
-  -> Profiling
-  -> Relationship mapping
-  -> Generation plan
-  -> Generation
-  -> Validation
-  -> Publication
-  -> Explanation
+Git repository
+  -> Declarative Automation Bundle
+  -> Databricks workspace job
+  -> bootstrap notebook
+  -> Unity Catalog information_schema
+  -> structured discovery summary
 ```
 
-This branch executes only through `PLAN_DRAFTED`. Later article branches replace each design stub with its actual deterministic implementation.
+## Bundle responsibilities
 
-## Core contracts
+The bundle now owns:
 
-- `GenerationRequest`: normalized intent, source scope, scale, privacy mode, and destination.
-- `AgentState`: current stage, artifact references, warnings, and completed tools.
-- `AgentTool`: protocol for deterministic tools.
-- `ToolResult`: auditable output with artifacts, metrics, and warnings.
-- `SyntheticDataAgent`: validates transitions and coordinates tools.
+- deployment targets: `dev`, `staging`, and `prod`;
+- workflow resources: `bootstrap_check`;
+- environment variables for catalogs and schemas;
+- resource permissions;
+- staging/prod run identity;
+- controlled workspace paths.
 
-## Safety properties already enforced
+The bundle does not own Unity Catalog data privileges. Those remain explicit platform grants handled through SQL, Terraform, or another approved provisioning layer.
 
-- A request requires an explicit catalog, schema, and table list.
-- Scale factors must be positive.
-- Target catalog and schema are configured together.
-- Workflow stages cannot be skipped.
-- Only the expected tool may produce a protected stage.
-- Intermediate artifacts and warnings remain attached to state.
-- Generation does not occur in Article 02.
+## First workflow
 
-## Article reference
+`bootstrap_check` proves that the platform path works before any synthetic generation starts:
 
-This implementation follows **SDA 02: Designing the Synthetic Data Agent**, especially its separation of agent reasoning, deterministic tools, persistent state, validation, and governed publication.
+1. Databricks deploys the source-controlled job.
+2. The job passes target-specific parameters into the notebook.
+3. The notebook validates simple Unity Catalog identifiers.
+4. The run identity queries `system.information_schema`.
+5. The task returns visible table and column counts.
+
+Discovery is not profiling. It only verifies the governed metadata path.
+
+## Permission boundaries
+
+The project separates three concerns:
+
+- deployment identity: who runs `databricks bundle deploy`;
+- run identity: who executes the Databricks job;
+- Unity Catalog privileges: what the run identity can see or modify.
+
+Development can run interactively. Staging and production should run with service principals and restricted bundle root paths outside `/Shared`.
+
+## What remains out of scope
+
+This milestone does not implement:
+
+- full Unity Catalog metadata normalization;
+- table profiling;
+- relationship detection;
+- pattern detection;
+- Lakebase state;
+- synthetic generation;
+- validation;
+- publishing.
+
+The point is to make sure every future milestone has a controlled, testable, deployable place to live.

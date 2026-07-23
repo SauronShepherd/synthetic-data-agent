@@ -1,0 +1,24 @@
+targets:
+  staging:
+    mode: production
+    workspace:
+      profile: sda-staging
+      # Do not use /Shared for controlled targets. Keep write access restricted to
+      # the deployment identity or a locked-down platform folder.
+      root_path: /Workspace/Production/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.runtime_service_principal_name}
+    variables:
+      catalog_name: sda_staging
+      source_schema_name: controlled_source
+      output_schema_name: validation
+      auto_create_uc_objects: "false"
+      seed_sample_data: "false"
+      allow_catalog_fallback: "false"
+    permissions:
+      - group_name: ${var.platform_admin_group_name}
+        level: CAN_MANAGE
+      - group_name: ${var.operator_group_name}
+        level: CAN_RUN
+      - group_name: ${var.observer_group_name}
+        level: CAN_VIEW
