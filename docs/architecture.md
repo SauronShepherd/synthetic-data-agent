@@ -1,68 +1,114 @@
-# Architecture — Article 03
+# Architecture — Article 04
 
-Article 03 gives the Synthetic Data Agent a deployable Databricks home. The project still follows the Article 02 design principle:
+Article 04 replaces the design-only metadata stub with the first deterministic tool: `uc_metadata_reader`.
 
-> The agent orchestrates. Deterministic tools calculate facts and execute work.
+The core rule remains unchanged:
 
-This milestone adds the delivery layer that future deterministic tools will use.
+> The agent orchestrates. Deterministic tools calculate facts and emit traceable evidence.
 
-## Runtime path
+Here, the evidence is metadata. The tool reads the governed shape of the estate before any source values are sampled or profiled.
 
-```text
-Git repository
-  -> Declarative Automation Bundle
-  -> Databricks workspace job
-  -> bootstrap notebook
-  -> Unity Catalog information_schema
-  -> structured discovery summary
+## What `uc_metadata_reader` owns
+
+`uc_metadata_reader` owns metadata discovery and normalization:
+
+- allowed catalogs and schemas;
+- tables and views;
+- object type, owner, and comments;
+- column names, data types, nullability, ordinal positions, comments, and tags;
+- declared primary-key, foreign-key, unique, `CHECK`, and `NOT NULL` claims;
+- sensitivity signals from tags, names, comments, and table context;
+- relationship hints from declared constraints;
+- warnings when metadata is incomplete or unvalidated;
+- compact summaries for agent reasoning.
+
+The tool does not read table values, calculate distributions, validate relationships, approve privacy behavior, or generate rows.
+
+## Metadata source
+
+The reader uses Unity Catalog information schema views. For Databricks Free/serverless compatibility, it queries workspace-wide views under:
+
+```sql
+system.information_schema
 ```
 
-## Bundle responsibilities
+Examples include:
 
-The bundle now owns:
+```sql
+system.information_schema.tables
+system.information_schema.columns
+system.information_schema.table_tags
+system.information_schema.column_tags
+system.information_schema.table_constraints
+```
 
-- deployment targets: `dev`, `staging`, and `prod`;
-- workflow resources: `bootstrap_check`;
-- environment variables for catalogs and schemas;
-- resource permissions;
-- staging/prod run identity;
-- controlled workspace paths.
+The reader filters these views by `table_catalog`, `table_schema`, and configured table patterns. It does not assume that every catalog exposes a catalog-local `<catalog>.information_schema` schema.
 
-The bundle does not own Unity Catalog data privileges. Those remain explicit platform grants handled through SQL, Terraform, or another approved provisioning layer.
+## Metadata is evidence, not prophecy
 
-## First workflow
+Unity Catalog metadata is a governed starting point, not a final verdict. Comments can be stale. Tags can be missing. Owners can be outdated. Databricks primary-key, foreign-key, and unique constraints are useful metadata declarations, but they are informational rather than enforced.
 
-`bootstrap_check` proves that the platform path works before any synthetic generation starts:
+The reader therefore preserves both the claim and its status. Relationship hints are marked as unvalidated so the next tool can test actual behavior.
 
-1. Databricks deploys the source-controlled job.
-2. The job passes target-specific parameters into the notebook.
-3. The notebook validates simple Unity Catalog identifiers.
-4. The run identity queries `system.information_schema`.
-5. The task returns visible table and column counts.
+## Designed Article 04 flow
 
-Discovery is not profiling. It only verifies the governed metadata path.
+```text
+Configured allowlist
+  -> Read Unity Catalog metadata through system.information_schema
+  -> Filter catalogs, schemas, tables, and views
+  -> Normalize object, column, tag, owner, and constraint metadata
+  -> Detect sensitivity signals
+  -> Add warnings and relationship hints
+  -> Emit structured inventory and compact summary
+  -> Next: source data profiling
+```
 
-## Permission boundaries
+## Execution modes
 
-The project separates three concerns:
+### Local demo
 
-- deployment identity: who runs `databricks bundle deploy`;
-- run identity: who executes the Databricks job;
-- Unity Catalog privileges: what the run identity can see or modify.
+`metadata-demo` uses deterministic in-repository sample metadata. It is for tests, documentation, and contract review.
 
-Development can run interactively. Staging and production should run with service principals and restricted bundle root paths outside `/Shared`.
+### Local SQL Warehouse
 
-## What remains out of scope
+`metadata-read-sql` uses the Databricks SQL Connector and a SQL Warehouse. This path is useful from a laptop or CI system when connection settings are provided through environment variables.
 
-This milestone does not implement:
+### Databricks Bundle serverless
 
-- full Unity Catalog metadata normalization;
-- table profiling;
-- relationship detection;
-- pattern detection;
-- Lakebase state;
-- synthetic generation;
-- validation;
-- publishing.
+The `uc_metadata_reader` bundle job runs the Spark entrypoint in Databricks serverless compute. The job uses an `environment_key` instead of a cluster configuration, making it suitable for Databricks Free/serverless workspaces.
 
-The point is to make sure every future milestone has a controlled, testable, deployable place to live.
+## Core contracts
+
+- `MetadataReadConfig`: explicit metadata scope and safe limits.
+- `ColumnMetadata`: column-level metadata without values.
+- `ConstraintMetadata`: declared constraint metadata as unvalidated claims.
+- `TableMetadata`: normalized table or view context for the agent.
+- `MetadataInventory`: collection of accepted objects, skipped objects, and warnings.
+- `UcMetadataReader`: deterministic tool implementation integrated with the orchestrator.
+
+## Safety properties added
+
+- Discovery starts from a catalog allowlist.
+- Broad visibility does not automatically become broad scanning.
+- Skipped objects are recorded.
+- Metadata warnings stay attached to the result.
+- Sensitivity detection is reason-based, not a binary magic flag.
+- Declared relationships are kept as hints, not proof.
+- The reader never profiles source values.
+- Documentation uses placeholders instead of personal workspace values.
+
+## Boundary with Article 05
+
+Article 04 answers:
+
+```text
+What does the governed metadata say exists?
+```
+
+Article 05 will answer:
+
+```text
+How does the data actually behave?
+```
+
+Realistic synthetic data needs both.

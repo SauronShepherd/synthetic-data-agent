@@ -43,7 +43,7 @@ def article_02_toolchain() -> tuple[DesignTool, ...]:
             ToolName.UC_METADATA_READER,
             RunStage.METADATA_DISCOVERED,
             "metadata_inventory",
-            "Governed source scope identified; implementation arrives in Article 04.",
+            "Governed metadata inventory produced by uc_metadata_reader.",
         ),
         DesignTool(
             ToolName.TABLE_PROFILER,

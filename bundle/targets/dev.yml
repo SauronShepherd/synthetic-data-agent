@@ -1,23 +1,7 @@
 targets:
   dev:
-    mode: development
-    default: true
-    workspace:
-      # The Databricks CLI profile owns the host and authentication details.
-      # Create it with:
-      # databricks auth login --host https://<your-workspace-url> -p sda-dev
-      profile: sda-dev
     variables:
-      catalog_name: sda_dev
-      source_schema_name: sample_source
-      output_schema_name: sandbox
-    permissions:
-      # Keep the developer group from the article/project defaults.
-      - group_name: ${var.developer_group_name}
-        level: CAN_MANAGE
-      # Match the CAN_MANAGE permission that Databricks places on the dev
-      # bundle workspace folder for the current user. Without this explicit
-      # declaration, `databricks bundle validate -t dev` warns about an
-      # unmanaged workspace-folder permission.
-      - user_name: ${workspace.current_user.userName}
-        level: CAN_MANAGE
+      sda_catalog_allowlist: main
+      sda_schema_allowlist: ""
+      sda_table_patterns: ""
+      sda_max_metadata_objects: "100"

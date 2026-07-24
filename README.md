@@ -1,54 +1,81 @@
-# Synthetic Data Agent — Article 03
+# Synthetic Data Agent — Article 04
 
-This repository implements the **SDA 03 bootstrap** from *Bootstrapping with Declarative Automation Bundles*.
+This branch extends the Article 03 project skeleton with the first concrete SDA tool from **SDA 04: Reading Unity Catalog Metadata — The Agent's First Tool**.
 
-The project still does **not** generate synthetic rows. That is intentional. This milestone proves that the solution has a deployable Databricks home before the agent starts profiling, detecting relationships, planning generation, or writing outputs.
+The project still does **not** generate synthetic rows and does **not** profile source data. That is intentional. Article 04 gives the agent governed awareness first: catalogs, schemas, tables, columns, comments, tags, owners, declared constraints, sensitivity signals, and warnings.
+
+## Current status
+
+This branch now supports three execution modes:
+
+- **Local demo mode** with deterministic sample metadata.
+- **Local Databricks SQL Warehouse mode** through the Databricks SQL Connector.
+- **Databricks Bundle serverless mode** for Databricks Free/serverless workspaces.
+
+The Databricks Bundle path has been tested successfully through `validate`, `deploy`, and `run`. A successful run may still return an empty inventory when the configured catalog/schema scope does not contain visible matching tables.
 
 ## What this milestone adds
 
-- A root `databricks.yml` bundle definition.
-- Modular bundle files under `bundle/`.
-- Separate `dev`, `staging`, and `prod` targets.
-- Target-specific Unity Catalog variables.
-- A first Databricks workflow: `bootstrap_check`.
-- A thin notebook entry point: `notebooks/00_bootstrap_check.py`.
-- Validated parameter loading for catalog and schema names.
-- Automatic development bootstrap for Unity Catalog objects when the run identity is allowed to create them.
-- Optional dev fallback to the first visible catalog/schema when catalog creation is not allowed.
-- A tiny sample source table so the first discovery run has something to find.
-- Unity Catalog discovery through `system.information_schema`.
-- Bundle resource permissions and staging/prod `run_as` boundaries.
-- Local unit tests for bootstrap contracts.
-- Real Databricks validate/deploy/run instructions.
+- `uc_metadata_reader` as a deterministic metadata discovery tool.
+- Typed Article 04 metadata contracts in `metadata_models.py`.
+- Explicit metadata reader configuration: catalog allowlist, schema allowlist, table patterns, and object limit.
+- Real Databricks/Spark `INFORMATION_SCHEMA` adapter for Unity Catalog metadata.
+- Real local Databricks SQL Warehouse adapter for Unity Catalog metadata.
+- Databricks Free/serverless-compatible bundle job using a job `environment_key`.
+- Workspace-wide `system.information_schema` queries filtered by catalog and schema.
+- Filtering by catalog, schema, table pattern, view inclusion, and object limit.
+- Sensitivity signals from names, comments, and tags.
+- Relationship hints from declared PK/FK/unique constraints.
+- Metadata warnings for missing comments, missing constraints, unvalidated claims, and sensitive fields without tags.
+- Compact agent-readable summaries with traceable reasons.
+- CLI `metadata-demo` command for local contract testing.
+- CLI `metadata-read-sql` command for local SQL Warehouse execution.
+- CLI `metadata-read-spark` command for Databricks Spark/serverless execution.
+- Tests for metadata contracts, reader behavior, orchestration integration, and configuration.
 
-## Project layout
+## What it deliberately does not add
 
-```text
-synthetic-data-agent/
-├── databricks.yml
-├── bundle/
-│   ├── resources.yml
-│   └── targets/
-│       ├── dev.yml
-│       ├── staging.yml
-│       └── prod.yml
-├── notebooks/
-│   └── 00_bootstrap_check.py
-├── scripts/
-│   └── grants/
-│       └── bootstrap_uc_grants.sql      # optional reference only
-├── src/
-│   └── sda/
-│       ├── bootstrap.py
-│       ├── uc_discovery.py
-│       └── ...
-├── tests/
-└── docs/
+- Source table value reads.
+- Statistical profiling.
+- Relationship validation.
+- Privacy approval logic.
+- Synthetic row generation.
+- Publishing.
+
+Metadata is evidence, not truth. Declared constraints are captured as claims and marked unvalidated; profiling will validate actual behavior in Article 05.
+
+## Requirements and installation
+
+Python 3.11 or newer. The project is platform-neutral: use the command block that matches your shell.
+
+### Linux / macOS / bash
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
 ```
 
-The rule from the article is enforced in the structure: notebooks are entry points. Core logic belongs in `src/sda/` where it can be tested, reviewed, packaged, and reused.
+Or use the helper script:
 
-## Local setup
+```bash
+./scripts/setup-dev.sh
+```
+
+To execute real Unity Catalog queries from your laptop through a Databricks SQL Warehouse, install the optional Databricks connector extra:
+
+```bash
+python -m pip install -e ".[dev,databricks]"
+```
+
+Or use:
+
+```bash
+./scripts/setup-dev-databricks.sh
+```
+
+### Windows / PowerShell
 
 ```powershell
 python -m venv .venv
@@ -57,167 +84,175 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-## Local tests
-
-Run the deterministic checks that do not require Databricks:
+To execute real Unity Catalog queries from your laptop through a Databricks SQL Warehouse, install the optional Databricks connector extra:
 
 ```powershell
+python -m pip install -e ".[dev,databricks]"
+```
+
+## Local commands
+
+```bash
+sda config
+sda design-demo
+sda metadata-demo
+```
+
+The same commands work in PowerShell.
+
+`design-demo` proves the Article 02 orchestration contract. `metadata-demo` returns a small normalized metadata inventory that shows allowed-object filtering, sensitivity signals, constraint hints, skipped objects, and warnings.
+
+## Read real Unity Catalog metadata from a laptop
+
+Use this path when you want to query Unity Catalog from your local machine through a Databricks SQL Warehouse.
+
+Linux / macOS / bash:
+
+```bash
+export SDA_METADATA_RUNTIME="databricks_sql"
+export DATABRICKS_HOST="https://<workspace-host>"
+export DATABRICKS_HTTP_PATH="/sql/1.0/warehouses/<warehouse-id>"
+export DATABRICKS_TOKEN="<token>"
+export SDA_CATALOG_ALLOWLIST="<catalog>"
+export SDA_SCHEMA_ALLOWLIST="<schema>"
+export SDA_TABLE_PATTERNS="*"
+export SDA_MAX_METADATA_OBJECTS="100"
+
+sda metadata-read-sql
+```
+
+Windows / PowerShell:
+
+```powershell
+$env:SDA_METADATA_RUNTIME = "databricks_sql"
+$env:DATABRICKS_HOST = "https://<workspace-host>"
+$env:DATABRICKS_HTTP_PATH = "/sql/1.0/warehouses/<warehouse-id>"
+$env:DATABRICKS_TOKEN = "<token>"
+$env:SDA_CATALOG_ALLOWLIST = "<catalog>"
+$env:SDA_SCHEMA_ALLOWLIST = "<schema>"
+$env:SDA_TABLE_PATTERNS = "*"
+$env:SDA_MAX_METADATA_OBJECTS = "100"
+
+sda metadata-read-sql
+```
+
+A reusable template is available in `.env.example`. Do not commit a real `.env` file, Databricks token, workspace host, SQL Warehouse path, or user-specific profile.
+
+## Run as a Databricks Bundle job
+
+This is the recommended path for Databricks Free/serverless workspaces.
+
+The bundle job resource key is:
+
+```text
+uc_metadata_reader
+```
+
+The job is defined in:
+
+```text
+bundle/resources.yml
+```
+
+It runs this Spark entrypoint:
+
+```text
+src/sda/job_entrypoints/metadata_read_spark.py
+```
+
+The task is configured for **Databricks serverless** with an `environment_key`; it does not require an existing cluster, a job cluster, or a cluster ID.
+
+Validate, deploy, and run:
+
+```bash
+databricks bundle validate -t dev --profile <profile-name>
+databricks bundle deploy -t dev --profile <profile-name>
+databricks bundle run uc_metadata_reader -t dev --profile <profile-name>
+```
+
+PowerShell uses the same commands:
+
+```powershell
+databricks bundle validate -t dev --profile <profile-name>
+databricks bundle deploy -t dev --profile <profile-name>
+databricks bundle run uc_metadata_reader -t dev --profile <profile-name>
+```
+
+Override the metadata scope when running the bundle:
+
+```bash
+databricks bundle run uc_metadata_reader -t dev --profile <profile-name> \
+  --var="sda_catalog_allowlist=<catalog>" \
+  --var="sda_schema_allowlist=<schema>" \
+  --var="sda_table_patterns=*" \
+  --var="sda_max_metadata_objects=100"
+```
+
+PowerShell one-line version:
+
+```powershell
+databricks bundle run uc_metadata_reader -t dev --profile <profile-name> --var="sda_catalog_allowlist=<catalog>" --var="sda_schema_allowlist=<schema>" --var="sda_table_patterns=*" --var="sda_max_metadata_objects=100"
+```
+
+## Databricks Free/serverless notes
+
+Databricks Free/serverless workspaces may not expose catalog-local paths such as:
+
+```sql
+<catalog>.information_schema.tables
+```
+
+For that reason, this project queries workspace-wide metadata views such as:
+
+```sql
+system.information_schema.tables
+system.information_schema.columns
+system.information_schema.table_constraints
+```
+
+and filters by `table_catalog`, `table_schema`, and table name patterns. This keeps the reader compatible with the serverless runtime used by Databricks Free.
+
+A successful run can legitimately return:
+
+```json
+{
+  "skipped_objects": [],
+  "tables": [],
+  "warnings": []
+}
+```
+
+That means the job executed successfully, but the configured catalog/schema/table scope did not return visible matching tables for the run identity. Change `sda_catalog_allowlist`, `sda_schema_allowlist`, or `sda_table_patterns` to point at objects that exist and are visible to the profile or job identity.
+
+## Quality checks
+
+Run before committing:
+
+```bash
 ruff check .
 mypy src tests
 pytest
 ```
 
-Or run everything through Make:
+On Linux/macOS you can also run:
 
-```powershell
+```bash
 make check
+./scripts/check.sh
 ```
 
-The Databricks notebook itself is tested through a real bundle deployment because it depends on the Databricks runtime, `spark`, `dbutils`, and Unity Catalog permissions.
+## Safety and repository hygiene
 
-## Authenticate to Databricks
+Before committing, verify that no personal or workspace-specific values are present:
 
-This project expects your dev workspace to be configured as a CLI profile named `sda-dev`:
+- no Databricks tokens;
+- no workspace host URLs;
+- no user email addresses;
+- no profile names;
+- no cluster IDs;
+- no SQL Warehouse IDs;
+- no job run URLs;
+- no generated `.env` files;
+- no local virtual environments or caches.
 
-```powershell
-databricks auth login --host https://<your-workspace-url> -p sda-dev
-databricks auth describe -p sda-dev
-```
-
-The `dev` target intentionally uses the profile instead of hardcoding the workspace host:
-
-```yaml
-workspace:
-  profile: sda-dev
-```
-
-For staging and production, create equivalent profiles named `sda-staging` and `sda-prod`, or change the target files to match your organization’s profile names.
-
-## Self-contained development bootstrap
-
-The dev target is designed to run without manual SQL.
-
-By default it tries to prepare this Unity Catalog scope automatically:
-
-```text
-catalog:       sda_dev
-source schema: sample_source
-output schema: sandbox
-sample table:  sda_dev.sample_source.sample_customers
-```
-
-The first job does this inside Databricks:
-
-1. Loads bundle parameters.
-2. Runs `CREATE CATALOG IF NOT EXISTS sda_dev`.
-3. Runs `CREATE SCHEMA IF NOT EXISTS sda_dev.sample_source`.
-4. Runs `CREATE SCHEMA IF NOT EXISTS sda_dev.sandbox`.
-5. Creates and seeds a tiny `sample_customers` Delta table.
-6. Reads `system.information_schema` to discover visible tables and columns.
-7. Emits a structured `bootstrap_summary`.
-
-If your user cannot create catalogs, the dev target falls back to the first visible catalog/schema so the bundle can still prove the deployment path. The run output will include a warning explaining which fallback scope was used.
-
-This fallback is enabled only for development. Staging and production set:
-
-```yaml
-auto_create_uc_objects: "false"
-allow_catalog_fallback: "false"
-```
-
-That keeps controlled environments honest: they should validate approved governed assets, not silently create or switch scopes.
-
-## Deploy and run on Databricks
-
-From the project root:
-
-```powershell
-databricks bundle validate -t dev
-databricks bundle plan -t dev
-databricks bundle deploy -t dev
-databricks bundle run bootstrap_check -t dev
-databricks bundle summary -t dev
-```
-
-No `bootstrap_cluster_id` is required. The bootstrap task does not declare `existing_cluster_id`; it is ready for serverless Jobs compute where your workspace supports it. If your workspace requires explicit job compute, add that compute policy to `bundle/resources.yml` or the target configuration rather than hardcoding it in the notebook.
-
-A successful run prints a JSON payload like:
-
-```json
-{
-  "bootstrap_summary": {
-    "catalog_name": "sda_dev",
-    "source_schema_name": "sample_source",
-    "output_schema_name": "sandbox",
-    "visible_tables": 1,
-    "visible_columns": 5,
-    "target_environment": "dev",
-    "auto_create_uc_objects": true,
-    "seed_sample_data": true,
-    "warnings": [
-      "Verified or created configured Unity Catalog bootstrap objects."
-    ]
-  }
-}
-```
-
-If the run cannot create `sda_dev` and uses fallback, that is still a valid dev smoke test. For the next articles, use a real governed catalog/schema by setting variables at deployment time or in the target file.
-
-## Optional variable overrides
-
-You can still override the development scope without editing source files:
-
-```powershell
-databricks bundle deploy -t dev `
-  --var "catalog_name=main" `
-  --var "source_schema_name=default" `
-  --var "output_schema_name=default" `
-  --var "auto_create_uc_objects=false"
-
-databricks bundle run bootstrap_check -t dev
-```
-
-Remember: bundle variables are deployment-time configuration. Redeploy after changing them.
-
-## Promote beyond development
-
-Only after the dev loop works, configure staging and production profiles plus real group names and a real service principal:
-
-```powershell
-databricks auth login --host https://<staging-workspace-url> -p sda-staging
-databricks auth login --host https://<prod-workspace-url> -p sda-prod
-```
-
-Then validate staging with controlled values:
-
-```powershell
-databricks bundle validate -t staging `
-  --var "runtime_service_principal_name=<service-principal-app-id>" `
-  --var "platform_admin_group_name=<group>" `
-  --var "operator_group_name=<group>" `
-  --var "observer_group_name=<group>"
-```
-
-Production should use the same lifecycle, but with production-safe values, a locked-down `root_path`, service-principal execution, and reviewed Unity Catalog privileges. Do not hotfix production jobs through the workspace UI and forget to bring the change back into the bundle.
-
-## What success means
-
-Success is not synthetic data.
-
-Success is proving that:
-
-- the repository validates locally;
-- the bundle validates for a target;
-- Databricks deploys the job from source-controlled YAML;
-- the notebook receives bundle-driven parameters;
-- the workflow can prepare or resolve a Unity Catalog scope in dev;
-- the run identity can read Unity Catalog metadata;
-- the workflow returns a structured discovery summary.
-
-Next milestone: replace this bootstrap check with the first real tool, `uc_metadata_reader`.
-
-## Article references
-
-- Article 01: Why Build a Synthetic Data Agent on Databricks?
-- Article 02: Designing the Synthetic Data Agent
-- Article 03: Bootstrapping with Declarative Automation Bundles
+Use placeholders such as `<profile-name>`, `<workspace-host>`, `<warehouse-id>`, `<catalog>`, and `<schema>` in documentation.

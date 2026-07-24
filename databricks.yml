@@ -40,3 +40,15 @@ variables:
   runtime_service_principal_name:
     description: Service principal application ID used as the staging/prod run identity.
     default: dummy-service-principal-for-dev
+  sda_catalog_allowlist:
+    description: Comma-separated Unity Catalog catalogs to inspect for Article 04 metadata discovery.
+    default: sda_dev
+  sda_schema_allowlist:
+    description: Comma-separated schemas to inspect. Leave empty for all visible schemas in allowed catalogs.
+    default: sample_source
+  sda_table_patterns:
+    description: Comma-separated table name patterns to include. Leave empty for all tables.
+    default: ""
+  sda_max_metadata_objects:
+    description: Maximum number of metadata objects to return from uc_metadata_reader.
+    default: "100"
