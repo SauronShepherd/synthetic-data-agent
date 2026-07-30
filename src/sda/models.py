@@ -14,6 +14,7 @@ class RunStage(StrEnum):
     METADATA_DISCOVERED = "metadata_discovered"
     PROFILED = "profiled"
     RELATIONSHIPS_MAPPED = "relationships_mapped"
+    PATTERNS_DETECTED = "patterns_detected"
     PLAN_DRAFTED = "plan_drafted"
     GENERATED = "generated"
     VALIDATED = "validated"

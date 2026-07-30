@@ -1,5 +1,17 @@
 targets:
   prod:
+    mode: production
+    run_as:
+      service_principal_name: ${var.runtime_service_principal_name}
+    workspace:
+      root_path: /Workspace/Production/.bundle/${bundle.name}/${bundle.target}
+    permissions:
+      - group_name: ${var.platform_admin_group_name}
+        level: CAN_MANAGE
+      - group_name: ${var.operator_group_name}
+        level: CAN_RUN
+      - group_name: ${var.observer_group_name}
+        level: CAN_VIEW
     variables:
       sda_catalog_allowlist: main
       sda_schema_allowlist: ""

@@ -14,11 +14,25 @@ from typing import Any
 class ObjectType(StrEnum):
     """Supported Unity Catalog relation types for the first metadata reader."""
 
-    BASE_TABLE = "BASE TABLE"
+    TABLE = "TABLE"
+    BASE_TABLE = "TABLE"  # backwards-compatible alias
     VIEW = "VIEW"
     MATERIALIZED_VIEW = "MATERIALIZED VIEW"
     STREAMING_TABLE = "STREAMING TABLE"
     UNKNOWN = "UNKNOWN"
+
+    @classmethod
+    def from_platform(cls, value: str) -> "ObjectType":
+        normalized = value.strip().upper()
+        if normalized in {"MANAGED", "EXTERNAL", "FOREIGN", "MANAGED_SHALLOW_CLONE", "EXTERNAL_SHALLOW_CLONE", "BASE TABLE"}:
+            return cls.TABLE
+        if normalized == "VIEW":
+            return cls.VIEW
+        if normalized == "MATERIALIZED_VIEW" or normalized == "MATERIALIZED VIEW":
+            return cls.MATERIALIZED_VIEW
+        if normalized == "STREAMING_TABLE" or normalized == "STREAMING TABLE":
+            return cls.STREAMING_TABLE
+        return cls.UNKNOWN
 
 
 class ConstraintKind(StrEnum):
@@ -83,6 +97,7 @@ class TableMetadata:
     schema: str
     object_name: str
     object_type: ObjectType
+    raw_table_type: str | None = None
     owner: str | None = None
     comment: str | None = None
     table_tags: tuple[str, ...] = ()
@@ -115,6 +130,7 @@ class TableMetadata:
             for constraint in self.constraints
         ]
         payload["full_name"] = self.full_name
+        payload["agent_summary"] = _table_summary(self)
         return payload
 
 
@@ -123,6 +139,11 @@ class MetadataInventory:
     """Agent-readable inventory produced by uc_metadata_reader."""
 
     tables: tuple[TableMetadata, ...]
+    visible_catalogs: tuple[str, ...] = ()
+    selected_catalogs: tuple[str, ...] = ()
+    visible_schemas: tuple[tuple[str, str], ...] = ()
+    selected_schemas: tuple[tuple[str, str], ...] = ()
+    provenance: dict[str, Any] = field(default_factory=dict)
     skipped_objects: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
 
@@ -134,10 +155,23 @@ class MetadataInventory:
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable inventory payload."""
         return {
+            "visible_catalogs": list(self.visible_catalogs),
+            "selected_catalogs": list(self.selected_catalogs),
+            "visible_schemas": [{"catalog": c, "schema": s} for c, s in self.visible_schemas],
+            "selected_schemas": [{"catalog": c, "schema": s} for c, s in self.selected_schemas],
+            "provenance": self.provenance,
             "tables": [table.to_dict() for table in self.tables],
             "skipped_objects": list(self.skipped_objects),
             "warnings": list(self.warnings),
         }
+
+
+def _table_summary(table: TableMetadata) -> str:
+    sensitivity = ", ".join(table.sensitivity_signals) or "no sensitivity signals detected"
+    warnings = ", ".join(table.metadata_warnings) or "no metadata warnings"
+    return (f"{table.full_name} is a {table.object_type.value.lower()} with {len(table.columns)} "
+            f"columns and {len(table.constraints)} declared constraints. "
+            f"Sensitivity: {sensitivity}. Warnings: {warnings}.")
 
 
 @dataclass(frozen=True, slots=True)

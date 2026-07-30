@@ -12,7 +12,7 @@ This branch now supports three execution modes:
 - **Local Databricks SQL Warehouse mode** through the Databricks SQL Connector.
 - **Databricks Bundle serverless mode** for Databricks Free/serverless workspaces.
 
-The Databricks Bundle path has been tested successfully through `validate`, `deploy`, and `run`. A successful run may still return an empty inventory when the configured catalog/schema scope does not contain visible matching tables.
+Bundle validation and deployment are environment-dependent; local checks cover compilation and deterministic reader contracts. A successful run may still return an empty inventory when the configured catalog/schema scope does not contain visible matching tables.
 
 ## What this milestone adds
 
@@ -256,3 +256,14 @@ Before committing, verify that no personal or workspace-specific values are pres
 - no local virtual environments or caches.
 
 Use placeholders such as `<profile-name>`, `<workspace-host>`, `<warehouse-id>`, `<catalog>`, and `<schema>` in documentation.
+## SDA 04 milestone
+
+Implemented through SDA 04: declarative bundle deployment with environment-specific
+guardrails, the orchestration contract, and a deterministic Unity Catalog metadata
+reader covering catalog/schema scope, table and column metadata, tags, sensitivity
+signals, declared constraints, warnings, provenance, and agent-facing summaries.
+
+Designed but intentionally deferred: profiling, relationship validation/inference,
+cross-column pattern detection implementation, durable state, generation, quality
+validation, and publishing. A missing metadata signal is not proof that data is safe;
+declared constraints remain unvalidated.

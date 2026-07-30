@@ -13,6 +13,7 @@ The production path should use the adapter with a Databricks Spark session.
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ from sda.metadata_models import (
     TableMetadata,
 )
 from sda.models import AgentState, ArtifactRef, RunStage, ToolName, ToolResult
+from sda.version import __version__
 
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -96,7 +98,7 @@ def information_schema_queries(catalog: str, schema: str | None = None) -> tuple
         (
             "SELECT constraint_catalog, constraint_schema, constraint_name, "
             "table_catalog AS catalog, table_schema AS schema, table_name AS name, "
-            "column_name, ordinal_position "
+            "column_name, ordinal_position, position_in_unique_constraint "
             "FROM system.information_schema.key_column_usage "
             f"WHERE {catalog_predicate}{schema_predicate}"
         ),
@@ -191,33 +193,51 @@ class InformationSchemaMetadataAdapter:
 
     def __init__(self, executor: SqlExecutor) -> None:
         self._executor = executor
+        self._query_warnings: list[str] = []
 
     def read_raw_tables(self, config: MetadataReadConfig) -> tuple[RawTableMetadata, ...]:
         """Execute Unity Catalog metadata queries and return raw table metadata."""
         raw_tables: list[RawTableMetadata] = []
         for catalog in config.catalog_allowlist:
             for schema in _schema_scope(config):
-                raw_tables.extend(self._read_catalog_scope(catalog, schema=schema))
+                raw_tables.extend(self._read_catalog_scope(catalog, schema=schema, max_objects=config.max_objects))
         return tuple(raw_tables)
 
     def read_inventory(self, config: MetadataReadConfig) -> MetadataInventory:
         """Read and normalize a governed metadata inventory from Unity Catalog."""
+        self._query_warnings = []
+        visible_catalog_rows = self._safe_execute("SELECT catalog_name AS catalog FROM system.information_schema.catalogs")
+        visible_catalogs = tuple(sorted({str(row["catalog"]) for row in visible_catalog_rows}))
         raw_tables = self.read_raw_tables(config)
-        return UcMetadataReader(config=config, raw_tables=raw_tables).read_inventory()
+        catalogs = tuple(catalog for catalog in config.catalog_allowlist if not visible_catalogs or catalog in visible_catalogs)
+        schemas = tuple((table.catalog, table.schema) for table in raw_tables)
+        inventory = UcMetadataReader(config=config, raw_tables=raw_tables).read_inventory(
+            visible_catalogs=visible_catalogs, selected_catalogs=catalogs,
+            visible_schemas=tuple(dict.fromkeys(schemas)), selected_schemas=tuple(dict.fromkeys(schemas))
+        )
+        return MetadataInventory(
+            tables=inventory.tables, skipped_objects=inventory.skipped_objects,
+            warnings=inventory.warnings + tuple(self._query_warnings),
+            visible_catalogs=inventory.visible_catalogs, selected_catalogs=inventory.selected_catalogs,
+            visible_schemas=inventory.visible_schemas, selected_schemas=inventory.selected_schemas,
+            provenance=inventory.provenance,
+        )
 
     def _read_catalog_scope(
         self,
         catalog: str,
         *,
         schema: str | None,
+        max_objects: int,
     ) -> tuple[RawTableMetadata, ...]:
         queries = information_schema_queries(catalog, schema=schema)
-        tables = self._executor.execute(queries[2])
-        columns = self._executor.execute(queries[3])
-        table_tags = self._safe_execute(queries[4])
-        column_tags = self._safe_execute(queries[5])
-        constraints = self._safe_execute(queries[6])
-        key_columns = self._safe_execute(queries[7])
+        tables = tuple(sorted(self._executor.execute(queries[2]), key=lambda r: (str(r['catalog']), str(r['schema']), str(r['name'])))[:max_objects])
+        selected = {(str(r['catalog']), str(r['schema']), str(r['name'])) for r in tables}
+        columns = self._executor.execute(_restrict_query(queries[3], selected))
+        table_tags = self._safe_execute(_restrict_query(queries[4], selected))
+        column_tags = self._safe_execute(_restrict_query(queries[5], selected))
+        constraints = self._safe_execute(_restrict_query(queries[6], selected))
+        key_columns = self._safe_execute(_restrict_query(queries[7], selected))
         referential_constraints = self._safe_execute(queries[8])
         constraint_tables = self._safe_execute(queries[9])
         constraint_columns = self._safe_execute(queries[10])
@@ -251,6 +271,8 @@ class InformationSchemaMetadataAdapter:
         try:
             return self._executor.execute(sql)
         except Exception:  # pragma: no cover - Databricks version/permission dependent
+            source = sql.lower().split("information_schema.")[-1].split()[0].upper()
+            self._query_warnings.append(f"{source.lower()}_metadata_unavailable")
             return ()
 
 
@@ -281,6 +303,15 @@ class UcMetadataReader:
             produced_by=self.name,
             summary=summarize_inventory(inventory),
             metadata={
+                "tool_name": self.name.value,
+                "tool_version": __version__,
+                "execution_timestamp": datetime.now(UTC).isoformat(),
+                "configured_scope": {
+                    "catalog_allowlist": list(self._config.catalog_allowlist),
+                    "schema_allowlist": list(self._config.schema_allowlist),
+                    "table_patterns": list(self._config.table_patterns),
+                    "max_objects": self._config.max_objects,
+                },
                 "table_count": len(inventory.tables),
                 "skipped_count": len(inventory.skipped_objects),
                 "warning_count": len(warnings),
@@ -294,7 +325,7 @@ class UcMetadataReader:
             metrics={"metadata_tables": len(inventory.tables)},
         )
 
-    def read_inventory(self) -> MetadataInventory:
+    def read_inventory(self, **discovery: Any) -> MetadataInventory:
         """Filter, normalize, and summarize raw metadata rows."""
         accepted: list[TableMetadata] = []
         skipped: list[str] = []
@@ -317,6 +348,17 @@ class UcMetadataReader:
             tables=tuple(accepted),
             skipped_objects=tuple(skipped),
             warnings=tuple(warnings),
+            **discovery,
+            provenance={
+                "tool_name": self.name.value,
+                "tool_version": __version__,
+                "configured_scope": {
+                    "catalog_allowlist": list(self._config.catalog_allowlist),
+                    "schema_allowlist": list(self._config.schema_allowlist),
+                    "table_patterns": list(self._config.table_patterns),
+                    "max_objects": self._config.max_objects,
+                },
+            },
         )
 
     def _is_in_scope(self, table: RawTableMetadata) -> bool:
@@ -324,7 +366,7 @@ class UcMetadataReader:
             return False
         if self._config.schema_allowlist and table.schema not in self._config.schema_allowlist:
             return False
-        if not self._config.include_views and table.object_type.upper() == ObjectType.VIEW.value:
+        if not self._config.include_views and ObjectType.from_platform(table.object_type) == ObjectType.VIEW:
             return False
         if not self._config.table_patterns:
             return True
@@ -346,7 +388,8 @@ class UcMetadataReader:
             catalog=raw_table.catalog,
             schema=raw_table.schema,
             object_name=raw_table.name,
-            object_type=_parse_object_type(raw_table.object_type),
+            object_type=ObjectType.from_platform(raw_table.object_type),
+            raw_table_type=raw_table.object_type,
             owner=raw_table.owner,
             comment=raw_table.comment,
             table_tags=raw_table.table_tags,
@@ -373,6 +416,13 @@ class UcMetadataReader:
             tag_terms = ("pii", "personal", "confidential", "sensitive")
             if any(term in tag_context for term in tag_terms):
                 signals.append(f"{column.name}:sensitive_tag")
+            for tag in column.tags:
+                if tag.lower().startswith("class."):
+                    signals.append(f"{column.name}:classification_tag:{tag}")
+
+        for tag in table.table_tags:
+            if tag.lower().startswith("class.") or any(term in tag.lower() for term in ("pii", "sensitive", "confidential")):
+                signals.append(f"table:sensitivity_tag:{tag}")
 
         return tuple(dict.fromkeys(signals))
 
@@ -509,10 +559,15 @@ def _build_constraints_by_table(
     constraint_tables: Sequence[Mapping[str, Any]],
     constraint_columns: Sequence[Mapping[str, Any]],
 ) -> dict[tuple[str, str, str], tuple[ConstraintMetadata, ...]]:
-    columns_by_constraint: dict[tuple[str, str, str], list[tuple[int, str]]] = defaultdict(list)
+    columns_by_constraint: dict[tuple[str, str, str], list[tuple[int, str, int | None]]] = defaultdict(list)
     for row in key_columns:
         columns_by_constraint[_constraint_key(row)].append(
-            (int(row.get("ordinal_position", 1)), str(row["column_name"]))
+            (
+                int(row.get("ordinal_position", 1)),
+                str(row["column_name"]),
+                int(row["position_in_unique_constraint"])
+                if row.get("position_in_unique_constraint") is not None else None,
+            )
         )
 
     unique_key_by_fk = {
@@ -538,9 +593,8 @@ def _build_constraints_by_table(
     grouped: dict[tuple[str, str, str], list[ConstraintMetadata]] = defaultdict(list)
     for row in constraints:
         constraint_key = _constraint_key(row)
-        ordered_columns = tuple(
-            column for _, column in sorted(columns_by_constraint.get(constraint_key, ()))
-        )
+        child_parts = sorted(columns_by_constraint.get(constraint_key, ()), key=lambda part: part[0])
+        ordered_columns = tuple(column for _, column, _ in child_parts)
         if not ordered_columns:
             continue
 
@@ -551,7 +605,18 @@ def _build_constraints_by_table(
             referenced_parts = referenced_table_by_constraint.get(unique_key)
             if referenced_parts is not None:
                 referenced_table = ".".join(referenced_parts)
-                referenced_columns = tuple(referenced_columns_by_constraint.get(unique_key, ()))
+                parent_parts = sorted(columns_by_constraint.get(unique_key, ()), key=lambda part: part[0])
+                parent_by_position = {ordinal: column for ordinal, column, _ in parent_parts}
+                if any(position is not None for _, _, position in child_parts):
+                    referenced_columns = tuple(
+                        parent_by_position[position]
+                        for _, _, position in child_parts
+                        if position is not None and position in parent_by_position
+                    )
+                else:
+                    referenced_columns = tuple(column for _, column, _ in parent_parts)
+                if len(referenced_columns) != len(ordered_columns):
+                    referenced_columns = ()
 
         grouped[_table_key(row)].append(
             ConstraintMetadata(
@@ -594,11 +659,17 @@ def _format_tag(row: Mapping[str, Any]) -> str:
 
 
 def _parse_object_type(value: str) -> ObjectType:
-    normalized = value.strip().upper()
-    for object_type in ObjectType:
-        if normalized == object_type.value:
-            return object_type
-    return ObjectType.UNKNOWN
+    return ObjectType.from_platform(value)
+
+
+def _restrict_query(sql: str, selected: set[tuple[str, str, str]]) -> str:
+    if not selected:
+        return sql + " AND 1 = 0"
+    predicates = " OR ".join(
+        f"(catalog = {_quote_literal(c)} AND schema = {_quote_literal(s)} AND name = {_quote_literal(n)})"
+        for c, s, n in sorted(selected)
+    )
+    return f"SELECT * FROM ({sql}) AS selected_metadata WHERE {predicates}"
 
 
 def _parse_constraint_kind(value: str) -> ConstraintKind:

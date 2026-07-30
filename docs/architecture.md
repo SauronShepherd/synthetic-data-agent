@@ -16,7 +16,8 @@ Here, the evidence is metadata. The tool reads the governed shape of the estate 
 - tables and views;
 - object type, owner, and comments;
 - column names, data types, nullability, ordinal positions, comments, and tags;
-- declared primary-key, foreign-key, unique, `CHECK`, and `NOT NULL` claims;
+- declared primary-key, foreign-key, and unique claims; column nullability;
+- explicit limitation warnings when CHECK expressions are not available from the inspected views;
 - sensitivity signals from tags, names, comments, and table context;
 - relationship hints from declared constraints;
 - warnings when metadata is incomplete or unvalidated;
@@ -55,7 +56,7 @@ The reader therefore preserves both the claim and its status. Relationship hints
 ```text
 Configured allowlist
   -> Read Unity Catalog metadata through system.information_schema
-  -> Filter catalogs, schemas, tables, and views
+  -> Discover visible catalogs and schemas, then select tables and views
   -> Normalize object, column, tag, owner, and constraint metadata
   -> Detect sensitivity signals
   -> Add warnings and relationship hints
@@ -95,6 +96,8 @@ The `uc_metadata_reader` bundle job runs the Spark entrypoint in Databricks serv
 - Sensitivity detection is reason-based, not a binary magic flag.
 - Declared relationships are kept as hints, not proof.
 - The reader never profiles source values.
+- A missing tag or sensitivity signal is not a safety verdict.
+- Optional metadata query failures are reported as unavailable rather than empty results.
 - Documentation uses placeholders instead of personal workspace values.
 
 ## Boundary with Article 05

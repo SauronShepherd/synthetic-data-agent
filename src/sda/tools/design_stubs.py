@@ -58,6 +58,12 @@ def article_02_toolchain() -> tuple[DesignTool, ...]:
             "Relationship contract recorded; detection arrives in Article 06.",
         ),
         DesignTool(
+            ToolName.PATTERN_DETECTOR,
+            RunStage.PATTERNS_DETECTED,
+            "detected_patterns",
+            "Pattern detection contract recorded; implementation arrives in Article 07.",
+        ),
+        DesignTool(
             ToolName.GENERATION_PLANNER,
             RunStage.PLAN_DRAFTED,
             "generation_plan",
