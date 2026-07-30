@@ -1,6 +1,7 @@
-# Architecture — Article 04
+# Architecture — Article 05
 
-Article 04 replaces the design-only metadata stub with the first deterministic tool: `uc_metadata_reader`.
+Article 05 adds the second deterministic tool, `table_profiler`, after the Article 04
+`uc_metadata_reader` contract.
 
 The core rule remains unchanged:
 
@@ -24,6 +25,10 @@ Here, the evidence is metadata. The tool reads the governed shape of the estate 
 - compact summaries for agent reasoning.
 
 The tool does not read table values, calculate distributions, validate relationships, approve privacy behavior, or generate rows.
+
+`table_profiler` reads one approved relation and calculates bounded value-level evidence.
+It reuses the Article 04 inventory, labels metric methods, avoids raw-value retention,
+and persists queryable governed profile artifacts.
 
 ## Metadata source
 
@@ -100,7 +105,7 @@ The `uc_metadata_reader` bundle job runs the Spark entrypoint in Databricks serv
 - Optional metadata query failures are reported as unavailable rather than empty results.
 - Documentation uses placeholders instead of personal workspace values.
 
-## Boundary with Article 05
+## Boundary with Article 06
 
 Article 04 answers:
 
@@ -108,10 +113,10 @@ Article 04 answers:
 What does the governed metadata say exists?
 ```
 
-Article 05 will answer:
+Article 05 answers:
 
 ```text
-How does the data actually behave?
+How does one approved table actually behave?
 ```
 
-Realistic synthetic data needs both.
+Article 06 will validate relationships using the structural and statistical evidence.

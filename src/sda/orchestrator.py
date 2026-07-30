@@ -11,7 +11,9 @@ _ALLOWED_TRANSITIONS: dict[RunStage, frozenset[RunStage]] = {
     RunStage.RECEIVED: frozenset({RunStage.METADATA_DISCOVERED, RunStage.FAILED}),
     RunStage.METADATA_DISCOVERED: frozenset({RunStage.PROFILED, RunStage.FAILED}),
     RunStage.PROFILED: frozenset({RunStage.RELATIONSHIPS_MAPPED, RunStage.FAILED}),
-    RunStage.RELATIONSHIPS_MAPPED: frozenset({RunStage.PATTERNS_DETECTED, RunStage.PLAN_DRAFTED, RunStage.FAILED}),
+    RunStage.RELATIONSHIPS_MAPPED: frozenset(
+        {RunStage.PATTERNS_DETECTED, RunStage.PLAN_DRAFTED, RunStage.FAILED}
+    ),
     RunStage.PATTERNS_DETECTED: frozenset({RunStage.PLAN_DRAFTED, RunStage.FAILED}),
     RunStage.PLAN_DRAFTED: frozenset({RunStage.GENERATED, RunStage.FAILED}),
     RunStage.GENERATED: frozenset({RunStage.VALIDATED, RunStage.FAILED}),

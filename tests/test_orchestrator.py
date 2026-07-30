@@ -22,9 +22,10 @@ def test_design_demo_stops_at_plan() -> None:
         ToolName.UC_METADATA_READER,
         ToolName.TABLE_PROFILER,
         ToolName.RELATIONSHIP_DETECTOR,
+        ToolName.PATTERN_DETECTOR,
         ToolName.GENERATION_PLANNER,
     ]
-    assert len(state.artifacts) == 4
+    assert len(state.artifacts) == 5
 
 
 def test_illegal_transition_is_rejected() -> None:

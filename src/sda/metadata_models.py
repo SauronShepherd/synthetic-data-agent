@@ -15,16 +15,24 @@ class ObjectType(StrEnum):
     """Supported Unity Catalog relation types for the first metadata reader."""
 
     TABLE = "TABLE"
-    BASE_TABLE = "TABLE"  # backwards-compatible alias
+    BASE_TABLE = "BASE TABLE"  # legacy serialized platform value
     VIEW = "VIEW"
     MATERIALIZED_VIEW = "MATERIALIZED VIEW"
     STREAMING_TABLE = "STREAMING TABLE"
     UNKNOWN = "UNKNOWN"
 
     @classmethod
-    def from_platform(cls, value: str) -> "ObjectType":
+    def from_platform(cls, value: str) -> ObjectType:
         normalized = value.strip().upper()
-        if normalized in {"MANAGED", "EXTERNAL", "FOREIGN", "MANAGED_SHALLOW_CLONE", "EXTERNAL_SHALLOW_CLONE", "BASE TABLE"}:
+        if normalized == "BASE TABLE":
+            return cls.BASE_TABLE
+        if normalized in {
+            "MANAGED",
+            "EXTERNAL",
+            "FOREIGN",
+            "MANAGED_SHALLOW_CLONE",
+            "EXTERNAL_SHALLOW_CLONE",
+        }:
             return cls.TABLE
         if normalized == "VIEW":
             return cls.VIEW
@@ -126,8 +134,7 @@ class TableMetadata:
         payload = asdict(self)
         payload["object_type"] = self.object_type.value
         payload["constraints"] = [
-            {**asdict(constraint), "kind": constraint.kind.value}
-            for constraint in self.constraints
+            {**asdict(constraint), "kind": constraint.kind.value} for constraint in self.constraints
         ]
         payload["full_name"] = self.full_name
         payload["agent_summary"] = _table_summary(self)
@@ -169,9 +176,11 @@ class MetadataInventory:
 def _table_summary(table: TableMetadata) -> str:
     sensitivity = ", ".join(table.sensitivity_signals) or "no sensitivity signals detected"
     warnings = ", ".join(table.metadata_warnings) or "no metadata warnings"
-    return (f"{table.full_name} is a {table.object_type.value.lower()} with {len(table.columns)} "
-            f"columns and {len(table.constraints)} declared constraints. "
-            f"Sensitivity: {sensitivity}. Warnings: {warnings}.")
+    return (
+        f"{table.full_name} is a {table.object_type.value.lower()} with {len(table.columns)} "
+        f"columns and {len(table.constraints)} declared constraints. "
+        f"Sensitivity: {sensitivity}. Warnings: {warnings}."
+    )
 
 
 @dataclass(frozen=True, slots=True)

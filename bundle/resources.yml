@@ -22,3 +22,37 @@ resources:
         - environment_key: uc_metadata_reader_environment
           spec:
             environment_version: "2"
+
+    table_profiler:
+      name: "[${bundle.target}] SDA Table Profiler"
+      parameters:
+        - name: source_table
+          default: ${var.sda_profile_source_table}
+        - name: mode
+          default: ${var.sda_profile_mode}
+        - name: column_allowlist
+          default: ""
+        - name: profile_catalog
+          default: ${var.sda_profile_catalog}
+        - name: profile_schema
+          default: ${var.sda_profile_schema}
+      tasks:
+        - task_key: profile_table
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/table_profile_spark.py
+            parameters:
+              - --source-table
+              - "{{job.parameters.source_table}}"
+              - --mode
+              - "{{job.parameters.mode}}"
+              - --column-allowlist
+              - "{{job.parameters.column_allowlist}}"
+              - --profile-catalog
+              - "{{job.parameters.profile_catalog}}"
+              - --profile-schema
+              - "{{job.parameters.profile_schema}}"
+          environment_key: table_profiler_environment
+      environments:
+        - environment_key: table_profiler_environment
+          spec:
+            environment_version: "2"

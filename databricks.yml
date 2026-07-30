@@ -52,3 +52,15 @@ variables:
   sda_max_metadata_objects:
     description: Maximum number of metadata objects to return from uc_metadata_reader.
     default: "100"
+  sda_profile_source_table:
+    description: Single fully qualified relation profiled by the SDA 05 job.
+    default: main.sample_source.sample_table
+  sda_profile_mode:
+    description: SDA 05 profiling mode.
+    default: quick
+  sda_profile_catalog:
+    description: Governed catalog for SDA 05 profile evidence.
+    default: sda_dev
+  sda_profile_schema:
+    description: Governed schema for SDA 05 profile evidence.
+    default: profiles

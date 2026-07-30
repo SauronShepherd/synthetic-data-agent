@@ -1,8 +1,8 @@
-# Synthetic Data Agent — Article 04
+# Synthetic Data Agent — Article 05
 
-This branch extends the Article 03 project skeleton with the first concrete SDA tool from **SDA 04: Reading Unity Catalog Metadata — The Agent's First Tool**.
+This branch extends the governed Article 04 foundation with the deterministic SDA 05 `table_profiler` tool.
 
-The project still does **not** generate synthetic rows and does **not** profile source data. That is intentional. Article 04 gives the agent governed awareness first: catalogs, schemas, tables, columns, comments, tags, owners, declared constraints, sensitivity signals, and warnings.
+The project still does **not** generate synthetic rows. SDA 05 adds governed value-level profiling while preserving the Article 04 metadata contract.
 
 ## Current status
 
@@ -256,14 +256,15 @@ Before committing, verify that no personal or workspace-specific values are pres
 - no local virtual environments or caches.
 
 Use placeholders such as `<profile-name>`, `<workspace-host>`, `<warehouse-id>`, `<catalog>`, and `<schema>` in documentation.
-## SDA 04 milestone
+## SDA 05 milestone
 
-Implemented through SDA 04: declarative bundle deployment with environment-specific
-guardrails, the orchestration contract, and a deterministic Unity Catalog metadata
-reader covering catalog/schema scope, table and column metadata, tags, sensitivity
-signals, declared constraints, warnings, provenance, and agent-facing summaries.
+Implemented through SDA 05: declarative bundle deployment with environment-specific
+guardrails, a deterministic Unity Catalog metadata reader, and a one-relation
+`table_profiler` that produces versioned numeric, categorical, string, temporal,
+missingness, outlier, complex-type, freshness, provenance, and governed Delta evidence.
 
-Designed but intentionally deferred: profiling, relationship validation/inference,
-cross-column pattern detection implementation, durable state, generation, quality
+Designed but intentionally deferred: relationship validation/inference, broad
+cross-column pattern detection, durable operational state, generation, quality
 validation, and publishing. A missing metadata signal is not proof that data is safe;
-declared constraints remain unvalidated.
+declared constraints remain unvalidated, and profiling remains evidence rather than a
+business-rule or privacy verdict.

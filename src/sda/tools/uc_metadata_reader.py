@@ -13,10 +13,10 @@ The production path should use the adapter with a Databricks Spark session.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from fnmatch import fnmatchcase
 from importlib import import_module
 from typing import Any, Protocol
@@ -175,11 +175,14 @@ class DatabricksSqlConnectorExecutor:
                 "Install it with: python -m pip install -e .[databricks]"
             ) from exc
 
-        with databricks_sql.connect(
-            server_hostname=self._server_hostname,
-            http_path=self._http_path,
-            access_token=self._access_token,
-        ) as connection, connection.cursor() as cursor:
+        with (
+            databricks_sql.connect(
+                server_hostname=self._server_hostname,
+                http_path=self._http_path,
+                access_token=self._access_token,
+            ) as connection,
+            connection.cursor() as cursor,
+        ):
             cursor.execute(sql)
             description = cursor.description or ()
             column_names = tuple(str(column[0]) for column in description)
@@ -200,26 +203,39 @@ class InformationSchemaMetadataAdapter:
         raw_tables: list[RawTableMetadata] = []
         for catalog in config.catalog_allowlist:
             for schema in _schema_scope(config):
-                raw_tables.extend(self._read_catalog_scope(catalog, schema=schema, max_objects=config.max_objects))
+                raw_tables.extend(
+                    self._read_catalog_scope(catalog, schema=schema, max_objects=config.max_objects)
+                )
         return tuple(raw_tables)
 
     def read_inventory(self, config: MetadataReadConfig) -> MetadataInventory:
         """Read and normalize a governed metadata inventory from Unity Catalog."""
         self._query_warnings = []
-        visible_catalog_rows = self._safe_execute("SELECT catalog_name AS catalog FROM system.information_schema.catalogs")
+        visible_catalog_rows = self._safe_execute(
+            "SELECT catalog_name AS catalog FROM system.information_schema.catalogs"
+        )
         visible_catalogs = tuple(sorted({str(row["catalog"]) for row in visible_catalog_rows}))
         raw_tables = self.read_raw_tables(config)
-        catalogs = tuple(catalog for catalog in config.catalog_allowlist if not visible_catalogs or catalog in visible_catalogs)
+        catalogs = tuple(
+            catalog
+            for catalog in config.catalog_allowlist
+            if not visible_catalogs or catalog in visible_catalogs
+        )
         schemas = tuple((table.catalog, table.schema) for table in raw_tables)
         inventory = UcMetadataReader(config=config, raw_tables=raw_tables).read_inventory(
-            visible_catalogs=visible_catalogs, selected_catalogs=catalogs,
-            visible_schemas=tuple(dict.fromkeys(schemas)), selected_schemas=tuple(dict.fromkeys(schemas))
+            visible_catalogs=visible_catalogs,
+            selected_catalogs=catalogs,
+            visible_schemas=tuple(dict.fromkeys(schemas)),
+            selected_schemas=tuple(dict.fromkeys(schemas)),
         )
         return MetadataInventory(
-            tables=inventory.tables, skipped_objects=inventory.skipped_objects,
+            tables=inventory.tables,
+            skipped_objects=inventory.skipped_objects,
             warnings=inventory.warnings + tuple(self._query_warnings),
-            visible_catalogs=inventory.visible_catalogs, selected_catalogs=inventory.selected_catalogs,
-            visible_schemas=inventory.visible_schemas, selected_schemas=inventory.selected_schemas,
+            visible_catalogs=inventory.visible_catalogs,
+            selected_catalogs=inventory.selected_catalogs,
+            visible_schemas=inventory.visible_schemas,
+            selected_schemas=inventory.selected_schemas,
             provenance=inventory.provenance,
         )
 
@@ -231,8 +247,13 @@ class InformationSchemaMetadataAdapter:
         max_objects: int,
     ) -> tuple[RawTableMetadata, ...]:
         queries = information_schema_queries(catalog, schema=schema)
-        tables = tuple(sorted(self._executor.execute(queries[2]), key=lambda r: (str(r['catalog']), str(r['schema']), str(r['name'])))[:max_objects])
-        selected = {(str(r['catalog']), str(r['schema']), str(r['name'])) for r in tables}
+        tables = tuple(
+            sorted(
+                self._executor.execute(queries[2]),
+                key=lambda r: (str(r["catalog"]), str(r["schema"]), str(r["name"])),
+            )[:max_objects]
+        )
+        selected = {(str(r["catalog"]), str(r["schema"]), str(r["name"])) for r in tables}
         columns = self._executor.execute(_restrict_query(queries[3], selected))
         table_tags = self._safe_execute(_restrict_query(queries[4], selected))
         column_tags = self._safe_execute(_restrict_query(queries[5], selected))
@@ -366,7 +387,10 @@ class UcMetadataReader:
             return False
         if self._config.schema_allowlist and table.schema not in self._config.schema_allowlist:
             return False
-        if not self._config.include_views and ObjectType.from_platform(table.object_type) == ObjectType.VIEW:
+        if (
+            not self._config.include_views
+            and ObjectType.from_platform(table.object_type) == ObjectType.VIEW
+        ):
             return False
         if not self._config.table_patterns:
             return True
@@ -378,7 +402,8 @@ class UcMetadataReader:
         relationships = tuple(
             f"{constraint.kind.value}:{','.join(constraint.columns)}"
             for constraint in raw_table.constraints
-            if constraint.kind in {
+            if constraint.kind
+            in {
                 ConstraintKind.PRIMARY_KEY,
                 ConstraintKind.FOREIGN_KEY,
                 ConstraintKind.UNIQUE,
@@ -421,7 +446,9 @@ class UcMetadataReader:
                     signals.append(f"{column.name}:classification_tag:{tag}")
 
         for tag in table.table_tags:
-            if tag.lower().startswith("class.") or any(term in tag.lower() for term in ("pii", "sensitive", "confidential")):
+            if tag.lower().startswith("class.") or any(
+                term in tag.lower() for term in ("pii", "sensitive", "confidential")
+            ):
                 signals.append(f"table:sensitivity_tag:{tag}")
 
         return tuple(dict.fromkeys(signals))
@@ -531,7 +558,7 @@ def _build_columns_by_table(
             name=str(row["column_name"]),
             data_type=str(data_type),
             nullable=str(row.get("is_nullable", "YES")).upper() == "YES",
-            ordinal_position=int(row["ordinal_position"]),
+            ordinal_position=max(1, int(row["ordinal_position"])),
             comment=_optional_str(row.get("comment")),
             tags=tuple(tags_by_column.get((*_table_key(row), str(row["column_name"])), ())),
         )
@@ -559,14 +586,17 @@ def _build_constraints_by_table(
     constraint_tables: Sequence[Mapping[str, Any]],
     constraint_columns: Sequence[Mapping[str, Any]],
 ) -> dict[tuple[str, str, str], tuple[ConstraintMetadata, ...]]:
-    columns_by_constraint: dict[tuple[str, str, str], list[tuple[int, str, int | None]]] = defaultdict(list)
+    columns_by_constraint: dict[tuple[str, str, str], list[tuple[int, str, int | None]]] = (
+        defaultdict(list)
+    )
     for row in key_columns:
         columns_by_constraint[_constraint_key(row)].append(
             (
                 int(row.get("ordinal_position", 1)),
                 str(row["column_name"]),
                 int(row["position_in_unique_constraint"])
-                if row.get("position_in_unique_constraint") is not None else None,
+                if row.get("position_in_unique_constraint") is not None
+                else None,
             )
         )
 
@@ -593,7 +623,9 @@ def _build_constraints_by_table(
     grouped: dict[tuple[str, str, str], list[ConstraintMetadata]] = defaultdict(list)
     for row in constraints:
         constraint_key = _constraint_key(row)
-        child_parts = sorted(columns_by_constraint.get(constraint_key, ()), key=lambda part: part[0])
+        child_parts = sorted(
+            columns_by_constraint.get(constraint_key, ()), key=lambda part: part[0]
+        )
         ordered_columns = tuple(column for _, column, _ in child_parts)
         if not ordered_columns:
             continue
@@ -605,7 +637,9 @@ def _build_constraints_by_table(
             referenced_parts = referenced_table_by_constraint.get(unique_key)
             if referenced_parts is not None:
                 referenced_table = ".".join(referenced_parts)
-                parent_parts = sorted(columns_by_constraint.get(unique_key, ()), key=lambda part: part[0])
+                parent_parts = sorted(
+                    columns_by_constraint.get(unique_key, ()), key=lambda part: part[0]
+                )
                 parent_by_position = {ordinal: column for ordinal, column, _ in parent_parts}
                 if any(position is not None for _, _, position in child_parts):
                     referenced_columns = tuple(
@@ -666,10 +700,14 @@ def _restrict_query(sql: str, selected: set[tuple[str, str, str]]) -> str:
     if not selected:
         return sql + " AND 1 = 0"
     predicates = " OR ".join(
-        f"(catalog = {_quote_literal(c)} AND schema = {_quote_literal(s)} AND name = {_quote_literal(n)})"
+        f"(catalog = {_quote_literal(c)} AND schema = {_quote_literal(s)} "
+        f"AND name = {_quote_literal(n)})"
         for c, s, n in sorted(selected)
     )
-    return f"SELECT * FROM ({sql}) AS selected_metadata WHERE {predicates}"
+    return (
+        f"SELECT * FROM ({sql}) AS selected_metadata "
+        f"WHERE {predicates}"
+    )
 
 
 def _parse_constraint_kind(value: str) -> ConstraintKind:
