@@ -13,6 +13,7 @@ def evidence(
     count: int | None = None,
     method: MetricMethod = MetricMethod.EXACT,
     sample_fraction: float | None = None,
+    approximation: dict[str, Any] | None = None,
     warning: str | None = None,
 ) -> MetricEvidence:
     return MetricEvidence(
@@ -20,6 +21,7 @@ def evidence(
         method=method,
         population_count=count,
         sample_fraction=sample_fraction,
+        approximation=approximation or {},
         warning=warning,
     )
 

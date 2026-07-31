@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatchcase
 from importlib import import_module
@@ -197,6 +197,7 @@ class InformationSchemaMetadataAdapter:
     def __init__(self, executor: SqlExecutor) -> None:
         self._executor = executor
         self._query_warnings: list[str] = []
+        self._query_status: dict[str, str] = {}
 
     def read_raw_tables(self, config: MetadataReadConfig) -> tuple[RawTableMetadata, ...]:
         """Execute Unity Catalog metadata queries and return raw table metadata."""
@@ -204,39 +205,129 @@ class InformationSchemaMetadataAdapter:
         for catalog in config.catalog_allowlist:
             for schema in _schema_scope(config):
                 raw_tables.extend(
-                    self._read_catalog_scope(catalog, schema=schema, max_objects=config.max_objects)
+                    self._read_catalog_scope(
+                        catalog,
+                        schema=schema,
+                        max_objects=2**31 - 1,
+                        table_patterns=config.table_patterns,
+                        include_views=config.include_views,
+                    )
                 )
         return tuple(raw_tables)
 
     def read_inventory(self, config: MetadataReadConfig) -> MetadataInventory:
         """Read and normalize a governed metadata inventory from Unity Catalog."""
         self._query_warnings = []
+        self._query_status = {}
         visible_catalog_rows = self._safe_execute(
             "SELECT catalog_name AS catalog FROM system.information_schema.catalogs"
         )
         visible_catalogs = tuple(sorted({str(row["catalog"]) for row in visible_catalog_rows}))
-        raw_tables = self.read_raw_tables(config)
+        schema_rows: list[Mapping[str, Any]] = []
+        for catalog in config.catalog_allowlist:
+            schema_rows.extend(
+                self._safe_execute(information_schema_queries(catalog)[1])
+            )
+        visible_schemas = tuple(
+            sorted({(str(row["catalog"]), str(row["schema"])) for row in schema_rows})
+        )
+        selected_schemas = tuple(
+            item
+            for item in visible_schemas
+            if not config.schema_allowlist or item[1] in config.schema_allowlist
+        )
+        raw_tables: tuple[RawTableMetadata, ...]
+        if visible_schemas and not selected_schemas:
+            raw_tables = ()
+        else:
+            scopes: tuple[tuple[str, str | None], ...] = (
+                selected_schemas
+                or tuple(
+                    (catalog, schema)
+                    for catalog in config.catalog_allowlist
+                    for schema in (config.schema_allowlist or (None,))
+                )
+            )
+            candidates: list[tuple[str, str, str]] = []
+            for catalog, schema in scopes:
+                rows = self._safe_execute(
+                    information_schema_queries(catalog, schema=schema)[2]
+                )
+                for row in rows:
+                    name = str(row["name"])
+                    if (
+                        config.include_views
+                        or ObjectType.from_platform(str(row.get("object_type", "")))
+                        != ObjectType.VIEW
+                    ) and (
+                        not config.table_patterns
+                        or any(fnmatchcase(name, pattern) for pattern in config.table_patterns)
+                    ):
+                        candidates.append((catalog, str(row["schema"]), name))
+            selected_names = sorted(set(candidates))[: config.max_objects]
+            grouped: dict[tuple[str, str], set[str]] = defaultdict(set)
+            for catalog, schema, name in selected_names:
+                grouped[(catalog, schema)].add(name)
+            detail_rows: list[RawTableMetadata] = []
+            for (catalog, schema), names in grouped.items():
+                detail_rows.extend(
+                    self._read_catalog_scope(
+                        catalog,
+                        schema=schema,
+                        max_objects=len(names),
+                        selected_names=names,
+                        table_patterns=config.table_patterns,
+                        include_views=config.include_views,
+                    )
+                )
+            raw_tables = tuple(detail_rows)
         catalogs = tuple(
             catalog
             for catalog in config.catalog_allowlist
             if not visible_catalogs or catalog in visible_catalogs
         )
-        schemas = tuple((table.catalog, table.schema) for table in raw_tables)
         inventory = UcMetadataReader(config=config, raw_tables=raw_tables).read_inventory(
             visible_catalogs=visible_catalogs,
             selected_catalogs=catalogs,
-            visible_schemas=tuple(dict.fromkeys(schemas)),
-            selected_schemas=tuple(dict.fromkeys(schemas)),
+            visible_schemas=visible_schemas,
+            selected_schemas=selected_schemas,
+        )
+        unavailable_warnings = {
+            "table_constraints": "constraint_metadata_unavailable",
+            "table_tags": "table_tag_metadata_unavailable",
+            "column_tags": "column_tag_metadata_unavailable",
+        }
+        adjusted_tables = tuple(
+            replace(
+                table,
+                metadata_warnings=tuple(
+                    warning
+                    for warning in (
+                        *table.metadata_warnings,
+                        *(
+                            unavailable_warnings[source]
+                            for source, warning in self._query_status.items()
+                            if warning == "unavailable" and source in unavailable_warnings
+                        ),
+                    )
+                    if warning != "no_declared_constraints"
+                    or self._query_status.get("table_constraints") != "unavailable"
+                ),
+            )
+            for table in inventory.tables
         )
         return MetadataInventory(
-            tables=inventory.tables,
+            tables=adjusted_tables,
             skipped_objects=inventory.skipped_objects,
             warnings=inventory.warnings + tuple(self._query_warnings),
             visible_catalogs=inventory.visible_catalogs,
             selected_catalogs=inventory.selected_catalogs,
             visible_schemas=inventory.visible_schemas,
             selected_schemas=inventory.selected_schemas,
-            provenance=inventory.provenance,
+            provenance={
+                **inventory.provenance,
+                "metadata_sources": dict(sorted(self._query_status.items())),
+            },
         )
 
     def _read_catalog_scope(
@@ -245,11 +336,27 @@ class InformationSchemaMetadataAdapter:
         *,
         schema: str | None,
         max_objects: int,
+        selected_names: set[str] | None = None,
+        table_patterns: tuple[str, ...] = (),
+        include_views: bool = True,
     ) -> tuple[RawTableMetadata, ...]:
         queries = information_schema_queries(catalog, schema=schema)
+        candidate_rows = tuple(
+            row
+            for row in self._executor.execute(queries[2])
+            if selected_names is None or str(row["name"]) in selected_names
+            if include_views
+            or ObjectType.from_platform(str(row.get("object_type", ""))) != ObjectType.VIEW
+        )
+        if table_patterns:
+            candidate_rows = tuple(
+                row
+                for row in candidate_rows
+                if any(fnmatchcase(str(row["name"]), pattern) for pattern in table_patterns)
+            )
         tables = tuple(
             sorted(
-                self._executor.execute(queries[2]),
+                candidate_rows,
                 key=lambda r: (str(r["catalog"]), str(r["schema"]), str(r["name"])),
             )[:max_objects]
         )
@@ -289,11 +396,14 @@ class InformationSchemaMetadataAdapter:
         )
 
     def _safe_execute(self, sql: str) -> Sequence[Mapping[str, Any]]:
+        source = _metadata_source_name(sql)
         try:
-            return self._executor.execute(sql)
+            rows = self._executor.execute(sql)
+            self._query_status[source] = "success"
+            return rows
         except Exception:  # pragma: no cover - Databricks version/permission dependent
-            source = sql.lower().split("information_schema.")[-1].split()[0].upper()
-            self._query_warnings.append(f"{source.lower()}_metadata_unavailable")
+            self._query_status[source] = "unavailable"
+            self._query_warnings.append(f"{source}_metadata_unavailable")
             return ()
 
 
@@ -627,7 +737,8 @@ def _build_constraints_by_table(
             columns_by_constraint.get(constraint_key, ()), key=lambda part: part[0]
         )
         ordered_columns = tuple(column for _, column, _ in child_parts)
-        if not ordered_columns:
+        kind = _parse_constraint_kind(str(row.get("constraint_type", "UNKNOWN")))
+        if not ordered_columns and kind not in {ConstraintKind.CHECK, ConstraintKind.NOT_NULL}:
             continue
 
         referenced_table = None
@@ -655,8 +766,9 @@ def _build_constraints_by_table(
         grouped[_table_key(row)].append(
             ConstraintMetadata(
                 name=str(row["constraint_name"]),
-                kind=_parse_constraint_kind(str(row.get("constraint_type", "UNKNOWN"))),
+                kind=kind,
                 columns=ordered_columns,
+                check_clause=_optional_str(row.get("check_clause")),
                 referenced_table=referenced_table,
                 referenced_columns=referenced_columns,
                 enforced=str(row.get("enforced", "NO")).upper() == "YES",
@@ -670,6 +782,27 @@ def _schema_scope(config: MetadataReadConfig) -> tuple[str | None, ...]:
     if not config.schema_allowlist:
         return (None,)
     return tuple(config.schema_allowlist)
+
+
+def _metadata_source_name(sql: str) -> str:
+    """Return a stable metadata-family name without exposing query details."""
+    lowered = sql.lower()
+    for source in (
+        "catalogs",
+        "schemata",
+        "tables",
+        "columns",
+        "table_tags",
+        "column_tags",
+        "table_constraints",
+        "key_column_usage",
+        "referential_constraints",
+        "constraint_table_usage",
+        "constraint_column_usage",
+    ):
+        if f"information_schema.{source}" in lowered:
+            return source
+    return "metadata_query"
 
 
 def _table_key(row: Mapping[str, Any]) -> tuple[str, str, str]:

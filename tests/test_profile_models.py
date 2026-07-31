@@ -1,6 +1,6 @@
 from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
 from sda.profile_models import ProfileMode, TableProfileRequest, ValueRetentionPolicy
-from sda.tools.table_profiler import TableProfiler
+from sda.tools.table_profiler import TableProfiler, _is_numeric_dtype
 
 
 def metadata() -> TableMetadata:
@@ -23,6 +23,12 @@ def test_request_validates_full_mode_and_hashes_configuration() -> None:
         request.configuration_hash
         != TableProfileRequest("main.sales.orders", sample_seed=7).configuration_hash
     )
+
+
+def test_spark_numeric_type_detection_does_not_misclassify_string() -> None:
+    assert _is_numeric_dtype("DOUBLE") is True
+    assert _is_numeric_dtype("DECIMAL(18,2)") is True
+    assert _is_numeric_dtype("STRING") is False
 
 
 def test_table_profiler_is_deterministic_and_redacts_sensitive_categories() -> None:

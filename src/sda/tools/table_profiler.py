@@ -38,6 +38,23 @@ from sda.profiling.temporal import temporal_metrics
 from sda.version import __version__
 
 
+def _is_numeric_dtype(dtype: str) -> bool:
+    """Recognize numeric Spark types without substring false positives."""
+    normalized = dtype.strip().lower()
+    return normalized in {
+        "byte",
+        "short",
+        "int",
+        "integer",
+        "long",
+        "bigint",
+        "float",
+        "double",
+        "decimal",
+        "numeric",
+    } or normalized.startswith(("decimal(", "numeric("))
+
+
 class TableProfiler:
     name = ToolName.TABLE_PROFILER
 
@@ -226,6 +243,10 @@ class TableProfiler:
                 seed=self.request.sample_seed,
             )
         )
+        live_types = {
+            field.name: field.dataType.simpleString().lower()
+            for field in dataframe.schema.fields
+        }
 
         selected = [
             column
@@ -245,17 +266,46 @@ class TableProfiler:
                     F.approx_count_distinct(col).alias(f"{safe}_distinct"),
                 )
             )
-            dtype = column.data_type.lower()
-            if any(
-                token in dtype
-                for token in ("int", "long", "short", "float", "double", "decimal", "numeric")
-            ):
+            dtype = live_types.get(column.name, column.data_type.lower())
+            if "string" in dtype or "char" in dtype or "varchar" in dtype:
+                aliases[column.name].update(
+                    {"blank": f"{safe}_blank", "whitespace": f"{safe}_whitespace"}
+                )
+                expressions.extend(
+                    (
+                        F.sum(F.when(col == "", 1).otherwise(0)).alias(f"{safe}_blank"),
+                        F.sum(
+                            F.when(
+                                (F.trim(col) == "") & col.isNotNull() & (col != ""), 1
+                            ).otherwise(0)
+                        ).alias(f"{safe}_whitespace"),
+                    )
+                )
+                patterns = self.request.expected_string_patterns.get(column.name, ())
+                aliases[column.name]["patterns"] = f"{safe}_patterns"
+                expressions.append(
+                    F.array(
+                        *[
+                            F.sum(
+                                F.when(col.rlike(pattern), 1).otherwise(0)
+                            ).alias(f"{safe}_pattern_{pattern_index}")
+                            for pattern_index, pattern in enumerate(patterns)
+                        ]
+                    ).alias(f"{safe}_patterns")
+                    if patterns
+                    else F.lit([]).alias(f"{safe}_patterns")
+                )
+            if _is_numeric_dtype(dtype):
                 aliases[column.name].update(
                     {
                         "min": f"{safe}_min",
                         "max": f"{safe}_max",
                         "mean": f"{safe}_mean",
                         "stddev": f"{safe}_stddev",
+                        "zero": f"{safe}_zero",
+                        "positive": f"{safe}_positive",
+                        "negative": f"{safe}_negative",
+                        "percentiles": f"{safe}_percentiles",
                     }
                 )
                 expressions.extend(
@@ -264,15 +314,46 @@ class TableProfiler:
                         F.max(col).alias(f"{safe}_max"),
                         F.avg(col).alias(f"{safe}_mean"),
                         F.stddev_pop(col).alias(f"{safe}_stddev"),
+                        F.sum(F.when(col == 0, 1).otherwise(0)).alias(f"{safe}_zero"),
+                        F.sum(F.when(col > 0, 1).otherwise(0)).alias(f"{safe}_positive"),
+                        F.sum(F.when(col < 0, 1).otherwise(0)).alias(f"{safe}_negative"),
+                        F.percentile_approx(
+                            col,
+                            [0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99],
+                            self.request.percentile_accuracy,
+                        ).alias(f"{safe}_percentiles"),
                     )
                 )
+                aliases[column.name]["nan"] = f"{safe}_nan"
+                expressions.append(F.sum(F.when(F.isnan(col), 1).otherwise(0)).alias(f"{safe}_nan"))
             elif "string" in dtype or "char" in dtype or "varchar" in dtype:
                 aliases[column.name]["length_mean"] = f"{safe}_length_mean"
                 expressions.append(F.avg(F.length(col)).alias(f"{safe}_length_mean"))
             elif "date" in dtype or "timestamp" in dtype:
-                aliases[column.name].update({"min": f"{safe}_min", "max": f"{safe}_max"})
+                aliases[column.name].update(
+                    {
+                        "min": f"{safe}_min",
+                        "max": f"{safe}_max",
+                        "future": f"{safe}_future",
+                        "midnight": f"{safe}_midnight",
+                    }
+                )
                 expressions.extend(
-                    (F.min(col).alias(f"{safe}_min"), F.max(col).alias(f"{safe}_max"))
+                    (
+                        F.min(col).alias(f"{safe}_min"),
+                        F.max(col).alias(f"{safe}_max"),
+                        F.sum(F.when(col > F.current_timestamp(), 1).otherwise(0)).alias(
+                            f"{safe}_future"
+                        ),
+                        F.sum(
+                            F.when(
+                                (F.hour(col) == 0)
+                                & (F.minute(col) == 0)
+                                & (F.second(col) == 0),
+                                1,
+                            ).otherwise(0)
+                        ).alias(f"{safe}_midnight"),
+                    )
                 )
         result = scan.agg(*expressions).first().asDict(recursive=True)
         now = datetime.now(UTC)
@@ -281,20 +362,154 @@ class TableProfiler:
         for column in selected:
             names = aliases[column.name]
             null_count = int(result.get(names["null"]) or 0)
-            dtype = column.data_type.lower()
-            if any(
-                token in dtype
-                for token in ("int", "long", "short", "float", "double", "decimal", "numeric")
-            ):
+            dtype = live_types.get(column.name, column.data_type.lower())
+            col = F.col(column.name)
+            outliers: tuple[dict[str, Any], ...] = ()
+            metrics: dict[str, Any]
+            if _is_numeric_dtype(dtype):
                 kind = ColumnProfileKind.NUMERIC
                 metrics = {
-                    key: evidence(result.get(alias), method=MetricMethod.EXACT)
-                    for key, alias in names.items()
-                    if key in {"min", "max", "mean", "stddev"}
+                    "approx_distinct_count": evidence(
+                        result.get(names["distinct"]),
+                        method=MetricMethod.APPROXIMATE,
+                        approximation={"algorithm": "approx_count_distinct"},
+                    ),
+                    **{
+                        key: evidence(
+                            result.get(alias),
+                            method=(
+                                MetricMethod.EXACT
+                                if self.request.mode is ProfileMode.FULL
+                                else MetricMethod.SAMPLED
+                            ),
+                            sample_fraction=(
+                                None
+                                if self.request.mode is ProfileMode.FULL
+                                else self.request.sample_fraction
+                            ),
+                        )
+                        for key, alias in names.items()
+                        if key in {"min", "max", "mean", "stddev"}
+                    },
+                    "nan_count": evidence(
+                        result.get(names.get("nan")),
+                        method=(
+                            MetricMethod.EXACT
+                            if self.request.mode is ProfileMode.FULL
+                            else MetricMethod.SAMPLED
+                        ),
+                    ),
+                    **{
+                        f"{key}_rate": evidence(
+                            (result.get(names[key]) or 0) / row_count if row_count else 0.0,
+                            method=(
+                                MetricMethod.EXACT
+                                if self.request.mode is ProfileMode.FULL
+                                else MetricMethod.SAMPLED
+                            ),
+                        )
+                        for key in ("zero", "positive", "negative")
+                    },
                 }
+                percentile_values = result.get(names["percentiles"])
+                if percentile_values:
+                    for key, value in zip(
+                        ("p01", "p05", "p25", "p50", "p75", "p95", "p99"),
+                        percentile_values,
+                        strict=True,
+                    ):
+                        metrics[key] = evidence(
+                            value,
+                            method=MetricMethod.APPROXIMATE,
+                            approximation={
+                                "algorithm": "percentile_approx",
+                                "accuracy": self.request.percentile_accuracy,
+                            },
+                        )
+                    if "iqr" in self.request.outlier_methods and percentile_values[2] is not None:
+                        q1, q3 = percentile_values[2], percentile_values[4]
+                        low, high = q1 - 1.5 * (q3 - q1), q3 + 1.5 * (q3 - q1)
+                        outlier_count = scan.where((col < low) | (col > high)).count()
+                        outliers = (
+                            {
+                                "method": "iqr",
+                                "thresholds": {"lower": low, "upper": high},
+                                "outlier_count": outlier_count,
+                                "population_count": row_count,
+                                "count_method": "spark_filter_count",
+                            },
+                        )
             elif "string" in dtype or "char" in dtype or "varchar" in dtype:
-                kind = ColumnProfileKind.STRING
-                metrics = {"mean_length": evidence(result.get(names["length_mean"]))}
+                distinct_value = int(result.get(names["distinct"]) or 0)
+                kind = (
+                    ColumnProfileKind.CATEGORICAL
+                    if distinct_value <= self.request.category_cardinality_threshold
+                    else ColumnProfileKind.STRING
+                )
+                metrics = {
+                    "cardinality": evidence(
+                        distinct_value,
+                        method=MetricMethod.APPROXIMATE,
+                        approximation={"algorithm": "approx_count_distinct"},
+                    ),
+                    "mean_length": evidence(result.get(names["length_mean"])),
+                    "blank_count": evidence(result.get(names["blank"])),
+                    "whitespace_count": evidence(result.get(names["whitespace"])),
+                }
+                pattern_counts = result.get(names["patterns"]) or []
+                patterns = self.request.expected_string_patterns.get(column.name, ())
+                if patterns:
+                    metrics["pattern_match_rates"] = evidence(
+                        {
+                            pattern: (int(count or 0) / row_count if row_count else 0.0)
+                            for pattern, count in zip(patterns, pattern_counts, strict=True)
+                        }
+                    )
+                if kind is ColumnProfileKind.CATEGORICAL:
+                    policy = (
+                        self.request.sensitive_value_retention_policy
+                        if column.tags
+                        else self.request.value_retention_policy
+                    )
+                    top_values = (
+                        scan.where(col.isNotNull())
+                        .groupBy(col)
+                        .count()
+                        .orderBy(F.desc("count"))
+                        .limit(self.request.max_category_values)
+                        .collect()
+                    )
+                    total_non_null = sum(int(row["count"]) for row in top_values)
+                    metrics.update(
+                        {
+                            "top_values": [
+                                {
+                                    "rank": rank,
+                                    "value": str(row[0])
+                                    if policy is ValueRetentionPolicy.ALLOW_SAFE_VALUES
+                                    else None,
+                                    "count": int(row["count"]),
+                                    "share": (
+                                        int(row["count"]) / total_non_null
+                                        if total_non_null
+                                        else 0.0
+                                    ),
+                                }
+                                for rank, row in enumerate(top_values, start=1)
+                            ],
+                            "retained_count": len(top_values),
+                            "retained_weight": (
+                                total_non_null / (row_count - null_count)
+                                if row_count - null_count
+                                else 0.0
+                            ),
+                            "dominant_share": (
+                                int(top_values[0]["count"]) / total_non_null
+                                if top_values and total_non_null
+                                else 0.0
+                            ),
+                        }
+                    )
             elif "date" in dtype or "timestamp" in dtype:
                 kind = ColumnProfileKind.TEMPORAL
                 metrics = {
@@ -302,6 +517,79 @@ class TableProfiler:
                     for key, alias in names.items()
                     if key in {"min", "max"}
                 }
+                metrics.update(
+                    {
+                        "future_count": evidence(result.get(names["future"])),
+                        "midnight_count": evidence(result.get(names["midnight"])),
+                    }
+                )
+                for bucket_name, bucket_expression in (
+                    ("month_counts", F.month(col)),
+                    ("year_counts", F.year(col)),
+                    ("weekday_counts", F.dayofweek(col)),
+                    ("hour_counts", F.hour(col)),
+                ):
+                    bucket_rows = (
+                        scan.where(col.isNotNull())
+                        .groupBy(bucket_expression.alias("bucket"))
+                        .count()
+                        .collect()
+                    )
+                    metrics[bucket_name] = evidence(
+                        {str(row["bucket"]): int(row["count"]) for row in bucket_rows}
+                    )
+            if self.request.conditional_null_segments:
+                conditional: dict[str, Any] = {}
+                for segment in self.request.conditional_null_segments:
+                    if segment == column.name:
+                        continue
+                    segment_col = F.col(segment)
+                    segment_cardinality = int(
+                        scan.select(F.approx_count_distinct(segment_col).alias("cardinality"))
+                        .first()["cardinality"]
+                        or 0
+                    )
+                    if segment_cardinality > 50:
+                        conditional[segment] = {
+                            "available": False,
+                            "warning": "conditional_null_segment_too_high_cardinality",
+                        }
+                        continue
+                    groups = (
+                        scan.groupBy(segment_col)
+                        .agg(
+                            F.count(F.lit(1)).alias("row_count"),
+                            F.sum(F.when(col.isNull(), 1).otherwise(0)).alias("null_count"),
+                        )
+                        .orderBy(F.asc_nulls_first(segment))
+                        .collect()
+                    )
+                    segment_policy = (
+                        self.request.sensitive_value_retention_policy
+                        if next(c for c in selected if c.name == segment).tags
+                        else self.request.value_retention_policy
+                    )
+                    conditional[segment] = {
+                        "available": True,
+                        "segment_column": segment,
+                        "target_column": column.name,
+                        "groups": [
+                            {
+                                "segment": str(group[0])
+                                if segment_policy is ValueRetentionPolicy.ALLOW_SAFE_VALUES
+                                else None,
+                                "row_count": int(group["row_count"]),
+                                "null_rate": (
+                                    int(group["null_count"]) / int(group["row_count"])
+                                    if group["row_count"]
+                                    else 0.0
+                                ),
+                            }
+                            for group in groups
+                        ],
+                    }
+                if conditional:
+                    metrics["conditional_nulls"] = evidence(conditional)
             else:
                 kind = ColumnProfileKind.UNSUPPORTED
                 metrics = {}
@@ -322,8 +610,19 @@ class TableProfiler:
                     null_count=evidence(null_count),
                     null_rate=evidence(null_count / row_count if row_count else 0.0),
                     metrics=metrics,
+                    outlier_findings=outliers,
                     warnings=("unsupported_type_profile",)
                     if kind is ColumnProfileKind.UNSUPPORTED
+                    else (
+                        "category_values_redacted",
+                    )
+                    if kind is ColumnProfileKind.CATEGORICAL
+                    and (
+                        self.request.sensitive_value_retention_policy
+                        if column.tags
+                        else self.request.value_retention_policy
+                    )
+                    is not ValueRetentionPolicy.ALLOW_SAFE_VALUES
                     else (),
                 )
             )
@@ -336,7 +635,7 @@ class TableProfiler:
                 "tool_version": __version__,
             }
         )
-        return TableProfile(
+        profile = TableProfile(
             profile_id=fingerprint,
             profile_schema_version="1.0",
             source_table=self.request.source_table,
@@ -351,14 +650,31 @@ class TableProfiler:
             profile_mode=self.request.mode,
             tool_name=self.name.value,
             tool_version=__version__,
-            configuration={"source_table": self.request.source_table},
+            configuration={
+                "source_table": self.request.source_table,
+                "mode": self.request.mode.value,
+                "sample_fraction": self.request.sample_fraction,
+                "sample_seed": self.request.sample_seed,
+                "column_allowlist": self.request.column_allowlist,
+                "column_denylist": self.request.column_denylist,
+                "max_category_values": self.request.max_category_values,
+                "percentile_accuracy": self.request.percentile_accuracy,
+                "outlier_methods": self.request.outlier_methods,
+                "value_retention_policy": self.request.value_retention_policy.value,
+                "sensitive_value_retention_policy": (
+                    self.request.sensitive_value_retention_policy.value
+                ),
+            },
             configuration_hash=self.request.configuration_hash,
             session_timezone=self.session_timezone,
-            source_row_count=evidence(
-                row_count,
-                method=MetricMethod.EXACT
+            source_row_count=(
+                evidence(row_count, method=MetricMethod.EXACT)
                 if self.request.mode is ProfileMode.FULL
-                else MetricMethod.APPROXIMATE,
+                else evidence(
+                    None,
+                    method=MetricMethod.UNAVAILABLE,
+                    warning="source_row_count_unavailable_for_sampled_profile",
+                )
             ),
             sample_row_count=evidence(
                 row_count,
@@ -374,11 +690,72 @@ class TableProfiler:
             else "spark_sample",
             column_count=len(self.metadata.columns),
             profiled_column_count=len(profiles),
-            skipped_columns=(),
+            skipped_columns=tuple(
+                {
+                    "column_name": column.name,
+                    "reason": (
+                        "denylisted"
+                        if column.name in self.request.column_denylist
+                        else "not_in_allowlist"
+                    ),
+                }
+                for column in self.metadata.columns
+                if column not in selected
+            ),
             column_profiles=tuple(profiles),
             warnings=("source_version_unavailable",) if source_version is None else (),
             agent_summary=self._summary(row_count, profiles),
         )
+        if self.request.business_event_column:
+            event_col = F.col(self.request.business_event_column)
+            freshness_aliases = {
+                str(days): f"recent_{days}"
+                for days in self.request.recent_windows_days
+            }
+            freshness_row = scan.agg(
+                F.max(event_col).alias("max_event_time"),
+                *[
+                    F.sum(
+                        F.when(
+                            event_col >= F.current_timestamp() - F.expr(f"INTERVAL {days} DAYS"),
+                            1,
+                        ).otherwise(0)
+                    ).alias(alias)
+                    for days, alias in freshness_aliases.items()
+                ],
+            ).first()
+            max_event_time = freshness_row["max_event_time"]
+            if max_event_time is not None:
+                lag_seconds = max(
+                    0.0,
+                    (datetime.now(UTC).replace(tzinfo=None) - max_event_time).total_seconds(),
+                )
+                profile = replace(
+                    profile,
+                    business_freshness={
+                        "available": True,
+                        "max_event_time": max_event_time.isoformat(),
+                        "lag_seconds": lag_seconds,
+                        "recent_window_counts": {
+                            days: int(freshness_row[alias] or 0)
+                            for days, alias in freshness_aliases.items()
+                        },
+                        "basis": (
+                            "spark_sample"
+                            if self.request.mode is ProfileMode.QUICK
+                            else "spark_full_scan"
+                        ),
+                    },
+                )
+            else:
+                profile = replace(
+                    profile,
+                    business_freshness={
+                        "available": False,
+                        "warning": "business_event_column_missing_or_unreadable",
+                    },
+                )
+        return profile
 
     def run(self, state: AgentState, rows: Iterable[Mapping[str, Any]]) -> ToolResult:
         profile = self.profile_rows(rows)

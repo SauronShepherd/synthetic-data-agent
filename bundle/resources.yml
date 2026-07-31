@@ -32,6 +32,34 @@ resources:
           default: ${var.sda_profile_mode}
         - name: column_allowlist
           default: ""
+        - name: column_denylist
+          default: ""
+        - name: sample_fraction
+          default: "0.1"
+        - name: sample_seed
+          default: "42"
+        - name: max_category_values
+          default: "100"
+        - name: percentile_accuracy
+          default: "10000"
+        - name: business_event_column
+          default: ""
+        - name: conditional_null_segments
+          default: ""
+        - name: outlier_methods
+          default: "iqr,percentile"
+        - name: value_retention_policy
+          default: redact_values
+        - name: sensitive_value_retention_policy
+          default: no_values
+        - name: reuse_existing
+          default: "true"
+        - name: allow_best_effort_snapshot
+          default: ${var.sda_allow_best_effort_snapshot}
+        - name: allow_profile_schema_create
+          default: ${var.sda_allow_profile_schema_create}
+        - name: allow_metadata_fallback
+          default: "false"
         - name: profile_catalog
           default: ${var.sda_profile_catalog}
         - name: profile_schema
@@ -47,6 +75,34 @@ resources:
               - "{{job.parameters.mode}}"
               - --column-allowlist
               - "{{job.parameters.column_allowlist}}"
+              - --column-denylist
+              - "{{job.parameters.column_denylist}}"
+              - --sample-fraction
+              - "{{job.parameters.sample_fraction}}"
+              - --sample-seed
+              - "{{job.parameters.sample_seed}}"
+              - --max-category-values
+              - "{{job.parameters.max_category_values}}"
+              - --percentile-accuracy
+              - "{{job.parameters.percentile_accuracy}}"
+              - --business-event-column
+              - "{{job.parameters.business_event_column}}"
+              - --conditional-null-segments
+              - "{{job.parameters.conditional_null_segments}}"
+              - --outlier-methods
+              - "{{job.parameters.outlier_methods}}"
+              - --value-retention-policy
+              - "{{job.parameters.value_retention_policy}}"
+              - --sensitive-value-retention-policy
+              - "{{job.parameters.sensitive_value_retention_policy}}"
+              - --reuse-existing
+              - "{{job.parameters.reuse_existing}}"
+              - --allow-best-effort-snapshot
+              - "{{job.parameters.allow_best_effort_snapshot}}"
+              - --allow-profile-schema-create
+              - "{{job.parameters.allow_profile_schema_create}}"
+              - --allow-metadata-fallback
+              - "{{job.parameters.allow_metadata_fallback}}"
               - --profile-catalog
               - "{{job.parameters.profile_catalog}}"
               - --profile-schema

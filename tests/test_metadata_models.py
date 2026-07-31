@@ -44,6 +44,17 @@ def test_table_metadata_full_name_and_dict() -> None:
     assert payload["constraints"][0]["kind"] == "PRIMARY KEY"
 
 
+def test_check_constraint_can_be_preserved_without_key_columns() -> None:
+    constraint = ConstraintMetadata(
+        name="ck_positive",
+        kind=ConstraintKind.CHECK,
+        columns=(),
+        check_clause="amount > 0",
+    )
+    assert constraint.columns == ()
+    assert constraint.check_clause == "amount > 0"
+
+
 def test_inventory_rejects_duplicate_full_names() -> None:
     table = TableMetadata(
         catalog="main",

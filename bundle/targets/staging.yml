@@ -13,6 +13,11 @@ targets:
       - group_name: ${var.observer_group_name}
         level: CAN_VIEW
     variables:
+      sda_profile_catalog: sda_staging
+      sda_profile_schema: profiles
+      catalog_name: sda_staging
+      sda_allow_best_effort_snapshot: "false"
+      sda_allow_profile_schema_create: "false"
       sda_catalog_allowlist: main
       sda_schema_allowlist: ""
       sda_table_patterns: ""

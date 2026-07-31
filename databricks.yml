@@ -27,19 +27,19 @@ variables:
     default: "true"
   developer_group_name:
     description: Group that can manage development bundle resources.
-    default: users
+    default: __REQUIRED_DEVELOPER_GROUP__
   platform_admin_group_name:
     description: Group that can manage staging and production bundle resources.
-    default: users
+    default: __REQUIRED_PLATFORM_ADMIN_GROUP__
   operator_group_name:
     description: Group allowed to run controlled staging and production workflows.
-    default: users
+    default: __REQUIRED_OPERATOR_GROUP__
   observer_group_name:
     description: Group allowed to view controlled staging and production workflows.
-    default: users
+    default: __REQUIRED_OBSERVER_GROUP__
   runtime_service_principal_name:
     description: Service principal application ID used as the staging/prod run identity.
-    default: dummy-service-principal-for-dev
+    default: __REQUIRED_SERVICE_PRINCIPAL__
   sda_catalog_allowlist:
     description: Comma-separated Unity Catalog catalogs to inspect for Article 04 metadata discovery.
     default: sda_dev
@@ -64,3 +64,9 @@ variables:
   sda_profile_schema:
     description: Governed schema for SDA 05 profile evidence.
     default: profiles
+  sda_allow_best_effort_snapshot:
+    description: Permit non-reproducible profiling when Delta history cannot provide a source version.
+    default: "true"
+  sda_allow_profile_schema_create:
+    description: Permit the profiler to create its output schema automatically.
+    default: "true"

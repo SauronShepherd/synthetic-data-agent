@@ -178,6 +178,17 @@ databricks bundle deploy -t dev --profile <profile-name>
 databricks bundle run uc_metadata_reader -t dev --profile <profile-name>
 ```
 
+Run the SDA 05 profiler against one approved relation:
+
+```bash
+databricks bundle run table_profiler -t dev --profile <profile-name> \
+  --params="source_table=<catalog>.<schema>.<table>,mode=quick"
+```
+
+The dev target permits diagnostic schema creation and best-effort snapshots. Staging
+and production disable both by default; their governed profile schema must already
+exist and a reproducible Delta source version must be available.
+
 Override the metadata scope when running the bundle:
 
 ```bash

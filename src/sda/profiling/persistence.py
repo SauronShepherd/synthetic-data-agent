@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from typing import Any, Protocol
 
 from sda.profile_models import TableProfile
@@ -28,6 +29,7 @@ def persist_profile(
         for key, value in payload.items()
         if key != "column_profiles"
     }
+    header["status"] = "COMPLETE"
     columns = []
     distributions = []
     for column in payload["column_profiles"]:
@@ -62,21 +64,25 @@ def persist_profile(
         "column_profiles": column_name,
         "profile_distributions": f"{target}_profile_distributions",
     }
-    if reuse_existing and hasattr(spark, "table"):
+    if hasattr(spark, "sql"):
+        with suppress(Exception):
+            spark.sql(f"ALTER TABLE {table_name} ADD COLUMNS (status STRING)")
+    can_reuse = reuse_existing and profile.snapshot_reproducible
+    if can_reuse and hasattr(spark, "table"):
         try:
-            existing = spark.table(table_name).where(
-                f"profile_id = '{profile.profile_id}'"
-            ).limit(1).count()
+            existing = (
+                spark.table(table_name)
+                .where(
+                    f"profile_id = '{profile.profile_id}' AND status = 'COMPLETE'"
+                )
+                .limit(1)
+                .count()
+            )
             if existing:
                 return locations
         except Exception:
             pass
 
-    header_schema = StructType([StructField(key, StringType(), True) for key in header])
-    header_row = [tuple(header.values())]
-    spark.createDataFrame(header_row, schema=header_schema).write.format("delta").mode(
-        "overwrite"
-    ).option("replaceWhere", f"profile_id = '{profile.profile_id}'").saveAsTable(table_name)
     column_schema = (
         StructType([StructField(key, StringType(), True) for key in columns[0]])
         if columns
@@ -116,4 +122,11 @@ def persist_profile(
     spark.createDataFrame(distribution_rows, schema=distribution_schema).write.format("delta").mode(
         "overwrite"
     ).option("replaceWhere", f"profile_id = '{profile.profile_id}'").saveAsTable(distribution_name)
+    # Publish the COMPLETE header last. A retry can therefore never reuse a
+    # profile whose child evidence was only partially written.
+    header_schema = StructType([StructField(key, StringType(), True) for key in header])
+    header_row = [tuple(header.values())]
+    spark.createDataFrame(header_row, schema=header_schema).write.format("delta").mode(
+        "overwrite"
+    ).option("replaceWhere", f"profile_id = '{profile.profile_id}'").saveAsTable(table_name)
     return {**locations, "profile_distributions": distribution_name}

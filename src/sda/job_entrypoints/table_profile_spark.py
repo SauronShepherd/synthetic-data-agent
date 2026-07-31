@@ -20,16 +20,46 @@ _SRC_ROOT = (
 if str(_SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(_SRC_ROOT))
 
-from sda.profile_models import ProfileMode, TableProfileRequest  # noqa: E402
+from sda.profile_models import (  # noqa: E402
+    ProfileMode,
+    TableProfileRequest,
+    ValueRetentionPolicy,
+)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Profile one Unity Catalog relation.")
     parser.add_argument("--source-table", required=True)
     parser.add_argument("--mode", choices=[mode.value for mode in ProfileMode], default="quick")
+    parser.add_argument("--column-allowlist", default="")
+    parser.add_argument("--column-denylist", default="")
     parser.add_argument("--sample-fraction", type=float, default=0.1)
     parser.add_argument("--sample-seed", type=int, default=42)
-    parser.add_argument("--column-allowlist", default="")
+    parser.add_argument("--max-category-values", type=int, default=100)
+    parser.add_argument("--percentile-accuracy", type=int, default=10000)
+    parser.add_argument("--business-event-column", default="")
+    parser.add_argument("--conditional-null-segments", default="")
+    parser.add_argument("--outlier-methods", default="iqr,percentile")
+    parser.add_argument("--value-retention-policy", default="redact_values")
+    parser.add_argument("--sensitive-value-retention-policy", default="no_values")
+    parser.add_argument(
+        "--reuse-existing", type=lambda value: value.lower() == "true", default=True
+    )
+    parser.add_argument(
+        "--allow-best-effort-snapshot",
+        type=lambda value: value.lower() == "true",
+        default=True,
+    )
+    parser.add_argument(
+        "--allow-profile-schema-create",
+        type=lambda value: value.lower() == "true",
+        default=False,
+    )
+    parser.add_argument(
+        "--allow-metadata-fallback",
+        type=lambda value: value.strip().lower() == "true",
+        default=False,
+    )
     parser.add_argument("--profile-catalog", default=os.getenv("SDA_PROFILE_CATALOG", "sda_dev"))
     parser.add_argument("--profile-schema", default=os.getenv("SDA_PROFILE_SCHEMA", "profiles"))
     return parser.parse_args(argv)
@@ -47,6 +77,26 @@ def main(argv: Sequence[str] | None = None) -> None:
             for name in re.split(r"[,;]", args.column_allowlist)
             if name.strip()
         ),
+        column_denylist=tuple(
+            name.strip() for name in re.split(r"[,;]", args.column_denylist) if name.strip()
+        ),
+        max_category_values=args.max_category_values,
+        percentile_accuracy=args.percentile_accuracy,
+        business_event_column=args.business_event_column or None,
+        conditional_null_segments=tuple(
+            name.strip()
+            for name in re.split(r"[,;]", args.conditional_null_segments)
+            if name.strip()
+        ),
+        outlier_methods=tuple(
+            name.strip() for name in re.split(r"[,;]", args.outlier_methods) if name.strip()
+        ),
+        value_retention_policy=ValueRetentionPolicy(args.value_retention_policy),
+        sensitive_value_retention_policy=ValueRetentionPolicy(
+            args.sensitive_value_retention_policy
+        ),
+        reuse_existing=args.reuse_existing,
+        allow_best_effort_snapshot=args.allow_best_effort_snapshot,
         profile_catalog=args.profile_catalog,
         profile_schema=args.profile_schema,
     )
@@ -68,11 +118,17 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
     )
     dataframe = spark.table(args.source_table)
-    if (
+    metadata_missing = (
         len(metadata.tables) != 1
         or metadata.tables[0].full_name != args.source_table
         or not metadata.tables[0].columns
-    ):
+    )
+    if metadata_missing and not args.allow_metadata_fallback:
+        raise RuntimeError(
+            f"Governed metadata unavailable for {args.source_table}; "
+            "use --allow-metadata-fallback only for explicit development diagnostics"
+        )
+    if metadata_missing:
         from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
 
         metadata_table = TableMetadata(
@@ -88,6 +144,21 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
     else:
         metadata_table = metadata.tables[0]
+    available_columns = {column.name: column for column in metadata_table.columns}
+    requested_columns = set(request.column_allowlist) | set(request.column_denylist)
+    requested_columns.update(request.conditional_null_segments)
+    if request.business_event_column:
+        requested_columns.add(request.business_event_column)
+    missing_columns = sorted(requested_columns - set(available_columns))
+    if missing_columns:
+        raise ValueError(
+            "Requested profiler columns are absent from governed metadata: "
+            + ", ".join(missing_columns)
+        )
+    if request.business_event_column:
+        event_type = available_columns[request.business_event_column].data_type.lower()
+        if "date" not in event_type and "timestamp" not in event_type:
+            raise ValueError("business_event_column must be temporal")
     metadata_schema = {
         column.name: column.data_type.lower() for column in metadata_table.columns
     }
@@ -121,6 +192,15 @@ def main(argv: Sequence[str] | None = None) -> None:
             snapshot_warning = ""
     except Exception:
         pass
+    if source_version is None and not request.allow_best_effort_snapshot:
+        raise RuntimeError(
+            f"A reproducible source snapshot is unavailable for {args.source_table}; "
+            "set allow_best_effort_snapshot=true only when explicitly permitted"
+        )
+    if source_version is not None:
+        dataframe = spark.sql(
+            f"SELECT * FROM {args.source_table} VERSION AS OF {int(source_version)}"
+        )
     profile = TableProfiler(
         request,
         metadata_table,
@@ -129,7 +209,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     if snapshot_warning:
         profile = replace(
             profile,
-            warnings=tuple(dict.fromkeys((*profile.warnings, snapshot_warning))),
+            warnings=tuple(
+                dict.fromkeys(
+                    (*profile.warnings, *metadata_table.metadata_warnings, snapshot_warning)
+                )
+            ),
         )
     if schema_drift:
         profile = replace(
@@ -149,7 +233,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "warning": "freshness_history_unavailable",
             },
         )
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{args.profile_catalog}`.`{args.profile_schema}`")
+    if args.allow_profile_schema_create:
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{args.profile_catalog}`.`{args.profile_schema}`")
     locations = persist_profile(
         spark,
         profile,

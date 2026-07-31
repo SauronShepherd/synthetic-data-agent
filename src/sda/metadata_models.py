@@ -81,6 +81,7 @@ class ConstraintMetadata:
     name: str
     kind: ConstraintKind
     columns: tuple[str, ...]
+    check_clause: str | None = None
     referenced_table: str | None = None
     referenced_columns: tuple[str, ...] = ()
     enforced: bool = False
@@ -89,7 +90,7 @@ class ConstraintMetadata:
     def __post_init__(self) -> None:
         if not self.name.strip():
             raise ValueError("constraint name must not be empty")
-        if not self.columns:
+        if not self.columns and self.kind not in {ConstraintKind.CHECK, ConstraintKind.NOT_NULL}:
             raise ValueError("constraint columns must not be empty")
         if self.referenced_table is None and self.referenced_columns:
             raise ValueError("referenced_columns require referenced_table")
