@@ -309,6 +309,7 @@ class InformationSchemaMetadataAdapter:
         )
         unavailable_warnings = {
             "table_constraints": "constraint_metadata_unavailable",
+            "check_constraints": "check_constraint_metadata_unavailable",
             "table_tags": "table_tag_metadata_unavailable",
             "column_tags": "column_tag_metadata_unavailable",
         }
@@ -854,6 +855,7 @@ def _metadata_source_name(sql: str) -> str:
         "referential_constraints",
         "constraint_table_usage",
         "constraint_column_usage",
+        "check_constraints",
     ):
         if f"information_schema.{source}" in lowered:
             return source
