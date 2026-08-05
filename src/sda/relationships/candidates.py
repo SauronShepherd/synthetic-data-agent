@@ -93,6 +93,13 @@ def discover_candidates(
     """Return declared FKs plus plausible inferred pairs from metadata/profile hints."""
     out: list[KeyCandidate] = []
     declared_pairs: set[tuple[str, str]] = set()
+    # Collect all declared directions before generating any inferred pair. The
+    # result must not depend on dictionary/table iteration order.
+    for child_name, child in tables.items():
+        for constraint in getattr(child, "constraints", ()):
+            parent = getattr(constraint, "referenced_table", None)
+            if parent:
+                declared_pairs.add((child_name, str(parent)))
     keys: dict[str, list[tuple[str, ...]]] = {}
     for name, table in tables.items():
         keys[name] = []
@@ -130,7 +137,6 @@ def discover_candidates(
                 out.append(
                     KeyCandidate(child_name, cols, parent, pcols, "declared", constraint.name)
                 )
-                declared_pairs.add((child_name, parent))
                 count += 1
         if count >= max_per_table:
             continue

@@ -219,7 +219,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if request.reuse_existing:
         reusable = find_reusable_profile(
             spark,
-            f"`{args.profile_catalog}`.`{args.profile_schema}`",
+            f"`{args.profile_catalog}`.`{args.profile_schema}`.profile",
             source_table=source_name.full_name,
             source_version=source_version,
             configuration_hash=request.configuration_hash,
