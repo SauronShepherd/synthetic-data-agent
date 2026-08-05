@@ -72,6 +72,7 @@ def test_detector_does_not_order_rejected_relationship() -> None:
         {"parent": [{"id": 1}, {"id": 1}], "child": [{"id": 1}]},
     )
     assert artifact["relationships"][0]["decision"] == "rejected"
+    assert not any(item.get("decision") == "accepted" for item in artifact["relationships"])
     assert artifact["generation_order"] == []
 
 

@@ -57,6 +57,7 @@ def test_lifecycle_publishes_writing_before_complete() -> None:
     )
 
     assert completed.status is ArtifactStatus.COMPLETE
+    assert completed.completed_at is not None
     assert [status for _, status in spark.calls] == ["writing", "writing", "complete", "complete"]
 
 
