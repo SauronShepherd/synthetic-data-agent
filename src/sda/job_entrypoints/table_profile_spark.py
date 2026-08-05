@@ -120,16 +120,23 @@ def main(argv: Sequence[str] | None = None) -> None:
             spark, args.metadata_inventory_table, args.metadata_inventory_id
         )
         from sda.artifacts.loaders import metadata_inventory_from_payload
+
         persisted_inventory = metadata_inventory_from_payload(persisted_inventory)
         persisted_tables = {table.full_name for table in persisted_inventory.tables}
         if source_name.full_name not in persisted_tables:
             raise RuntimeError("metadata inventory does not contain the requested source table")
-    metadata = persisted_inventory if persisted_inventory is not None else InformationSchemaMetadataAdapter(
-        SparkSqlExecutor(spark)
-    ).read_inventory(MetadataReadConfig(
-        catalog_allowlist=(catalog,), schema_allowlist=(schema,),
-        table_patterns=(source_name.object_name,), max_objects=1,
-    ))
+    metadata = (
+        persisted_inventory
+        if persisted_inventory is not None
+        else InformationSchemaMetadataAdapter(SparkSqlExecutor(spark)).read_inventory(
+            MetadataReadConfig(
+                catalog_allowlist=(catalog,),
+                schema_allowlist=(schema,),
+                table_patterns=(source_name.object_name,),
+                max_objects=1,
+            )
+        )
+    )
     governed_table = next(
         (table for table in metadata.tables if table.full_name == source_name.full_name),
         None,
@@ -270,9 +277,15 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
     if args.metadata_inventory_id:
         from sda.profile_models import sha256_json
+
         profile = replace(
             profile,
-            profile_id=sha256_json({"profile_id": profile.profile_id, "metadata_inventory_id": args.metadata_inventory_id}),
+            profile_id=sha256_json(
+                {
+                    "profile_id": profile.profile_id,
+                    "metadata_inventory_id": args.metadata_inventory_id,
+                }
+            ),
             metadata_inventory_id=args.metadata_inventory_id,
         )
     if args.allow_profile_schema_create:

@@ -58,8 +58,8 @@ def measure_spark_join(
     child_rows = child_non_null.count()
     distinct_child = child_non_null.dropDuplicates().count()
     matched_rows = child_non_null.join(
-            parent_key.dropDuplicates().alias("parent_key"), condition_expr, "left_semi"
-        ).count()
+        parent_key.dropDuplicates().alias("parent_key"), condition_expr, "left_semi"
+    ).count()
     matched_values = (
         child_non_null.join(
             parent_key.dropDuplicates().alias("parent_key"), condition_expr, "left_semi"
@@ -103,9 +103,7 @@ def measure_spark_join(
         "child_row_coverage": matched_rows / child_rows if child_rows else 1.0,
         "child_value_coverage": matched_values / distinct_child if distinct_child else 1.0,
         "orphan_rate": (child_rows - matched_rows) / child_rows if child_rows else 0.0,
-        "parent_reference_rate": referenced_parents / distinct_parent
-        if distinct_parent
-        else 0.0,
+        "parent_reference_rate": referenced_parents / distinct_parent if distinct_parent else 0.0,
         "non_null_child_rows": child_rows,
         "matched_child_rows": matched_rows,
         "orphan_child_rows": child_rows - matched_rows,

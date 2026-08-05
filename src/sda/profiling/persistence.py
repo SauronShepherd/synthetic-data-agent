@@ -39,9 +39,7 @@ def find_reusable_profile(
                 if source_version is None
                 else f"source_version = '{str(source_version).replace(chr(39), chr(39) * 2)}'"
             )
-            .where(
-                f"configuration_hash = '{configuration_hash.replace(chr(39), chr(39) * 2)}'"
-            )
+            .where(f"configuration_hash = '{configuration_hash.replace(chr(39), chr(39) * 2)}'")
             .where(
                 "metadata_inventory_id IS NULL"
                 if metadata_inventory_id is None

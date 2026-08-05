@@ -10,9 +10,7 @@ def test_sensitive_canary_is_not_serialized_in_profile_artifact() -> None:
         schema="source",
         object_name="customers",
         object_type=ObjectType.TABLE,
-        columns=(
-            ColumnMetadata("email", "string", True, 1, tags=("pii=email",)),
-        ),
+        columns=(ColumnMetadata("email", "string", True, 1, tags=("pii=email",)),),
     )
     profile = TableProfiler(
         TableProfileRequest(

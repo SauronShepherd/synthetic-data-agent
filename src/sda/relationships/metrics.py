@@ -79,7 +79,9 @@ def measure_join(
     sorted_fanout = sorted(fanout)
     p95_index = min(len(sorted_fanout) - 1, int(len(sorted_fanout) * 0.95)) if sorted_fanout else 0
     if duplicated_parent:
-        warnings = tuple(dict.fromkeys((*warnings, "parent_key_is_not_unique", "candidate_rejected")))
+        warnings = tuple(
+            dict.fromkeys((*warnings, "parent_key_is_not_unique", "candidate_rejected"))
+        )
     return JoinMetrics(
         unique_ratio,
         1 - len(nonnull_c) / len(ckeys) if ckeys else 0.0,

@@ -122,7 +122,11 @@ class RelationshipDetector:
                 }
             )
         accepted = [r for r in relationships if r.get("decision") == "accepted"]
-        order = tuple(node for node in graph.topological_order() if node in accepted_nodes) if accepted else ()
+        order = (
+            tuple(node for node in graph.topological_order() if node in accepted_nodes)
+            if accepted
+            else ()
+        )
         if not order and accepted:
             order = tuple(sorted(accepted_nodes))
         parents_by_child: dict[str, set[str]] = {}

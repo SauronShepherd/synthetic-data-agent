@@ -99,11 +99,20 @@ def persist_artifact_registry(spark: Any, ref: ArtifactRef, location: str) -> No
 
             schema = StructType([StructField(key, StringType(), True) for key in row])
             frame = spark.createDataFrame(
-                [{key: json.dumps(value, default=str) if isinstance(value, list) else value
-                  for key, value in row.items()}],
+                [
+                    {
+                        key: json.dumps(value, default=str) if isinstance(value, list) else value
+                        for key, value in row.items()
+                    }
+                ],
                 schema=schema,
             )
-        _merge_or_append(frame, spark, location, "target.artifact_id = source.artifact_id AND target.status = source.status")
+        _merge_or_append(
+            frame,
+            spark,
+            location,
+            "target.artifact_id = source.artifact_id AND target.status = source.status",
+        )
     except Exception as exc:
         raise PersistenceError(
             "failed to persist artifact registry row",
@@ -132,7 +141,10 @@ def persist_artifact_lifecycle(
     # raw evidence is written only once below, at COMPLETE.
     receipt = {key: None for key in (rows[0] if rows else {"receipt": None})}
     persist_rows(
-        spark, [receipt], evidence_location, artifact_id=ref.artifact_id,
+        spark,
+        [receipt],
+        evidence_location,
+        artifact_id=ref.artifact_id,
         status=ArtifactStatus.WRITING.value,
     )
     persist_artifact_registry(spark, ref, registry_location)

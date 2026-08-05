@@ -115,7 +115,9 @@ def discover_candidates(
                 max_width=max_width,
             )
             keys[name].extend(
-                profile.columns for profile in inferred if profile.minimal and profile.uniqueness_ratio == 1.0
+                profile.columns
+                for profile in inferred
+                if profile.minimal and profile.uniqueness_ratio == 1.0
             )
             keys[name] = list(dict.fromkeys(keys[name]))
     for child_name, child in tables.items():
@@ -138,7 +140,10 @@ def discover_candidates(
             # A declared relationship is directional evidence.  If it is
             # rejected during validation, do not manufacture a reverse edge
             # from name overlap or inferred uniqueness.
-            if (child_name, parent_name) in declared_pairs or (parent_name, child_name) in declared_pairs:
+            if (child_name, parent_name) in declared_pairs or (
+                parent_name,
+                child_name,
+            ) in declared_pairs:
                 continue
             child_cols = {c.name.lower(): c for c in getattr(child, "columns", ())}
             for pkey in parent_keys:

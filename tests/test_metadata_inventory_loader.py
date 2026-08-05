@@ -32,7 +32,7 @@ class _Spark:
 
 def test_load_metadata_inventory_by_id() -> None:
     inventory = load_metadata_inventory(
-        _Spark([{"payload": '{"tables": [{"full_name": "sda_dev.sample_source.t"}]}' }]),
+        _Spark([{"payload": '{"tables": [{"full_name": "sda_dev.sample_source.t"}]}'}]),
         "sda_dev.profiles.metadata_inventory",
         "inventory-1",
     )
@@ -41,6 +41,4 @@ def test_load_metadata_inventory_by_id() -> None:
 
 def test_load_metadata_inventory_missing_id() -> None:
     with pytest.raises(ArtifactNotFoundError):
-        load_metadata_inventory(
-            _Spark([]), "sda_dev.profiles.metadata_inventory", "missing"
-        )
+        load_metadata_inventory(_Spark([]), "sda_dev.profiles.metadata_inventory", "missing")

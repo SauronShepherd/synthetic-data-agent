@@ -332,27 +332,39 @@ class TableProfiler:
                         ).alias(f"{safe}_percentiles"),
                     )
                 )
-                aliases[column.name].update({
-                    "nan": f"{safe}_nan",
-                    "positive_infinity": f"{safe}_positive_infinity",
-                    "negative_infinity": f"{safe}_negative_infinity",
-                })
-                expressions.extend((
-                    F.sum(F.when(F.isnan(col), 1).otherwise(0)).alias(f"{safe}_nan"),
-                    F.sum(F.when(col == float("inf"), 1).otherwise(0)).alias(f"{safe}_positive_infinity"),
-                    F.sum(F.when(col == float("-inf"), 1).otherwise(0)).alias(f"{safe}_negative_infinity"),
-                ))
+                aliases[column.name].update(
+                    {
+                        "nan": f"{safe}_nan",
+                        "positive_infinity": f"{safe}_positive_infinity",
+                        "negative_infinity": f"{safe}_negative_infinity",
+                    }
+                )
+                expressions.extend(
+                    (
+                        F.sum(F.when(F.isnan(col), 1).otherwise(0)).alias(f"{safe}_nan"),
+                        F.sum(F.when(col == float("inf"), 1).otherwise(0)).alias(
+                            f"{safe}_positive_infinity"
+                        ),
+                        F.sum(F.when(col == float("-inf"), 1).otherwise(0)).alias(
+                            f"{safe}_negative_infinity"
+                        ),
+                    )
+                )
             elif "string" in dtype or "char" in dtype or "varchar" in dtype:
-                aliases[column.name].update({
-                    "length_mean": f"{safe}_length_mean",
-                    "length_min": f"{safe}_length_min",
-                    "length_max": f"{safe}_length_max",
-                })
-                expressions.extend((
-                    F.avg(F.length(col)).alias(f"{safe}_length_mean"),
-                    F.min(F.length(col)).alias(f"{safe}_length_min"),
-                    F.max(F.length(col)).alias(f"{safe}_length_max"),
-                ))
+                aliases[column.name].update(
+                    {
+                        "length_mean": f"{safe}_length_mean",
+                        "length_min": f"{safe}_length_min",
+                        "length_max": f"{safe}_length_max",
+                    }
+                )
+                expressions.extend(
+                    (
+                        F.avg(F.length(col)).alias(f"{safe}_length_mean"),
+                        F.min(F.length(col)).alias(f"{safe}_length_min"),
+                        F.max(F.length(col)).alias(f"{safe}_length_max"),
+                    )
+                )
             elif "date" in dtype or "timestamp" in dtype:
                 aliases[column.name].update(
                     {
@@ -517,18 +529,14 @@ class TableProfiler:
                                     else None,
                                     "count": int(row["count"]),
                                     "share": (
-                                        int(row["count"]) / full_non_null
-                                        if full_non_null
-                                        else 0.0
+                                        int(row["count"]) / full_non_null if full_non_null else 0.0
                                     ),
                                 }
                                 for rank, row in enumerate(top_values, start=1)
                             ],
                             "retained_count": len(top_values),
                             "retained_weight": (
-                                retained_non_null / full_non_null
-                                if full_non_null
-                                else 0.0
+                                retained_non_null / full_non_null if full_non_null else 0.0
                             ),
                             "dominant_share": (
                                 int(top_values[0]["count"]) / full_non_null

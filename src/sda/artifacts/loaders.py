@@ -9,7 +9,13 @@ from typing import Any, Protocol
 from sda.artifacts.compatibility import require_supported_schema
 from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType, SourceReference
 from sda.runtime.errors import ArtifactCompatibilityError, ArtifactNotFoundError
-from sda.metadata_models import ColumnMetadata, ConstraintKind, ConstraintMetadata, ObjectType, TableMetadata
+from sda.metadata_models import (
+    ColumnMetadata,
+    ConstraintKind,
+    ConstraintMetadata,
+    ObjectType,
+    TableMetadata,
+)
 
 
 class ArtifactStore(Protocol):
@@ -17,24 +23,24 @@ class ArtifactStore(Protocol):
     def get_rows(self, location: str, artifact_id: str) -> Sequence[Mapping[str, Any]]: ...
 
 
-def load_metadata_inventory(
-    spark: Any, table: str, inventory_id: str
-) -> Mapping[str, Any]:
+def load_metadata_inventory(spark: Any, table: str, inventory_id: str) -> Mapping[str, Any]:
     """Load one complete persisted metadata inventory by deterministic ID."""
     if not table or "." not in table:
         raise ValueError("metadata inventory table must be qualified")
-    rows = (
-        spark.table(table)
-        .where(f"inventory_id = '{inventory_id}'")
-        .collect()
-    )
+    rows = spark.table(table).where(f"inventory_id = '{inventory_id}'").collect()
     if not rows:
         raise ArtifactNotFoundError(
             "metadata inventory was not found", details={"inventory_id": inventory_id}
         )
     complete = [
-        row for row in rows
-        if (row.get("status", "complete") if isinstance(row, Mapping) else getattr(row, "status", "complete")) == "complete"
+        row
+        for row in rows
+        if (
+            row.get("status", "complete")
+            if isinstance(row, Mapping)
+            else getattr(row, "status", "complete")
+        )
+        == "complete"
     ]
     if len(complete) != 1:
         raise ArtifactCompatibilityError(
@@ -74,24 +80,35 @@ def metadata_inventory_from_payload(payload: Mapping[str, Any]):
             )
             for constraint in raw.get("constraints", [])
         )
-        tables.append(TableMetadata(
-            catalog=str(raw["catalog"]), schema=str(raw["schema"]),
-            object_name=str(raw["object_name"]),
-            object_type=ObjectType(str(raw.get("object_type", "UNKNOWN"))),
-            raw_table_type=raw.get("raw_table_type"), owner=raw.get("owner"),
-            comment=raw.get("comment"), table_tags=tuple(raw.get("table_tags", ())),
-            columns=columns, constraints=constraints,
-            relationship_hints=tuple(raw.get("relationship_hints", ())),
-            sensitivity_signals=tuple(raw.get("sensitivity_signals", ())),
-            metadata_warnings=tuple(raw.get("metadata_warnings", ())),
-        ))
+        tables.append(
+            TableMetadata(
+                catalog=str(raw["catalog"]),
+                schema=str(raw["schema"]),
+                object_name=str(raw["object_name"]),
+                object_type=ObjectType(str(raw.get("object_type", "UNKNOWN"))),
+                raw_table_type=raw.get("raw_table_type"),
+                owner=raw.get("owner"),
+                comment=raw.get("comment"),
+                table_tags=tuple(raw.get("table_tags", ())),
+                columns=columns,
+                constraints=constraints,
+                relationship_hints=tuple(raw.get("relationship_hints", ())),
+                sensitivity_signals=tuple(raw.get("sensitivity_signals", ())),
+                metadata_warnings=tuple(raw.get("metadata_warnings", ())),
+            )
+        )
     from sda.metadata_models import MetadataInventory
+
     return MetadataInventory(
         tables=tuple(tables),
         visible_catalogs=tuple(payload.get("visible_catalogs", ())),
         selected_catalogs=tuple(payload.get("selected_catalogs", ())),
-        visible_schemas=tuple((item["catalog"], item["schema"]) for item in payload.get("visible_schemas", ())),
-        selected_schemas=tuple((item["catalog"], item["schema"]) for item in payload.get("selected_schemas", ())),
+        visible_schemas=tuple(
+            (item["catalog"], item["schema"]) for item in payload.get("visible_schemas", ())
+        ),
+        selected_schemas=tuple(
+            (item["catalog"], item["schema"]) for item in payload.get("selected_schemas", ())
+        ),
         provenance=dict(payload.get("provenance", {})),
         skipped_objects=tuple(payload.get("skipped_objects", ())),
         warnings=tuple(payload.get("warnings", ())),

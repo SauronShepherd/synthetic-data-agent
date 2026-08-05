@@ -276,7 +276,9 @@ class InformationSchemaMetadataAdapter:
             selected_names = all_candidate_names[: config.max_objects]
             truncated_objects = tuple(
                 f"{catalog}.{schema}.{name}"
-                for catalog, schema, name in all_candidate_names[config.max_objects : config.max_objects + 100]
+                for catalog, schema, name in all_candidate_names[
+                    config.max_objects : config.max_objects + 100
+                ]
             )
             grouped: dict[tuple[str, str], set[str]] = defaultdict(set)
             for catalog, schema, name in selected_names:
@@ -779,8 +781,7 @@ def _build_constraints_by_table(
     for row in constraint_columns:
         referenced_columns_by_constraint[_constraint_key(row)].append(str(row["referenced_column"]))
     check_clause_by_constraint = {
-        _constraint_key(row): _optional_str(row.get("check_clause"))
-        for row in check_constraints
+        _constraint_key(row): _optional_str(row.get("check_clause")) for row in check_constraints
     }
 
     grouped: dict[tuple[str, str, str], list[ConstraintMetadata]] = defaultdict(list)
