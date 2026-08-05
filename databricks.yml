@@ -33,7 +33,7 @@ variables:
     default: "true"
   developer_group_name:
     description: Group that can manage development bundle resources.
-    default: __REQUIRED_DEVELOPER_GROUP__
+    default: users
   platform_admin_group_name:
     description: Group that can manage staging and production bundle resources.
     default: __REQUIRED_PLATFORM_ADMIN_GROUP__
