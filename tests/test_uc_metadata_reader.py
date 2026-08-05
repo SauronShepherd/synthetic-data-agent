@@ -15,6 +15,25 @@ from sda.tools.uc_metadata_reader import (
 )
 
 
+def test_check_constraint_expression_is_normalized() -> None:
+    from sda.tools.uc_metadata_reader import _build_constraints_by_table
+
+    result = _build_constraints_by_table(
+        [{
+            "constraint_catalog": "main", "constraint_schema": "sales",
+            "constraint_name": "amount_positive", "catalog": "main",
+            "schema": "sales", "name": "orders", "constraint_type": "CHECK",
+            "enforced": "YES",
+        }],
+        [], [], [], [],
+        [{
+            "constraint_catalog": "main", "constraint_schema": "sales",
+            "constraint_name": "amount_positive", "check_clause": "amount > 0",
+        }],
+    )
+    assert result[("main", "sales", "orders")][0].check_clause == "amount > 0"
+
+
 def make_reader() -> UcMetadataReader:
     return UcMetadataReader(
         MetadataReadConfig(catalog_allowlist=("main",), table_patterns=("customers",)),
