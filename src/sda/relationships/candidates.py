@@ -135,7 +135,10 @@ def discover_candidates(
         for parent_name, parent_keys in keys.items():
             if parent_name == child_name:
                 continue
-            if (child_name, parent_name) in declared_pairs:
+            # A declared relationship is directional evidence.  If it is
+            # rejected during validation, do not manufacture a reverse edge
+            # from name overlap or inferred uniqueness.
+            if (child_name, parent_name) in declared_pairs or (parent_name, child_name) in declared_pairs:
                 continue
             child_cols = {c.name.lower(): c for c in getattr(child, "columns", ())}
             for pkey in parent_keys:
