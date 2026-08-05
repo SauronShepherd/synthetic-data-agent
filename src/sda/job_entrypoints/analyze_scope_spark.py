@@ -186,22 +186,39 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
 
             candidates: list[dict[str, Any]] = []
             for parent_table, child_table in combinations(scoped_tables, 2):
-                parent_columns = {column.name for column in parent_table.columns}
-                child_columns = {column.name for column in child_table.columns}
-                common = sorted(parent_columns & child_columns)
-                if not common:
+                declared = [
+                    constraint for constraint in child_table.constraints
+                    if str(getattr(constraint.kind, "value", constraint.kind)) == "FOREIGN KEY"
+                    and constraint.referenced_table == parent_table.full_name
+                    and len(constraint.columns) == len(constraint.referenced_columns)
+                ]
+                if declared:
+                    child_columns = tuple(declared[0].columns)
+                    parent_columns = tuple(declared[0].referenced_columns)
+                    origin = "declared"
+                else:
+                    parent_names = {column.name for column in parent_table.columns}
+                    child_names = {column.name for column in child_table.columns}
+                    common = sorted(parent_names & child_names)
+                    if not common:
+                        continue
+                    parent_columns = child_columns = (common[0],)
+                    origin = "inferred_common_name"
+                if not parent_columns:
                     continue
-                column = common[0]
                 candidates.append(
                     {
                         "parent_table": parent_table.full_name,
                         "child_table": child_table.full_name,
-                        "columns": [column],
+                        "columns": list(child_columns),
+                        "parent_columns": list(parent_columns),
+                        "child_columns": list(child_columns),
+                        "origin": origin,
                         "evidence": measure_spark_join(
                             scoped_frames[parent_table.full_name],
                             scoped_frames[child_table.full_name],
-                            (column,),
-                            (column,),
+                            parent_columns,
+                            child_columns,
                         ),
                     }
                 )
