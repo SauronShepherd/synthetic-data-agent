@@ -108,7 +108,8 @@ def information_schema_queries(catalog: str, schema: str | None = None) -> tuple
         ),
         (
             "SELECT constraint_catalog, constraint_schema, constraint_name, "
-            "unique_constraint_catalog, unique_constraint_schema, unique_constraint_name "
+            "unique_constraint_catalog, unique_constraint_schema, unique_constraint_name, "
+            "match_option, update_rule, delete_rule, rely "
             "FROM system.information_schema.referential_constraints "
             f"WHERE constraint_catalog = {_quote_literal(catalog)}"
         ),
@@ -838,6 +839,24 @@ def _build_constraints_by_table(
                 referenced_columns=referenced_columns,
                 enforced=str(row.get("enforced", "NO")).upper() == "YES",
                 validated=False,
+                match_option=_optional_str(
+                    next((item.get("match_option") for item in referential_constraints
+                          if _constraint_key(item) == constraint_key), None)
+                ),
+                update_rule=_optional_str(
+                    next((item.get("update_rule") for item in referential_constraints
+                          if _constraint_key(item) == constraint_key), None)
+                ),
+                delete_rule=_optional_str(
+                    next((item.get("delete_rule") for item in referential_constraints
+                          if _constraint_key(item) == constraint_key), None)
+                ),
+                rely=(
+                    str(next((item.get("rely") for item in referential_constraints
+                              if _constraint_key(item) == constraint_key), "")).upper() == "YES"
+                    if any(_constraint_key(item) == constraint_key for item in referential_constraints)
+                    else None
+                ),
             )
         )
     return {key: tuple(values) for key, values in grouped.items()}

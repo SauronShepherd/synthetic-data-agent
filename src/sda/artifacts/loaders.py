@@ -77,6 +77,10 @@ def metadata_inventory_from_payload(payload: Mapping[str, Any]):
                 referenced_columns=tuple(constraint.get("referenced_columns", ())),
                 enforced=bool(constraint.get("enforced", False)),
                 validated=bool(constraint.get("validated", False)),
+                match_option=constraint.get("match_option"),
+                update_rule=constraint.get("update_rule"),
+                delete_rule=constraint.get("delete_rule"),
+                rely=constraint.get("rely"),
             )
             for constraint in raw.get("constraints", [])
         )

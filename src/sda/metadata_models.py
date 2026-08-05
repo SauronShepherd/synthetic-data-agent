@@ -87,6 +87,10 @@ class ConstraintMetadata:
     referenced_columns: tuple[str, ...] = ()
     enforced: bool = False
     validated: bool = False
+    match_option: str | None = None
+    update_rule: str | None = None
+    delete_rule: str | None = None
+    rely: bool | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
