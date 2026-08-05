@@ -13,6 +13,19 @@ REQUIRED_ENV = (
     "SDA_OPERATOR_GROUP",
     "SDA_OBSERVER_GROUP",
 )
+IDENTITY_VARIABLES = {
+    "SDA_RUNTIME_SERVICE_PRINCIPAL": "runtime_service_principal_name",
+    "SDA_PLATFORM_ADMIN_GROUP": "platform_admin_group_name",
+    "SDA_OPERATOR_GROUP": "operator_group_name",
+    "SDA_OBSERVER_GROUP": "observer_group_name",
+}
+CONTROLLED_SCOPE_ENV = {
+    "SDA_PROFILE_SOURCE_TABLE": "sda_profile_source_table",
+    "SDA_SCOPE_CATALOG": "sda_scope_catalog",
+    "SDA_SCOPE_SCHEMA": "sda_scope_schema",
+    "SDA_RELATIONSHIP_PARENT_TABLE": "sda_relationship_parent_table",
+    "SDA_RELATIONSHIP_CHILD_TABLE": "sda_relationship_child_table",
+}
 
 
 def main() -> int:
@@ -27,7 +40,19 @@ def main() -> int:
         ):
             print("Controlled-target identity variables are missing or placeholders", file=sys.stderr)
             return 2
+        scope_values = {name: os.getenv(name, "").strip() for name in CONTROLLED_SCOPE_ENV}
+        if any(not value for value in scope_values.values()):
+            print("Controlled-target source scope variables are required", file=sys.stderr)
+            return 2
+        if scope_values["SDA_RELATIONSHIP_PARENT_TABLE"] == scope_values["SDA_RELATIONSHIP_CHILD_TABLE"]:
+            print("Controlled-target relationship parent and child must differ", file=sys.stderr)
+            return 2
     command = ["databricks", "bundle", "validate", "-t", args.target]
+    if args.target in {"staging", "prod"}:
+        for env_name, variable_name in IDENTITY_VARIABLES.items():
+            command.extend(("--var", f"{variable_name}={os.environ[env_name].strip()}"))
+        for env_name, variable_name in CONTROLLED_SCOPE_ENV.items():
+            command.extend(("--var", f"{variable_name}={os.environ[env_name].strip()}"))
     if args.profile:
         command.extend(("--profile", args.profile))
     return subprocess.run(command, check=False).returncode
