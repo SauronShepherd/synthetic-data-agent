@@ -308,6 +308,7 @@ class TableProfiler:
                         "max": f"{safe}_max",
                         "mean": f"{safe}_mean",
                         "stddev": f"{safe}_stddev",
+                        "skewness": f"{safe}_skewness",
                         "zero": f"{safe}_zero",
                         "positive": f"{safe}_positive",
                         "negative": f"{safe}_negative",
@@ -320,6 +321,7 @@ class TableProfiler:
                         F.max(col).alias(f"{safe}_max"),
                         F.avg(col).alias(f"{safe}_mean"),
                         F.stddev_pop(col).alias(f"{safe}_stddev"),
+                        F.skewness(col).alias(f"{safe}_skewness"),
                         F.sum(F.when(col == 0, 1).otherwise(0)).alias(f"{safe}_zero"),
                         F.sum(F.when(col > 0, 1).otherwise(0)).alias(f"{safe}_positive"),
                         F.sum(F.when(col < 0, 1).otherwise(0)).alias(f"{safe}_negative"),
@@ -330,11 +332,27 @@ class TableProfiler:
                         ).alias(f"{safe}_percentiles"),
                     )
                 )
-                aliases[column.name]["nan"] = f"{safe}_nan"
-                expressions.append(F.sum(F.when(F.isnan(col), 1).otherwise(0)).alias(f"{safe}_nan"))
+                aliases[column.name].update({
+                    "nan": f"{safe}_nan",
+                    "positive_infinity": f"{safe}_positive_infinity",
+                    "negative_infinity": f"{safe}_negative_infinity",
+                })
+                expressions.extend((
+                    F.sum(F.when(F.isnan(col), 1).otherwise(0)).alias(f"{safe}_nan"),
+                    F.sum(F.when(col == float("inf"), 1).otherwise(0)).alias(f"{safe}_positive_infinity"),
+                    F.sum(F.when(col == float("-inf"), 1).otherwise(0)).alias(f"{safe}_negative_infinity"),
+                ))
             elif "string" in dtype or "char" in dtype or "varchar" in dtype:
-                aliases[column.name]["length_mean"] = f"{safe}_length_mean"
-                expressions.append(F.avg(F.length(col)).alias(f"{safe}_length_mean"))
+                aliases[column.name].update({
+                    "length_mean": f"{safe}_length_mean",
+                    "length_min": f"{safe}_length_min",
+                    "length_max": f"{safe}_length_max",
+                })
+                expressions.extend((
+                    F.avg(F.length(col)).alias(f"{safe}_length_mean"),
+                    F.min(F.length(col)).alias(f"{safe}_length_min"),
+                    F.max(F.length(col)).alias(f"{safe}_length_max"),
+                ))
             elif "date" in dtype or "timestamp" in dtype:
                 aliases[column.name].update(
                     {
@@ -393,7 +411,7 @@ class TableProfiler:
                             ),
                         )
                         for key, alias in names.items()
-                        if key in {"min", "max", "mean", "stddev"}
+                        if key in {"min", "max", "mean", "stddev", "skewness"}
                     },
                     "nan_count": evidence(
                         result.get(names.get("nan")),
@@ -403,6 +421,8 @@ class TableProfiler:
                             else MetricMethod.SAMPLED
                         ),
                     ),
+                    "positive_infinity_count": evidence(result.get(names.get("positive_infinity"))),
+                    "negative_infinity_count": evidence(result.get(names.get("negative_infinity"))),
                     **{
                         f"{key}_rate": evidence(
                             (result.get(names[key]) or 0) / row_count if row_count else 0.0,
@@ -457,6 +477,8 @@ class TableProfiler:
                         approximation={"algorithm": "approx_count_distinct"},
                     ),
                     "mean_length": evidence(result.get(names["length_mean"])),
+                    "min_length": evidence(result.get(names["length_min"])),
+                    "max_length": evidence(result.get(names["length_max"])),
                     "blank_count": evidence(result.get(names["blank"])),
                     "whitespace_count": evidence(result.get(names["whitespace"])),
                 }
