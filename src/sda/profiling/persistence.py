@@ -35,19 +35,17 @@ def find_reusable_profile(
             .where("status = 'COMPLETE'")
             .where(f"source_table = '{source_table.replace(chr(39), chr(39) * 2)}'")
             .where(
-                "source_version = "
-                + (
-                    "'null'"
-                    if source_version is None
-                    else f"'{json.dumps(source_version)}'"
-                )
+                "source_version IS NULL"
+                if source_version is None
+                else f"source_version = '{str(source_version).replace(chr(39), chr(39) * 2)}'"
             )
             .where(
                 f"configuration_hash = '{configuration_hash.replace(chr(39), chr(39) * 2)}'"
             )
             .where(
-                "metadata_inventory_id = "
-                + ("''" if metadata_inventory_id is None else f"'{metadata_inventory_id.replace(chr(39), chr(39) * 2)}'")
+                "metadata_inventory_id IS NULL"
+                if metadata_inventory_id is None
+                else f"metadata_inventory_id = '{metadata_inventory_id.replace(chr(39), chr(39) * 2)}'"
             )
             .limit(1)
             .collect()
@@ -70,7 +68,11 @@ def persist_profile(
     """Write queryable header and column evidence without raw source values."""
     payload = profile.to_dict()
     header = {
-        key: (str(value) if key == "profile_id" else json.dumps(value, sort_keys=True, default=str))
+        key: (
+            json.dumps(value, sort_keys=True, default=str)
+            if isinstance(value, (dict, list, tuple))
+            else (None if value is None else str(value))
+        )
         for key, value in payload.items()
         if key != "column_profiles"
     }
