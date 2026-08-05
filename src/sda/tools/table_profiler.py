@@ -108,7 +108,7 @@ class TableProfiler:
             null_count = int(missing["null_count"])
             policy = (
                 self.request.sensitive_value_retention_policy
-                if column.tags
+                if column.tags or column.sensitivity_signals
                 else self.request.value_retention_policy
             )
             metrics: dict[str, Any]
@@ -160,7 +160,7 @@ class TableProfiler:
                     declared_nullable=column.nullable,
                     profile_kind=kind,
                     classification_evidence=classification,
-                    sensitivity_signals=column.tags,
+                    sensitivity_signals=column.tags + column.sensitivity_signals,
                     value_retention_policy=policy,
                     row_count_basis=evidence(total),
                     non_null_count=evidence(total - null_count),
@@ -506,7 +506,7 @@ class TableProfiler:
                 if kind is ColumnProfileKind.CATEGORICAL:
                     policy = (
                         self.request.sensitive_value_retention_policy
-                        if column.tags
+                        if column.tags or column.sensitivity_signals
                         else self.request.value_retention_policy
                     )
                     top_values = (
@@ -697,9 +697,9 @@ class TableProfiler:
                     declared_nullable=column.nullable,
                     profile_kind=kind,
                     classification_evidence=("declared_type",),
-                    sensitivity_signals=column.tags,
+                    sensitivity_signals=column.tags + column.sensitivity_signals,
                     value_retention_policy=self.request.sensitive_value_retention_policy
-                    if column.tags
+                    if column.tags or column.sensitivity_signals
                     else self.request.value_retention_policy,
                     row_count_basis=evidence(row_count),
                     non_null_count=evidence(row_count - null_count),
@@ -713,7 +713,7 @@ class TableProfiler:
                     if kind is ColumnProfileKind.CATEGORICAL
                     and (
                         self.request.sensitive_value_retention_policy
-                        if column.tags
+                    if column.tags or column.sensitivity_signals
                         else self.request.value_retention_policy
                     )
                     is not ValueRetentionPolicy.ALLOW_SAFE_VALUES

@@ -64,6 +64,7 @@ class ColumnMetadata:
     ordinal_position: int
     comment: str | None = None
     tags: tuple[str, ...] = ()
+    sensitivity_signals: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.name.strip():

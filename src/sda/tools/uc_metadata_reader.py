@@ -715,13 +715,22 @@ def _build_columns_by_table(
     grouped: dict[tuple[str, str, str], list[ColumnMetadata]] = defaultdict(list)
     for row in rows:
         data_type = row.get("full_data_type") or row.get("data_type") or "UNKNOWN"
+        name = str(row["column_name"])
+        tags = tuple(tags_by_column.get((*_table_key(row), name), ()))
+        normalized = f"{name} {row.get('comment') or ''} {' '.join(tags)}".lower()
+        sensitivity_signals = tuple(
+            f"column:name_or_context:{term}"
+            for term in ("email", "phone", "telephone", "iban", "ssn", "address")
+            if term in normalized
+        )
         column = ColumnMetadata(
-            name=str(row["column_name"]),
+            name=name,
             data_type=str(data_type),
             nullable=str(row.get("is_nullable", "YES")).upper() == "YES",
             ordinal_position=max(1, int(row["ordinal_position"])),
             comment=_optional_str(row.get("comment")),
-            tags=tuple(tags_by_column.get((*_table_key(row), str(row["column_name"])), ())),
+            tags=tags,
+            sensitivity_signals=sensitivity_signals,
         )
         grouped[_table_key(row)].append(column)
 
