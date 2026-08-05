@@ -99,7 +99,7 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 request = TableProfileRequest(
                     source_table=table.full_name,
                     mode=ProfileMode.QUICK,
-                    allow_best_effort_snapshot=True,
+                    allow_best_effort_snapshot=False,
                 )
                 profile = TableProfiler(request, table).profile_spark(
                     spark.table(QualifiedName.parse(table.full_name).quoted)
@@ -205,7 +205,21 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
             if args.graph_output_table:
                 graph_identity = {"relationship_analysis_id": relationship_id, "scope": tables}
                 graph_id = f"dependency_graph_{fingerprint(graph_identity)}"
-                graph_rows = [{"node": table, "relationship_analysis_id": relationship_id} for table in tables]
+                graph_rows = [
+                    {"kind": "node", "node": table, "relationship_analysis_id": relationship_id}
+                    for table in tables
+                ]
+                graph_rows.extend(
+                    {
+                        "kind": "edge",
+                        "parent_table": candidate["parent_table"],
+                        "child_table": candidate["child_table"],
+                        "columns": candidate["columns"],
+                        "accepted_for_graph": candidate.get("evidence", {}).get("cardinality") != "parent_key_invalid",
+                        "relationship_analysis_id": relationship_id,
+                    }
+                    for candidate in metadata_summary.get("candidate_relationships", [])
+                )
                 graph_ref = replace(relationship_ref, artifact_id=graph_id, artifact_type=ArtifactType.DEPENDENCY_GRAPH,
                                     primary_location=args.graph_output_table, related_locations={"relationship_analysis_id": relationship_id},
                                     checksum=fingerprint(graph_rows), summary="Scope dependency graph", input_artifact_ids=(relationship_id,))
@@ -230,7 +244,7 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
         "status": (
             "DRY_RUN"
             if args.dry_run
-            else ("PROFILED" if args.profile else "METADATA_VALIDATED")
+            else ("RELATIONSHIPS_MAPPED" if metadata_summary.get("relationship_analysis_id") else ("PROFILED" if args.profile else "METADATA_VALIDATED"))
         ),
         **metadata_summary,
         "manifest": manifest.to_dict(),

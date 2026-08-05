@@ -60,7 +60,7 @@ def measure_join(
     duplicated_parent = any(v > 1 for v in counts.values())
     duplicated_child = any(v > 1 for v in child_reference_counts.values())
     cardinality = (
-        "many_to_many"
+        "parent_key_invalid"
         if duplicated_parent and duplicated_child
         else "many_to_one"
         if duplicated_child
@@ -78,6 +78,8 @@ def measure_join(
     fanout = [child_reference_counts.get(key, 0) for key in pset]
     sorted_fanout = sorted(fanout)
     p95_index = min(len(sorted_fanout) - 1, int(len(sorted_fanout) * 0.95)) if sorted_fanout else 0
+    if duplicated_parent:
+        warnings = tuple(dict.fromkeys((*warnings, "parent_key_is_not_unique", "candidate_rejected")))
     return JoinMetrics(
         unique_ratio,
         1 - len(nonnull_c) / len(ckeys) if ckeys else 0.0,

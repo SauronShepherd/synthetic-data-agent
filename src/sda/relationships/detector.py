@@ -47,6 +47,7 @@ class RelationshipDetector:
     ) -> dict[str, Any]:
         discovered_candidates = discover_candidates(
             tables,
+            rows=rows,
             max_width=self.config.max_composite_key_width,
             max_per_table=self.config.max_candidates_per_table,
         )
@@ -96,6 +97,8 @@ class RelationshipDetector:
             )
             verified += 1
             scored = score_relationship(metrics, declared=c.origin == "declared", hints=c.hints)
+            if metrics.parent_uniqueness_ratio < 1.0:
+                scored = {**scored, "decision": "rejected", "confidence_band": "low"}
             if scored["decision"] == "accepted":
                 graph.add_edge(c.parent_table, c.child_table)
                 accepted_nodes.update((c.parent_table, c.child_table))
@@ -118,8 +121,10 @@ class RelationshipDetector:
                     "generation_direction": f"{c.parent_table} -> {c.child_table}",
                 }
             )
-        order = tuple(node for node in graph.topological_order() if node in accepted_nodes)
         accepted = [r for r in relationships if r.get("decision") == "accepted"]
+        order = tuple(node for node in graph.topological_order() if node in accepted_nodes) if accepted else ()
+        if not order and accepted:
+            order = tuple(sorted(accepted_nodes))
         parents_by_child: dict[str, set[str]] = {}
         for relationship in accepted:
             parents_by_child.setdefault(relationship["child_table"], set()).add(

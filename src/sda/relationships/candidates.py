@@ -84,10 +84,15 @@ def discover_key_candidates(
 
 
 def discover_candidates(
-    tables: dict[str, Any], *, max_width: int = 3, max_per_table: int = 100
+    tables: dict[str, Any],
+    *,
+    rows: dict[str, list[dict[str, Any]]] | None = None,
+    max_width: int = 3,
+    max_per_table: int = 100,
 ) -> list[KeyCandidate]:
     """Return declared FKs plus plausible inferred pairs from metadata/profile hints."""
     out: list[KeyCandidate] = []
+    declared_pairs: set[tuple[str, str]] = set()
     keys: dict[str, list[tuple[str, ...]]] = {}
     for name, table in tables.items():
         keys[name] = []
@@ -102,6 +107,17 @@ def discover_candidates(
                 and len(c.columns) <= max_width
             ):
                 keys[name].append(tuple(c.columns))
+        if rows and name in rows:
+            inferred = discover_key_candidates(
+                name,
+                rows[name],
+                [column.name for column in getattr(table, "columns", ())],
+                max_width=max_width,
+            )
+            keys[name].extend(
+                profile.columns for profile in inferred if profile.minimal and profile.uniqueness_ratio == 1.0
+            )
+            keys[name] = list(dict.fromkeys(keys[name]))
     for child_name, child in tables.items():
         count = 0
         for constraint in getattr(child, "constraints", ()):
@@ -112,11 +128,14 @@ def discover_candidates(
                 out.append(
                     KeyCandidate(child_name, cols, parent, pcols, "declared", constraint.name)
                 )
+                declared_pairs.add((child_name, parent))
                 count += 1
         if count >= max_per_table:
             continue
         for parent_name, parent_keys in keys.items():
             if parent_name == child_name:
+                continue
+            if (child_name, parent_name) in declared_pairs:
                 continue
             child_cols = {c.name.lower(): c for c in getattr(child, "columns", ())}
             for pkey in parent_keys:
@@ -152,4 +171,5 @@ def discover_candidates(
                         KeyCandidate(child_name, tuple(child_match), parent_name, pkey, hints=hints)
                     )
                     count += 1
-    return list(dict.fromkeys(out))
+    unique = list(dict.fromkeys(out))
+    return sorted(unique, key=lambda candidate: (candidate.origin != "declared", candidate.width))

@@ -104,14 +104,19 @@ def persist_artifact_lifecycle(
     evidence_location: str,
     registry_location: str,
 ) -> ArtifactRef:
-    """Publish bounded evidence with detail-before-complete ordering."""
+    """Publish one idempotent COMPLETE publication for bounded evidence.
+
+    Delta tables are append-only at the storage layer, so publication carries
+    a deterministic artifact id and writes the evidence/header once.  Readers
+    must select the unique COMPLETE row for that id; retries therefore do not
+    create a second writing/complete evidence pair.
+    """
     if ref.status is not ArtifactStatus.WRITING:
         raise ValueError("lifecycle publication must start with a writing artifact")
+    # Keep a lightweight pre-publication receipt for operational observability;
+    # raw evidence is written only once below, at COMPLETE.
     persist_rows(
-        spark,
-        rows,
-        evidence_location,
-        artifact_id=ref.artifact_id,
+        spark, [{"_lifecycle_receipt": "writing"}], evidence_location, artifact_id=ref.artifact_id,
         status=ArtifactStatus.WRITING.value,
     )
     persist_artifact_registry(spark, ref, registry_location)

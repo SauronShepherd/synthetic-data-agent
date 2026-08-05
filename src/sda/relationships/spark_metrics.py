@@ -79,7 +79,12 @@ def measure_spark_join(
         )
         .groupBy(*[F.col(f"parent_key.k{index}") for index in range(len(parent_columns))])
         .count()
-        .agg(F.avg("count").alias("mean"), F.max("count").alias("max"))
+        .agg(
+            F.avg("count").alias("mean"),
+            F.max("count").alias("max"),
+            F.expr("percentile_approx(count, 0.5)").alias("median"),
+            F.expr("percentile_approx(count, 0.95)").alias("p95"),
+        )
         .first()
     )
     warnings = []
@@ -88,7 +93,7 @@ def measure_spark_join(
     if distinct_parent < parent_rows:
         warnings.append("parent_key_is_not_unique")
     if distinct_parent != parent_rows:
-        cardinality = "many_to_many"
+        cardinality = "parent_key_invalid"
     elif matched_values == child_rows:
         cardinality = "one_to_one"
     else:
@@ -114,6 +119,9 @@ def measure_spark_join(
         ),
         "cardinality": cardinality,
         "fanout_mean": float(fanout_stats["mean"] or 0.0),
+        "fanout_median": int(fanout_stats["median"] or 0),
+        "fanout_p95": int(fanout_stats["p95"] or 0),
         "fanout_max": int(fanout_stats["max"] or 0),
+        "parents_with_no_children": distinct_parent - referenced_parents,
         "warnings": warnings,
     }

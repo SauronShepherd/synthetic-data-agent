@@ -4,7 +4,7 @@ targets:
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     permissions:
-      - user_name: angel.alvarez@sdggroup.com
+      - group_name: ${var.developer_group_name}
         level: CAN_MANAGE
     variables:
       sda_catalog_allowlist: samples
