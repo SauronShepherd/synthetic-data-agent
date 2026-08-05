@@ -346,6 +346,25 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     }
                     for candidate in metadata_summary.get("candidate_relationships", [])
                 )
+                accepted_edges = [
+                    candidate for candidate in metadata_summary.get("candidate_relationships", [])
+                    if candidate.get("origin") == "declared"
+                    and candidate.get("evidence", {}).get("cardinality") != "parent_key_invalid"
+                    and float(candidate.get("evidence", {}).get("parent_uniqueness_ratio", 0.0)) >= 1.0
+                    and float(candidate.get("evidence", {}).get("orphan_rate", 1.0)) <= 0.05
+                ]
+                parents = {edge["parent_table"] for edge in accepted_edges}
+                children = {edge["child_table"] for edge in accepted_edges}
+                graph_rows.append({
+                    "kind": "graph_summary",
+                    "isolates": sorted(set(tables) - parents - children),
+                    "components": [sorted(set(tables))] if tables else [],
+                    "dependency_levels": {
+                        table: (0 if table not in children else 1) for table in sorted(set(tables))
+                    },
+                    "accepted_edge_count": len(accepted_edges),
+                    "relationship_analysis_id": relationship_id,
+                })
                 graph_ref = replace(
                     relationship_ref,
                     artifact_id=graph_id,
