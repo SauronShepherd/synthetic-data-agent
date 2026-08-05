@@ -854,7 +854,10 @@ def _build_constraints_by_table(
                 rely=(
                     str(next((item.get("rely") for item in referential_constraints
                               if _constraint_key(item) == constraint_key), "")).upper() == "YES"
-                    if any(_constraint_key(item) == constraint_key for item in referential_constraints)
+                    if any(
+                        _constraint_key(item) == constraint_key
+                        for item in referential_constraints
+                    )
                     else None
                 ),
             )

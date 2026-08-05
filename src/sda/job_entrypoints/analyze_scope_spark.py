@@ -350,7 +350,9 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     candidate for candidate in metadata_summary.get("candidate_relationships", [])
                     if candidate.get("origin") == "declared"
                     and candidate.get("evidence", {}).get("cardinality") != "parent_key_invalid"
-                    and float(candidate.get("evidence", {}).get("parent_uniqueness_ratio", 0.0)) >= 1.0
+                    and float(
+                        candidate.get("evidence", {}).get("parent_uniqueness_ratio", 0.0)
+                    ) >= 1.0
                     and float(candidate.get("evidence", {}).get("orphan_rate", 1.0)) <= 0.05
                 ]
                 parents = {edge["parent_table"] for edge in accepted_edges}
