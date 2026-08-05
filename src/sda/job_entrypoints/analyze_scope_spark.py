@@ -98,11 +98,31 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
         if missing:
             raise RuntimeError(f"requested tables not found in governed metadata: {missing}")
         scoped_tables = tuple(table for table in inventory.tables if table.full_name in requested)
+        source_versions: dict[str, str] = {}
+        scoped_frames: dict[str, Any] = {}
+        for table in scoped_tables:
+            qualified = QualifiedName.parse(table.full_name).quoted
+            try:
+                history = spark.sql(
+                    f"DESCRIBE HISTORY {qualified}"
+                ).orderBy("version", ascending=False).limit(1).collect()
+                if not history:
+                    raise RuntimeError("no Delta history available")
+                version = str(history[0]["version"])
+                source_versions[table.full_name] = version
+                scoped_frames[table.full_name] = spark.sql(
+                    f"SELECT * FROM {qualified} VERSION AS OF {int(version)}"
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"unable to pin governed source snapshot for {table.full_name}"
+                ) from exc
         metadata_summary = {
             "metadata_tables": len(inventory.tables),
             "metadata_artifact_status": "complete",
             "metadata_warnings": list(inventory.warnings),
             "metadata_inventory_id": args.metadata_inventory_id,
+            "source_versions": source_versions,
         }
         if args.profile:
             from sda.profile_models import ProfileMode, TableProfileRequest
@@ -117,7 +137,8 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     allow_best_effort_snapshot=False,
                 )
                 profile = TableProfiler(request, table).profile_spark(
-                    spark.table(QualifiedName.parse(table.full_name).quoted)
+                    scoped_frames[table.full_name],
+                    source_version=source_versions[table.full_name],
                 )
                 if args.metadata_inventory_id:
                     from sda.profile_models import sha256_json
@@ -206,7 +227,7 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 environment="databricks", created_at=datetime.now(UTC).isoformat(),
                 configuration_hash=fingerprint({"scope": tables}), primary_location=args.relationship_output_table,
                 related_locations={}, source_references=tuple(
-                    SourceReference(name.full_name, "TABLE", "best_effort", None, None, None, metadata_inventory_id=args.metadata_inventory_id)
+                    SourceReference(name.full_name, "TABLE", "delta_version", source_versions[name.full_name], None, None, metadata_inventory_id=args.metadata_inventory_id)
                     for name in names
                 ), checksum=fingerprint(relationship_rows), summary="Scope relationship evidence",
                 input_artifact_ids=tuple(item["profile_id"] for item in metadata_summary.get("profiled_tables", [])),
