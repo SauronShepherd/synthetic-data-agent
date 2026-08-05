@@ -268,7 +268,11 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                         "parent_table": candidate["parent_table"],
                         "child_table": candidate["child_table"],
                         "columns": candidate["columns"],
-                        "accepted_for_graph": candidate.get("evidence", {}).get("cardinality") != "parent_key_invalid",
+                        "accepted_for_graph": (
+                            candidate.get("evidence", {}).get("cardinality") != "parent_key_invalid"
+                            and float(candidate.get("evidence", {}).get("parent_uniqueness_ratio", 0.0)) >= 1.0
+                            and float(candidate.get("evidence", {}).get("orphan_rate", 1.0)) <= 0.05
+                        ),
                         "relationship_analysis_id": relationship_id,
                     }
                     for candidate in metadata_summary.get("candidate_relationships", [])
