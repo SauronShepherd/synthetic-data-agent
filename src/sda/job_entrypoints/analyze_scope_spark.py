@@ -171,8 +171,8 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 raise ValueError("relationship parameters must be supplied together")
             from sda.relationships.spark_metrics import measure_spark_join
 
-            parent = spark.table(QualifiedName.parse(args.parent_table).quoted).alias("parent")
-            child = spark.table(QualifiedName.parse(args.child_table).quoted).alias("child")
+            parent = scoped_frames.get(args.parent_table, spark.table(QualifiedName.parse(args.parent_table).quoted)).alias("parent")
+            child = scoped_frames.get(args.child_table, spark.table(QualifiedName.parse(args.child_table).quoted)).alias("child")
             metadata_summary["relationship"] = measure_spark_join(
                 parent,
                 child,
@@ -198,8 +198,8 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                         "child_table": child_table.full_name,
                         "columns": [column],
                         "evidence": measure_spark_join(
-                            spark.table(QualifiedName.parse(parent_table.full_name).quoted),
-                            spark.table(QualifiedName.parse(child_table.full_name).quoted),
+                            scoped_frames[parent_table.full_name],
+                            scoped_frames[child_table.full_name],
                             (column,),
                             (column,),
                         ),
