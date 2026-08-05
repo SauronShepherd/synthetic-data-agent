@@ -97,6 +97,9 @@ class ArtifactRef:
         if status not in allowed[self.status]:
             raise ValueError(f"invalid artifact transition: {self.status.value} -> {status.value}")
         from dataclasses import replace
+        if status is ArtifactStatus.COMPLETE and completed_at is None:
+            from datetime import UTC, datetime
+            completed_at = datetime.now(UTC).isoformat()
 
         return replace(
             self,

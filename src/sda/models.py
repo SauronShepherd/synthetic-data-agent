@@ -63,6 +63,18 @@ class GenerationRequest:
     privacy_mode: str = "strict"
     target_catalog: str | None = None
     target_schema: str | None = None
+    requester: str | None = None
+    environment: str = "dev"
+    intended_use: str | None = None
+    idempotency_key: str | None = None
+    selected_columns: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    scan_budget: int | None = None
+    cost_budget: float | None = None
+    retention_days: int | None = None
+    approval_required: bool = False
+    validation_policy_ref: str | None = None
+    sensitivity_treatments: dict[str, str] = field(default_factory=dict)
+    mode: str = "clean"
 
     def __post_init__(self) -> None:
         if not self.request_id.strip():
@@ -73,6 +85,16 @@ class GenerationRequest:
             raise ValueError("privacy_mode must be 'strict' or 'standard'")
         if (self.target_catalog is None) != (self.target_schema is None):
             raise ValueError("target_catalog and target_schema must be provided together")
+        if not self.environment.strip():
+            raise ValueError("environment must not be empty")
+        if self.scan_budget is not None and self.scan_budget < 1:
+            raise ValueError("scan_budget must be positive")
+        if self.cost_budget is not None and self.cost_budget < 0:
+            raise ValueError("cost_budget must not be negative")
+        if self.retention_days is not None and self.retention_days < 1:
+            raise ValueError("retention_days must be positive")
+        if self.mode not in {"clean", "noisy"}:
+            raise ValueError("mode must be clean or noisy")
 
 
 @dataclass(frozen=True, slots=True)
