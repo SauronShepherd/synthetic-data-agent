@@ -125,6 +125,11 @@ def information_schema_queries(catalog: str, schema: str | None = None) -> tuple
             "FROM system.information_schema.constraint_column_usage "
             f"WHERE constraint_catalog = {_quote_literal(catalog)}"
         ),
+        (
+            "SELECT constraint_catalog, constraint_schema, constraint_name, check_clause "
+            "FROM system.information_schema.check_constraints "
+            f"WHERE constraint_catalog = {_quote_literal(catalog)}"
+        ),
     )
 
 
@@ -385,6 +390,7 @@ class InformationSchemaMetadataAdapter:
         referential_constraints = self._safe_execute(queries[8])
         constraint_tables = self._safe_execute(queries[9])
         constraint_columns = self._safe_execute(queries[10])
+        check_constraints = self._safe_execute(queries[11])
 
         columns_by_table = _build_columns_by_table(columns, column_tags)
         tags_by_table = _build_table_tags_by_table(table_tags)
@@ -394,6 +400,7 @@ class InformationSchemaMetadataAdapter:
             referential_constraints,
             constraint_tables,
             constraint_columns,
+            check_constraints,
         )
 
         return tuple(
@@ -736,6 +743,7 @@ def _build_constraints_by_table(
     referential_constraints: Sequence[Mapping[str, Any]],
     constraint_tables: Sequence[Mapping[str, Any]],
     constraint_columns: Sequence[Mapping[str, Any]],
+    check_constraints: Sequence[Mapping[str, Any]] = (),
 ) -> dict[tuple[str, str, str], tuple[ConstraintMetadata, ...]]:
     columns_by_constraint: dict[tuple[str, str, str], list[tuple[int, str, int | None]]] = (
         defaultdict(list)
@@ -770,6 +778,10 @@ def _build_constraints_by_table(
     referenced_columns_by_constraint: dict[tuple[str, str, str], list[str]] = defaultdict(list)
     for row in constraint_columns:
         referenced_columns_by_constraint[_constraint_key(row)].append(str(row["referenced_column"]))
+    check_clause_by_constraint = {
+        _constraint_key(row): _optional_str(row.get("check_clause"))
+        for row in check_constraints
+    }
 
     grouped: dict[tuple[str, str, str], list[ConstraintMetadata]] = defaultdict(list)
     for row in constraints:
@@ -809,7 +821,8 @@ def _build_constraints_by_table(
                 name=str(row["constraint_name"]),
                 kind=kind,
                 columns=ordered_columns,
-                check_clause=_optional_str(row.get("check_clause")),
+                check_clause=check_clause_by_constraint.get(constraint_key)
+                or _optional_str(row.get("check_clause")),
                 referenced_table=referenced_table,
                 referenced_columns=referenced_columns,
                 enforced=str(row.get("enforced", "NO")).upper() == "YES",
