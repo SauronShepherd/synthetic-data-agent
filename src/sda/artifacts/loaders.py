@@ -26,14 +26,23 @@ def load_metadata_inventory(
     rows = (
         spark.table(table)
         .where(f"inventory_id = '{inventory_id}'")
-        .limit(1)
         .collect()
     )
     if not rows:
         raise ArtifactNotFoundError(
             "metadata inventory was not found", details={"inventory_id": inventory_id}
         )
-    payload = rows[0]["payload"] if isinstance(rows[0], Mapping) else rows[0].payload
+    complete = [
+        row for row in rows
+        if (row.get("status", "complete") if isinstance(row, Mapping) else getattr(row, "status", "complete")) == "complete"
+    ]
+    if len(complete) != 1:
+        raise ArtifactCompatibilityError(
+            "metadata inventory has no unique COMPLETE version",
+            details={"inventory_id": inventory_id, "versions": len(complete)},
+        )
+    row = complete[0]
+    payload = row["payload"] if isinstance(row, Mapping) else row.payload
     return json.loads(str(payload))
 
 
