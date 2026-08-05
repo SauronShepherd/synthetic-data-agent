@@ -22,6 +22,19 @@ class MetricMethod(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
+class PopulationScope(StrEnum):
+    FULL = "full"
+    SAMPLE = "sample"
+    METADATA = "metadata"
+
+
+class CalculationMethod(StrEnum):
+    EXACT = "exact"
+    APPROXIMATE = "approximate"
+    METADATA_DERIVED = "metadata_derived"
+    UNAVAILABLE = "unavailable"
+
+
 class ColumnProfileKind(StrEnum):
     NUMERIC = "numeric"
     CATEGORICAL = "categorical"
@@ -50,9 +63,17 @@ class MetricEvidence:
     sample_fraction: float | None = None
     approximation: dict[str, Any] = field(default_factory=dict)
     warning: str | None = None
+    population_scope: PopulationScope = PopulationScope.FULL
+    calculation_method: CalculationMethod = CalculationMethod.EXACT
+    sample_seed: int | None = None
+    algorithm: str | None = None
+    algorithm_parameters: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {**asdict(self), "method": self.method.value}
+        value = {**asdict(self), "method": self.method.value}
+        value["population_scope"] = self.population_scope.value
+        value["calculation_method"] = self.calculation_method.value
+        return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +191,7 @@ class TableProfile:
     warnings: tuple[str, ...] = ()
     agent_summary: str = ""
     artifact_locations: dict[str, str] = field(default_factory=dict)
+    metadata_inventory_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)

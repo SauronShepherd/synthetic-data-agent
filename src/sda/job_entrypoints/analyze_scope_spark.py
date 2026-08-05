@@ -1,0 +1,253 @@
+"""Governed scope-analysis entrypoint for the Article 01-06 workflow."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from dataclasses import replace
+from datetime import UTC, datetime
+from typing import Any
+
+from sda.artifacts.manifest import RunManifest
+from sda.runtime.identifiers import QualifiedName
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--catalog", required=True)
+    parser.add_argument("--schema", required=True)
+    parser.add_argument("--tables", required=True)
+    parser.add_argument("--run-id", default="")
+    parser.add_argument("--dry-run", type=lambda value: value.lower() == "true", default=False)
+    parser.add_argument("--profile", type=lambda value: value.lower() == "true", default=True)
+    parser.add_argument("--parent-table", default="")
+    parser.add_argument("--child-table", default="")
+    parser.add_argument("--parent-columns", default="")
+    parser.add_argument("--child-columns", default="")
+    parser.add_argument("--profile-catalog", default="sda_dev")
+    parser.add_argument("--profile-schema", default="profiles")
+    parser.add_argument("--manifest-table", default="")
+    parser.add_argument("--metadata-inventory-id", default="")
+    parser.add_argument("--metadata-inventory-table", default="")
+    parser.add_argument("--relationship-output-table", default="")
+    parser.add_argument("--graph-output-table", default="")
+    return parser.parse_args()
+
+
+def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
+    tables = tuple(item.strip() for item in args.tables.split(",") if item.strip())
+    if not tables:
+        raise ValueError("--tables must contain at least one table")
+    names = tuple(QualifiedName.parse(f"{args.catalog}.{args.schema}.{table}") for table in tables)
+    run_id = args.run_id or f"scope-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
+    manifest = RunManifest(
+        run_id=run_id,
+        tool_name="analyze_scope",
+        tool_version="0.6.0.dev0",
+        artifact_schema_version="1.0",
+        environment="databricks",
+        configuration_hash=json.dumps(
+            {"catalog": args.catalog, "schema": args.schema, "tables": tables},
+            sort_keys=True,
+        ),
+        status="complete" if args.dry_run else "running",
+        started_at=datetime.now(UTC).isoformat(),
+        completed_at=datetime.now(UTC).isoformat() if args.dry_run else None,
+    )
+    metadata_summary: dict[str, Any] = {}
+    if not args.dry_run:
+        from sda.metadata_models import MetadataReadConfig
+        from sda.tools.uc_metadata_reader import (
+            InformationSchemaMetadataAdapter,
+            SparkSqlExecutor,
+        )
+
+        if args.metadata_inventory_id:
+            from sda.artifacts.loaders import load_metadata_inventory, metadata_inventory_from_payload
+            if not args.metadata_inventory_table:
+                raise ValueError("metadata inventory table is required with metadata inventory ID")
+            inventory = metadata_inventory_from_payload(load_metadata_inventory(
+                spark, args.metadata_inventory_table, args.metadata_inventory_id
+            ))
+        else:
+            inventory = InformationSchemaMetadataAdapter(SparkSqlExecutor(spark)).read_inventory(
+                MetadataReadConfig(
+                catalog_allowlist=(args.catalog,),
+                schema_allowlist=(args.schema,),
+                table_patterns=tables,
+                max_objects=len(tables),
+                )
+            )
+        discovered = {table.full_name for table in inventory.tables}
+        requested = {name.full_name for name in names}
+        missing = sorted(requested - discovered)
+        if missing:
+            raise RuntimeError(f"requested tables not found in governed metadata: {missing}")
+        scoped_tables = tuple(table for table in inventory.tables if table.full_name in requested)
+        metadata_summary = {
+            "metadata_tables": len(inventory.tables),
+            "metadata_artifact_status": "complete",
+            "metadata_warnings": list(inventory.warnings),
+        }
+        if args.profile:
+            from sda.profile_models import ProfileMode, TableProfileRequest
+            from sda.profiling.persistence import persist_profile
+            from sda.tools.table_profiler import TableProfiler
+
+            profiled: list[dict[str, Any]] = []
+            for table in scoped_tables:
+                request = TableProfileRequest(
+                    source_table=table.full_name,
+                    mode=ProfileMode.QUICK,
+                    allow_best_effort_snapshot=True,
+                )
+                profile = TableProfiler(request, table).profile_spark(
+                    spark.table(QualifiedName.parse(table.full_name).quoted)
+                )
+                if args.metadata_inventory_id:
+                    from sda.profile_models import sha256_json
+                    profile = replace(
+                        profile,
+                        profile_id=sha256_json({
+                            "profile_id": profile.profile_id,
+                            "metadata_inventory_id": args.metadata_inventory_id,
+                        }),
+                        metadata_inventory_id=args.metadata_inventory_id,
+                    )
+                locations = persist_profile(
+                    spark,
+                    profile,
+                    f"`{args.profile_catalog}`.`{args.profile_schema}`.profile",
+                    reuse_existing=True,
+                )
+                profiled.append(
+                    {
+                        "source_table": table.full_name,
+                        "profile_id": profile.profile_id,
+                        "locations": locations,
+                    }
+                )
+            metadata_summary["profiled_tables"] = profiled
+        if any((args.parent_table, args.child_table, args.parent_columns, args.child_columns)):
+            if not all(
+                (args.parent_table, args.child_table, args.parent_columns, args.child_columns)
+            ):
+                raise ValueError("relationship parameters must be supplied together")
+            from sda.relationships.spark_metrics import measure_spark_join
+
+            parent = spark.table(QualifiedName.parse(args.parent_table).quoted).alias("parent")
+            child = spark.table(QualifiedName.parse(args.child_table).quoted).alias("child")
+            metadata_summary["relationship"] = measure_spark_join(
+                parent,
+                child,
+                tuple(item.strip() for item in args.parent_columns.split(",") if item.strip()),
+                tuple(item.strip() for item in args.child_columns.split(",") if item.strip()),
+            )
+        else:
+            from itertools import combinations
+
+            from sda.relationships.spark_metrics import measure_spark_join
+
+            candidates: list[dict[str, Any]] = []
+            for parent_table, child_table in combinations(scoped_tables, 2):
+                parent_columns = {column.name for column in parent_table.columns}
+                child_columns = {column.name for column in child_table.columns}
+                common = sorted(parent_columns & child_columns)
+                if not common:
+                    continue
+                column = common[0]
+                candidates.append(
+                    {
+                        "parent_table": parent_table.full_name,
+                        "child_table": child_table.full_name,
+                        "columns": [column],
+                        "evidence": measure_spark_join(
+                            spark.table(QualifiedName.parse(parent_table.full_name).quoted),
+                            spark.table(QualifiedName.parse(child_table.full_name).quoted),
+                            (column,),
+                            (column,),
+                        ),
+                    }
+                )
+            metadata_summary["candidate_relationships"] = candidates
+        if args.relationship_output_table:
+            from sda.artifacts.delta import persist_artifact_lifecycle
+            from sda.artifacts.fingerprint import fingerprint
+            from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType, SourceReference
+
+            relationship_rows = []
+            if "relationship" in metadata_summary:
+                relationship_rows.append({"kind": "relationship", **metadata_summary["relationship"]})
+            relationship_rows.extend(
+                {"kind": "candidate", **candidate}
+                for candidate in metadata_summary.get("candidate_relationships", [])
+            )
+            relationship_identity = {"run_id": run_id, "scope": [n.full_name for n in names], "inventory": args.metadata_inventory_id}
+            relationship_id = f"relationship_analysis_{fingerprint(relationship_identity)}"
+            relationship_ref = ArtifactRef(
+                artifact_id=relationship_id, artifact_type=ArtifactType.RELATIONSHIP_ANALYSIS,
+                artifact_schema_version="1.0", status=ArtifactStatus.WRITING,
+                tool_name="relationship_detector", tool_version="0.6.0.dev0", run_id=run_id,
+                environment="databricks", created_at=datetime.now(UTC).isoformat(),
+                configuration_hash=fingerprint({"scope": tables}), primary_location=args.relationship_output_table,
+                related_locations={}, source_references=tuple(
+                    SourceReference(name.full_name, "TABLE", "best_effort", None, None, None, metadata_inventory_id=args.metadata_inventory_id)
+                    for name in names
+                ), checksum=fingerprint(relationship_rows), summary="Scope relationship evidence",
+                input_artifact_ids=tuple(item["profile_id"] for item in metadata_summary.get("profiled_tables", [])),
+            )
+            completed_relationship = persist_artifact_lifecycle(
+                spark, relationship_ref, relationship_rows or [{"kind": "scope", "tables": tables}],
+                evidence_location=args.relationship_output_table,
+                registry_location=f"{args.relationship_output_table}_registry",
+            )
+            metadata_summary["relationship_analysis_id"] = completed_relationship.artifact_id
+            if args.graph_output_table:
+                graph_identity = {"relationship_analysis_id": relationship_id, "scope": tables}
+                graph_id = f"dependency_graph_{fingerprint(graph_identity)}"
+                graph_rows = [{"node": table, "relationship_analysis_id": relationship_id} for table in tables]
+                graph_ref = replace(relationship_ref, artifact_id=graph_id, artifact_type=ArtifactType.DEPENDENCY_GRAPH,
+                                    primary_location=args.graph_output_table, related_locations={"relationship_analysis_id": relationship_id},
+                                    checksum=fingerprint(graph_rows), summary="Scope dependency graph", input_artifact_ids=(relationship_id,))
+                completed_graph = persist_artifact_lifecycle(
+                    spark, graph_ref, graph_rows, evidence_location=args.graph_output_table,
+                    registry_location=f"{args.graph_output_table}_registry",
+                )
+                metadata_summary["dependency_graph_id"] = completed_graph.artifact_id
+        manifest = replace(
+            manifest,
+            status="complete",
+            completed_at=datetime.now(UTC).isoformat(),
+            warning_count=len(inventory.warnings),
+            input_artifact_ids=((args.metadata_inventory_id,) if args.metadata_inventory_id else ()),
+            output_artifact_ids=tuple(item["profile_id"] for item in metadata_summary.get("profiled_tables", [])) + tuple(
+                item for item in (metadata_summary.get("relationship_analysis_id"), metadata_summary.get("dependency_graph_id")) if item
+            ),
+        )
+    result = {
+        "run_id": run_id,
+        "scope": [name.full_name for name in names],
+        "status": (
+            "DRY_RUN"
+            if args.dry_run
+            else ("PROFILED" if args.profile else "METADATA_VALIDATED")
+        ),
+        **metadata_summary,
+        "manifest": manifest.to_dict(),
+    }
+    if getattr(args, "manifest_table", ""):
+        from sda.artifacts.delta import persist_run_manifest
+
+        persist_run_manifest(spark, manifest, args.manifest_table)
+    print(json.dumps(result, sort_keys=True))
+    return result
+
+
+def main() -> None:
+    from pyspark.sql import SparkSession
+
+    run(SparkSession.getActiveSession() or SparkSession.builder.getOrCreate(), parse_args())
+
+
+if __name__ == "__main__":
+    main()

@@ -3,8 +3,19 @@ targets:
     mode: development
     workspace:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    permissions:
+      - user_name: angel.alvarez@sdggroup.com
+        level: CAN_MANAGE
     variables:
-      sda_catalog_allowlist: main
+      sda_catalog_allowlist: samples
       sda_schema_allowlist: ""
       sda_table_patterns: ""
       sda_max_metadata_objects: "100"
+      sda_profile_source_table: samples.bakehouse.sales_transactions
+      sda_scope_catalog: samples
+      sda_scope_schema: bakehouse
+      sda_relationship_parent_table: samples.bakehouse.sales_franchises
+      sda_relationship_child_table: samples.bakehouse.sales_transactions
+      sda_relationship_output_table: sda_dev.profiles.relationship_analysis_scope
+      sda_graph_output_table: sda_dev.profiles.dependency_graph_scope
+      sda_metadata_inventory_table: sda_dev.profiles.metadata_inventory

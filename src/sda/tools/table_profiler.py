@@ -12,12 +12,19 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
+from sda.artifacts.fingerprint import fingerprint
+from sda.artifacts.lineage import source_reference_from_profile
+from sda.artifacts.models import ArtifactRef as DurableArtifactRef
+from sda.artifacts.models import ArtifactStatus, ArtifactType
 from sda.metadata_models import TableMetadata
 from sda.models import AgentState, ArtifactRef, RunStage, ToolName, ToolResult
 from sda.profile_models import (
     ColumnProfile,
     ColumnProfileKind,
+    CalculationMethod,
+    MetricEvidence,
     MetricMethod,
+    PopulationScope,
     ProfileMode,
     TableProfile,
     TableProfileRequest,
@@ -244,8 +251,7 @@ class TableProfiler:
             )
         )
         live_types = {
-            field.name: field.dataType.simpleString().lower()
-            for field in dataframe.schema.fields
+            field.name: field.dataType.simpleString().lower() for field in dataframe.schema.fields
         }
 
         selected = [
@@ -286,9 +292,9 @@ class TableProfiler:
                 expressions.append(
                     F.array(
                         *[
-                            F.sum(
-                                F.when(col.rlike(pattern), 1).otherwise(0)
-                            ).alias(f"{safe}_pattern_{pattern_index}")
+                            F.sum(F.when(col.rlike(pattern), 1).otherwise(0)).alias(
+                                f"{safe}_pattern_{pattern_index}"
+                            )
                             for pattern_index, pattern in enumerate(patterns)
                         ]
                     ).alias(f"{safe}_patterns")
@@ -347,9 +353,7 @@ class TableProfiler:
                         ),
                         F.sum(
                             F.when(
-                                (F.hour(col) == 0)
-                                & (F.minute(col) == 0)
-                                & (F.second(col) == 0),
+                                (F.hour(col) == 0) & (F.minute(col) == 0) & (F.second(col) == 0),
                                 1,
                             ).otherwise(0)
                         ).alias(f"{safe}_midnight"),
@@ -479,7 +483,8 @@ class TableProfiler:
                         .limit(self.request.max_category_values)
                         .collect()
                     )
-                    total_non_null = sum(int(row["count"]) for row in top_values)
+                    retained_non_null = sum(int(row["count"]) for row in top_values)
+                    full_non_null = row_count - null_count
                     metrics.update(
                         {
                             "top_values": [
@@ -490,8 +495,8 @@ class TableProfiler:
                                     else None,
                                     "count": int(row["count"]),
                                     "share": (
-                                        int(row["count"]) / total_non_null
-                                        if total_non_null
+                                        int(row["count"]) / full_non_null
+                                        if full_non_null
                                         else 0.0
                                     ),
                                 }
@@ -499,13 +504,13 @@ class TableProfiler:
                             ],
                             "retained_count": len(top_values),
                             "retained_weight": (
-                                total_non_null / (row_count - null_count)
-                                if row_count - null_count
+                                retained_non_null / full_non_null
+                                if full_non_null
                                 else 0.0
                             ),
                             "dominant_share": (
-                                int(top_values[0]["count"]) / total_non_null
-                                if top_values and total_non_null
+                                int(top_values[0]["count"]) / full_non_null
+                                if top_values and full_non_null
                                 else 0.0
                             ),
                         }
@@ -538,6 +543,43 @@ class TableProfiler:
                     metrics[bucket_name] = evidence(
                         {str(row["bucket"]): int(row["count"]) for row in bucket_rows}
                     )
+            elif dtype in {"boolean", "bool"}:
+                kind = ColumnProfileKind.CATEGORICAL
+                metrics = {
+                    "cardinality": evidence(
+                        result.get(names["distinct"]),
+                        method=MetricMethod.APPROXIMATE,
+                        approximation={"algorithm": "approx_count_distinct"},
+                    )
+                }
+            elif dtype.startswith("array"):
+                kind = ColumnProfileKind.ARRAY
+                metrics = {
+                    "complex_type_evidence": evidence(None, warning="array_values_not_retained")
+                }
+            elif dtype.startswith("map"):
+                kind = ColumnProfileKind.MAP
+                metrics = {
+                    "complex_type_evidence": evidence(None, warning="map_values_not_retained")
+                }
+            elif dtype.startswith("struct"):
+                kind = ColumnProfileKind.STRUCT
+                metrics = {
+                    "complex_type_evidence": evidence(None, warning="struct_values_not_retained")
+                }
+            elif dtype in {"binary", "varbinary"}:
+                kind = ColumnProfileKind.BINARY
+                metrics = {
+                    "complex_type_evidence": evidence(None, warning="binary_values_not_retained")
+                }
+            elif dtype in {"variant", "json"}:
+                kind = ColumnProfileKind.VARIANT
+                metrics = {
+                    "complex_type_evidence": evidence(None, warning="variant_values_not_retained")
+                }
+            else:
+                kind = ColumnProfileKind.UNSUPPORTED
+                metrics = {}
             if self.request.conditional_null_segments:
                 conditional: dict[str, Any] = {}
                 for segment in self.request.conditional_null_segments:
@@ -545,8 +587,9 @@ class TableProfiler:
                         continue
                     segment_col = F.col(segment)
                     segment_cardinality = int(
-                        scan.select(F.approx_count_distinct(segment_col).alias("cardinality"))
-                        .first()["cardinality"]
+                        scan.select(
+                            F.approx_count_distinct(segment_col).alias("cardinality")
+                        ).first()["cardinality"]
                         or 0
                     )
                     if segment_cardinality > 50:
@@ -564,9 +607,16 @@ class TableProfiler:
                         .orderBy(F.asc_nulls_first(segment))
                         .collect()
                     )
+                    segment_metadata = next((c for c in selected if c.name == segment), None)
+                    if segment_metadata is None:
+                        conditional[segment] = {
+                            "available": False,
+                            "warning": "conditional_null_segment_not_profiled",
+                        }
+                        continue
                     segment_policy = (
                         self.request.sensitive_value_retention_policy
-                        if next(c for c in selected if c.name == segment).tags
+                        if segment_metadata.tags
                         else self.request.value_retention_policy
                     )
                     conditional[segment] = {
@@ -590,9 +640,25 @@ class TableProfiler:
                     }
                 if conditional:
                     metrics["conditional_nulls"] = evidence(conditional)
-            else:
-                kind = ColumnProfileKind.UNSUPPORTED
-                metrics = {}
+            metrics = {
+                key: value if isinstance(value, MetricEvidence) else evidence(value)
+                for key, value in metrics.items()
+            }
+            if self.request.mode is ProfileMode.QUICK:
+                metrics = {
+                    key: replace(
+                        value,
+                        population_scope=PopulationScope.SAMPLE,
+                        calculation_method=(
+                            CalculationMethod.APPROXIMATE
+                            if value.method is MetricMethod.APPROXIMATE
+                            else CalculationMethod.EXACT
+                        ),
+                        sample_fraction=self.request.sample_fraction,
+                        sample_seed=self.request.sample_seed,
+                    )
+                    for key, value in metrics.items()
+                }
             profiles.append(
                 ColumnProfile(
                     column_name=column.name,
@@ -613,9 +679,7 @@ class TableProfiler:
                     outlier_findings=outliers,
                     warnings=("unsupported_type_profile",)
                     if kind is ColumnProfileKind.UNSUPPORTED
-                    else (
-                        "category_values_redacted",
-                    )
+                    else ("category_values_redacted",)
                     if kind is ColumnProfileKind.CATEGORICAL
                     and (
                         self.request.sensitive_value_retention_policy
@@ -709,8 +773,7 @@ class TableProfiler:
         if self.request.business_event_column:
             event_col = F.col(self.request.business_event_column)
             freshness_aliases = {
-                str(days): f"recent_{days}"
-                for days in self.request.recent_windows_days
+                str(days): f"recent_{days}" for days in self.request.recent_windows_days
             }
             freshness_row = scan.agg(
                 F.max(event_col).alias("max_event_time"),
@@ -771,12 +834,35 @@ class TableProfiler:
                 "warning_count": len(profile.warnings),
             },
         )
+        durable_artifact = DurableArtifactRef(
+            artifact_id=artifact.artifact_id,
+            artifact_type=ArtifactType.TABLE_PROFILE,
+            artifact_schema_version=profile.profile_schema_version,
+            status=ArtifactStatus.COMPLETE,
+            tool_name=self.name.value,
+            tool_version=profile.tool_version,
+            strategy_version="table-profile-v1",
+            run_id=state.request.request_id,
+            environment="local",
+            created_at=profile.profile_started_at,
+            completed_at=profile.profile_completed_at,
+            configuration_hash=profile.configuration_hash,
+            primary_location=f"table_profile/{artifact.artifact_id}",
+            related_locations=profile.artifact_locations,
+            input_artifact_ids=(),
+            source_references=(source_reference_from_profile(profile),),
+            checksum=fingerprint(profile.to_dict()),
+            content_checksum=fingerprint(profile.to_dict()),
+            summary=profile.agent_summary,
+            warnings=profile.warnings,
+        )
         return ToolResult(
             tool=self.name,
             stage=RunStage.PROFILED,
             artifacts=(artifact,),
             warnings=profile.warnings,
             metrics={"profiled_columns": profile.profiled_column_count},
+            durable_artifacts=(durable_artifact,),
         )
 
     @staticmethod

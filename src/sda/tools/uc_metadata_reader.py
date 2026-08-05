@@ -21,6 +21,10 @@ from fnmatch import fnmatchcase
 from importlib import import_module
 from typing import Any, Protocol
 
+from sda.artifacts.fingerprint import fingerprint
+from sda.artifacts.lineage import source_reference_from_table
+from sda.artifacts.models import ArtifactRef as DurableArtifactRef
+from sda.artifacts.models import ArtifactStatus, ArtifactType
 from sda.metadata_models import (
     ColumnMetadata,
     ConstraintKind,
@@ -198,6 +202,7 @@ class InformationSchemaMetadataAdapter:
         self._executor = executor
         self._query_warnings: list[str] = []
         self._query_status: dict[str, str] = {}
+        self._query_errors: dict[str, str] = {}
 
     def read_raw_tables(self, config: MetadataReadConfig) -> tuple[RawTableMetadata, ...]:
         """Execute Unity Catalog metadata queries and return raw table metadata."""
@@ -219,15 +224,14 @@ class InformationSchemaMetadataAdapter:
         """Read and normalize a governed metadata inventory from Unity Catalog."""
         self._query_warnings = []
         self._query_status = {}
+        self._query_errors = {}
         visible_catalog_rows = self._safe_execute(
             "SELECT catalog_name AS catalog FROM system.information_schema.catalogs"
         )
         visible_catalogs = tuple(sorted({str(row["catalog"]) for row in visible_catalog_rows}))
         schema_rows: list[Mapping[str, Any]] = []
         for catalog in config.catalog_allowlist:
-            schema_rows.extend(
-                self._safe_execute(information_schema_queries(catalog)[1])
-            )
+            schema_rows.extend(self._safe_execute(information_schema_queries(catalog)[1]))
         visible_schemas = tuple(
             sorted({(str(row["catalog"]), str(row["schema"])) for row in schema_rows})
         )
@@ -237,22 +241,20 @@ class InformationSchemaMetadataAdapter:
             if not config.schema_allowlist or item[1] in config.schema_allowlist
         )
         raw_tables: tuple[RawTableMetadata, ...]
+        candidate_count = 0
+        selected_names: list[tuple[str, str, str]] = []
+        truncated_objects: tuple[str, ...] = ()
         if visible_schemas and not selected_schemas:
             raw_tables = ()
         else:
-            scopes: tuple[tuple[str, str | None], ...] = (
-                selected_schemas
-                or tuple(
-                    (catalog, schema)
-                    for catalog in config.catalog_allowlist
-                    for schema in (config.schema_allowlist or (None,))
-                )
+            scopes: tuple[tuple[str, str | None], ...] = selected_schemas or tuple(
+                (catalog, schema)
+                for catalog in config.catalog_allowlist
+                for schema in (config.schema_allowlist or (None,))
             )
             candidates: list[tuple[str, str, str]] = []
             for catalog, schema in scopes:
-                rows = self._safe_execute(
-                    information_schema_queries(catalog, schema=schema)[2]
-                )
+                rows = self._safe_execute(information_schema_queries(catalog, schema=schema)[2])
                 for row in rows:
                     name = str(row["name"])
                     if (
@@ -264,7 +266,13 @@ class InformationSchemaMetadataAdapter:
                         or any(fnmatchcase(name, pattern) for pattern in config.table_patterns)
                     ):
                         candidates.append((catalog, str(row["schema"]), name))
-            selected_names = sorted(set(candidates))[: config.max_objects]
+            all_candidate_names = sorted(set(candidates))
+            candidate_count = len(all_candidate_names)
+            selected_names = all_candidate_names[: config.max_objects]
+            truncated_objects = tuple(
+                f"{catalog}.{schema}.{name}"
+                for catalog, schema, name in all_candidate_names[config.max_objects : config.max_objects + 100]
+            )
             grouped: dict[tuple[str, str], set[str]] = defaultdict(set)
             for catalog, schema, name in selected_names:
                 grouped[(catalog, schema)].add(name)
@@ -327,6 +335,14 @@ class InformationSchemaMetadataAdapter:
             provenance={
                 **inventory.provenance,
                 "metadata_sources": dict(sorted(self._query_status.items())),
+                "scope_accounting": {
+                    "candidate_count": candidate_count,
+                    "selected_count": len(raw_tables),
+                    "truncated_count": max(0, candidate_count - len(selected_names)),
+                    "truncated_objects_sample": list(truncated_objects),
+                    "truncation_reason": "max_object_budget" if truncated_objects else None,
+                },
+                "query_error_categories": dict(sorted(self._query_errors.items())),
             },
         )
 
@@ -401,8 +417,9 @@ class InformationSchemaMetadataAdapter:
             rows = self._executor.execute(sql)
             self._query_status[source] = "success"
             return rows
-        except Exception:  # pragma: no cover - Databricks version/permission dependent
+        except Exception as exc:  # pragma: no cover - Databricks version/permission dependent
             self._query_status[source] = "unavailable"
+            self._query_errors[source] = type(exc).__name__
             self._query_warnings.append(f"{source}_metadata_unavailable")
             return ()
 
@@ -448,12 +465,36 @@ class UcMetadataReader:
                 "warning_count": len(warnings),
             },
         )
+        durable_artifact = DurableArtifactRef(
+            artifact_id=artifact.artifact_id,
+            artifact_type=ArtifactType.METADATA_INVENTORY,
+            artifact_schema_version="1.0",
+            status=ArtifactStatus.COMPLETE,
+            tool_name=self.name.value,
+            tool_version=__version__,
+            strategy_version="metadata-normalization-v1",
+            run_id=state.request.request_id,
+            environment="local",
+            created_at=datetime.now(UTC).isoformat(),
+            configuration_hash=fingerprint(self._config),
+            primary_location=f"metadata_inventory/{artifact.artifact_id}",
+            related_locations={},
+            input_artifact_ids=(),
+            source_references=tuple(
+                source_reference_from_table(table) for table in inventory.tables
+            ),
+            checksum=fingerprint(inventory.to_dict()),
+            content_checksum=fingerprint(inventory.to_dict()),
+            summary=summarize_inventory(inventory),
+            warnings=tuple(warnings),
+        )
         return ToolResult(
             tool=self.name,
             stage=RunStage.METADATA_DISCOVERED,
             artifacts=(artifact,),
             warnings=warnings,
             metrics={"metadata_tables": len(inventory.tables)},
+            durable_artifacts=(durable_artifact,),
         )
 
     def read_inventory(self, **discovery: Any) -> MetadataInventory:
@@ -837,10 +878,7 @@ def _restrict_query(sql: str, selected: set[tuple[str, str, str]]) -> str:
         f"AND name = {_quote_literal(n)})"
         for c, s, n in sorted(selected)
     )
-    return (
-        f"SELECT * FROM ({sql}) AS selected_metadata "
-        f"WHERE {predicates}"
-    )
+    return f"SELECT * FROM ({sql}) AS selected_metadata WHERE {predicates}"
 
 
 def _parse_constraint_kind(value: str) -> ConstraintKind:

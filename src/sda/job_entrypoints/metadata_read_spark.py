@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -52,7 +53,26 @@ def main(argv: Sequence[str] | None = None) -> None:
     settings = load_settings()
     spark = SparkSession.builder.getOrCreate()
     inventory = read_uc_metadata_with_spark(settings.metadata_read_config(), spark)
-    print(json.dumps(inventory.to_dict(), indent=2, sort_keys=True))
+    payload = inventory.to_dict()
+    from sda.artifacts.fingerprint import fingerprint
+
+    inventory_id = f"metadata_inventory_{fingerprint(payload)}"
+    output_table = os.getenv("SDA_METADATA_OUTPUT_TABLE", "")
+    if output_table:
+        row = {
+            "inventory_id": inventory_id,
+            "artifact_schema_version": "1.0",
+            "created_at": datetime.now(UTC).isoformat(),
+            "payload": json.dumps(payload, sort_keys=True),
+        }
+        spark.createDataFrame([row]).write.format("delta").mode("append").saveAsTable(output_table)
+    print(
+        json.dumps(
+            {**payload, "inventory_id": inventory_id, "output_table": output_table},
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
@@ -61,6 +81,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--schema-allowlist", default="")
     parser.add_argument("--table-patterns", default="")
     parser.add_argument("--max-metadata-objects", default="100")
+    parser.add_argument("--output-table", default="")
     return parser.parse_args(argv)
 
 
@@ -70,6 +91,8 @@ def _apply_env_overrides(args: argparse.Namespace) -> None:
     os.environ["SDA_SCHEMA_ALLOWLIST"] = args.schema_allowlist
     os.environ["SDA_TABLE_PATTERNS"] = args.table_patterns
     os.environ["SDA_MAX_METADATA_OBJECTS"] = args.max_metadata_objects
+    if args.output_table:
+        os.environ["SDA_METADATA_OUTPUT_TABLE"] = args.output_table
 
 
 if __name__ == "__main__":

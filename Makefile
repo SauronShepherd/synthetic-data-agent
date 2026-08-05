@@ -1,12 +1,30 @@
-.PHONY: test lint typecheck check
+.PHONY: test lint format format-check typecheck build spark-test release-check bundle-validate check
 
 test:
-	pytest
+	python -m pytest
 
 lint:
-	ruff check .
+	python -m ruff check src tests
+
+format:
+	python -m ruff format src tests
+
+format-check:
+	python -m ruff format --check src tests
 
 typecheck:
-	mypy src tests
+	python -m mypy src tests
+
+build:
+	python -m build --sdist --wheel
+
+release-check:
+	python scripts/check_release.py
+
+bundle-validate:
+	python scripts/validate_bundle_config.py --target dev
+
+spark-test:
+	python -m pytest -m spark
 
 check: lint typecheck test

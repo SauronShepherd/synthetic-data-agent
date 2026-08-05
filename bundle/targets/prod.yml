@@ -15,10 +15,18 @@ targets:
     variables:
       sda_profile_catalog: sda_prod
       sda_profile_schema: profiles
+      sda_metadata_inventory_table: sda_prod.profiles.metadata_inventory
+      sda_scope_catalog: sda_prod
+      sda_scope_schema: sample_source
+      sda_relationship_parent_table: sda_prod.sample_source.sample_customers
+      sda_relationship_child_table: sda_prod.sample_source.sample_customers
+      sda_relationship_output_table: sda_prod.profiles.relationship_analysis_scope
+      sda_graph_output_table: sda_prod.profiles.dependency_graph_scope
       catalog_name: sda_prod
       sda_allow_best_effort_snapshot: "false"
       sda_allow_profile_schema_create: "false"
-      sda_catalog_allowlist: main
+      sda_profile_source_table: sda_prod.sample_source.sample_table
+      sda_catalog_allowlist: sda_prod
       sda_schema_allowlist: ""
       sda_table_patterns: ""
       sda_max_metadata_objects: "100"

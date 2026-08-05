@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synthetic-data-agent"
-version = "0.5.0"
-description = "Article 05 governed value profiler for a Synthetic Data Agent on Databricks."
+version = "0.6.0.dev0"
+description = "SDA 06 governed metadata, profiling, and relationship evidence for Databricks."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Ángel Álvarez Pascua" }]
 dependencies = []
 
@@ -17,6 +17,7 @@ databricks = [
   "databricks-sql-connector>=3,<5",
 ]
 dev = [
+  "build>=1.2,<2",
   "mypy>=1.15,<2",
   "pytest>=8,<10",
   "pytest-cov>=6,<7",
@@ -36,6 +37,11 @@ where = ["src"]
 addopts = "-q"
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+  "unit: fast local tests",
+  "spark: tests requiring PySpark",
+  "databricks: tests requiring a Databricks workspace",
+]
 
 [tool.ruff]
 target-version = "py311"

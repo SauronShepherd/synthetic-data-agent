@@ -65,5 +65,8 @@ class SyntheticDataAgent:
 
         state.stage = result.stage
         state.artifacts.extend(result.artifacts)
+        # Canonical durable references are carried alongside the legacy state
+        # list during migration; the orchestrator does not reinterpret them.
+        state.durable_artifacts.extend(result.durable_artifacts)
         state.warnings.extend(result.warnings)
         state.completed_tools.append(result.tool)

@@ -4,7 +4,12 @@ import math
 from collections.abc import Iterable
 from typing import Any
 
-from sda.profile_models import MetricEvidence, MetricMethod
+from sda.profile_models import (
+    CalculationMethod,
+    MetricEvidence,
+    MetricMethod,
+    PopulationScope,
+)
 
 
 def evidence(
@@ -15,6 +20,11 @@ def evidence(
     sample_fraction: float | None = None,
     approximation: dict[str, Any] | None = None,
     warning: str | None = None,
+    population_scope: PopulationScope = PopulationScope.FULL,
+    calculation_method: CalculationMethod = CalculationMethod.EXACT,
+    sample_seed: int | None = None,
+    algorithm: str | None = None,
+    algorithm_parameters: dict[str, Any] | None = None,
 ) -> MetricEvidence:
     return MetricEvidence(
         value=value,
@@ -23,6 +33,11 @@ def evidence(
         sample_fraction=sample_fraction,
         approximation=approximation or {},
         warning=warning,
+        population_scope=population_scope,
+        calculation_method=calculation_method,
+        sample_seed=sample_seed,
+        algorithm=algorithm,
+        algorithm_parameters=algorithm_parameters or {},
     )
 
 

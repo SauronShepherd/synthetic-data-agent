@@ -25,6 +25,7 @@ from sda.profile_models import (  # noqa: E402
     TableProfileRequest,
     ValueRetentionPolicy,
 )
+from sda.runtime.identifiers import QualifiedName  # noqa: E402
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -62,20 +63,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--profile-catalog", default=os.getenv("SDA_PROFILE_CATALOG", "sda_dev"))
     parser.add_argument("--profile-schema", default=os.getenv("SDA_PROFILE_SCHEMA", "profiles"))
+    parser.add_argument("--metadata-inventory-id", default="")
+    parser.add_argument("--metadata-inventory-table", default="")
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
+    source_name = QualifiedName.parse(args.source_table)
     request = TableProfileRequest(
-        source_table=args.source_table,
+        source_table=source_name.full_name,
         mode=ProfileMode(args.mode),
         sample_fraction=1.0 if args.mode == "full" else args.sample_fraction,
         sample_seed=args.sample_seed,
         column_allowlist=tuple(
-            name.strip()
-            for name in re.split(r"[,;]", args.column_allowlist)
-            if name.strip()
+            name.strip() for name in re.split(r"[,;]", args.column_allowlist) if name.strip()
         ),
         column_denylist=tuple(
             name.strip() for name in re.split(r"[,;]", args.column_denylist) if name.strip()
@@ -102,39 +104,50 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     from pyspark.sql import SparkSession
 
+    from sda.artifacts.loaders import load_metadata_inventory
     from sda.metadata_models import MetadataReadConfig
-    from sda.profiling.persistence import persist_profile
+    from sda.profiling.persistence import find_reusable_profile, persist_profile
     from sda.tools.table_profiler import TableProfiler
     from sda.tools.uc_metadata_reader import InformationSchemaMetadataAdapter, SparkSqlExecutor
 
     spark = SparkSession.builder.getOrCreate()
-    catalog, schema, _ = args.source_table.split(".")
-    metadata = InformationSchemaMetadataAdapter(SparkSqlExecutor(spark)).read_inventory(
-        MetadataReadConfig(
-            catalog_allowlist=(catalog,),
-            schema_allowlist=(schema,),
-            table_patterns=(args.source_table.rsplit(".", 1)[-1],),
-            max_objects=1,
+    catalog, schema, _ = source_name.full_name.split(".")
+    persisted_inventory = None
+    if args.metadata_inventory_id:
+        if not args.metadata_inventory_table:
+            raise ValueError("metadata inventory table is required with metadata inventory ID")
+        persisted_inventory = load_metadata_inventory(
+            spark, args.metadata_inventory_table, args.metadata_inventory_id
         )
+        from sda.artifacts.loaders import metadata_inventory_from_payload
+        persisted_inventory = metadata_inventory_from_payload(persisted_inventory)
+        persisted_tables = {table.full_name for table in persisted_inventory.tables}
+        if source_name.full_name not in persisted_tables:
+            raise RuntimeError("metadata inventory does not contain the requested source table")
+    metadata = persisted_inventory if persisted_inventory is not None else InformationSchemaMetadataAdapter(
+        SparkSqlExecutor(spark)
+    ).read_inventory(MetadataReadConfig(
+        catalog_allowlist=(catalog,), schema_allowlist=(schema,),
+        table_patterns=(source_name.object_name,), max_objects=1,
+    ))
+    governed_table = next(
+        (table for table in metadata.tables if table.full_name == source_name.full_name),
+        None,
     )
-    dataframe = spark.table(args.source_table)
-    metadata_missing = (
-        len(metadata.tables) != 1
-        or metadata.tables[0].full_name != args.source_table
-        or not metadata.tables[0].columns
-    )
+    metadata_missing = governed_table is None or not governed_table.columns
     if metadata_missing and not args.allow_metadata_fallback:
         raise RuntimeError(
             f"Governed metadata unavailable for {args.source_table}; "
             "use --allow-metadata-fallback only for explicit development diagnostics"
         )
     if metadata_missing:
+        dataframe = spark.table(source_name.quoted)
         from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
 
         metadata_table = TableMetadata(
             catalog=catalog,
             schema=schema,
-            object_name=args.source_table.rsplit(".", 1)[-1],
+            object_name=source_name.object_name,
             object_type=ObjectType.TABLE,
             columns=tuple(
                 ColumnMetadata(field.name, field.dataType.simpleString(), field.nullable, index + 1)
@@ -143,7 +156,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             metadata_warnings=("metadata_inventory_unavailable_schema_fallback",),
         )
     else:
-        metadata_table = metadata.tables[0]
+        # Constructing the relation is lazy; actions remain below the reuse
+        # check, so compatible profiles can still return before a scan.
+        dataframe = spark.table(source_name.quoted)
+        metadata_table = governed_table
     available_columns = {column.name: column for column in metadata_table.columns}
     requested_columns = set(request.column_allowlist) | set(request.column_denylist)
     requested_columns.update(request.conditional_null_segments)
@@ -159,23 +175,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         event_type = available_columns[request.business_event_column].data_type.lower()
         if "date" not in event_type and "timestamp" not in event_type:
             raise ValueError("business_event_column must be temporal")
-    metadata_schema = {
-        column.name: column.data_type.lower() for column in metadata_table.columns
-    }
+    metadata_schema = {column.name: column.data_type.lower() for column in metadata_table.columns}
     live_schema = {
-        field.name: field.dataType.simpleString().lower()
-        for field in dataframe.schema.fields
+        field.name: field.dataType.simpleString().lower() for field in dataframe.schema.fields
     }
-    schema_drift = (
-        set(metadata_schema) != set(live_schema)
-        or any(metadata_schema.get(name) != dtype for name, dtype in live_schema.items())
+    schema_drift = set(metadata_schema) != set(live_schema) or any(
+        metadata_schema.get(name) != dtype for name, dtype in live_schema.items()
     )
     source_version = None
     storage_freshness: dict[str, object] = {}
     snapshot_warning = "source_version_unavailable"
     try:
         history = (
-            spark.sql(f"DESCRIBE HISTORY {args.source_table}")
+            spark.sql(f"DESCRIBE HISTORY {source_name.quoted}")
             .select("version", "timestamp", "operation")
             .limit(1)
             .collect()
@@ -197,9 +209,32 @@ def main(argv: Sequence[str] | None = None) -> None:
             f"A reproducible source snapshot is unavailable for {args.source_table}; "
             "set allow_best_effort_snapshot=true only when explicitly permitted"
         )
+    if request.reuse_existing:
+        reusable = find_reusable_profile(
+            spark,
+            f"`{args.profile_catalog}`.`{args.profile_schema}`",
+            source_table=source_name.full_name,
+            source_version=source_version,
+            configuration_hash=request.configuration_hash,
+            metadata_inventory_id=args.metadata_inventory_id or None,
+        )
+        if reusable is not None:
+            print(
+                json.dumps(
+                    {
+                        "status": "REUSED",
+                        "profile_id": reusable.get("profile_id"),
+                        "source_table": source_name.full_name,
+                        "source_version": source_version,
+                    },
+                    sort_keys=True,
+                )
+            )
+            return
+    dataframe = spark.table(source_name.quoted)
     if source_version is not None:
         dataframe = spark.sql(
-            f"SELECT * FROM {args.source_table} VERSION AS OF {int(source_version)}"
+            f"SELECT * FROM {source_name.quoted} VERSION AS OF {int(source_version)}"
         )
     profile = TableProfiler(
         request,
@@ -232,6 +267,13 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "method": "unavailable",
                 "warning": "freshness_history_unavailable",
             },
+        )
+    if args.metadata_inventory_id:
+        from sda.profile_models import sha256_json
+        profile = replace(
+            profile,
+            profile_id=sha256_json({"profile_id": profile.profile_id, "metadata_inventory_id": args.metadata_inventory_id}),
+            metadata_inventory_id=args.metadata_inventory_id,
         )
     if args.allow_profile_schema_create:
         spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{args.profile_catalog}`.`{args.profile_schema}`")

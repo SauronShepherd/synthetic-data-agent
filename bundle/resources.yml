@@ -2,6 +2,22 @@ resources:
   jobs:
     uc_metadata_reader:
       name: "[${bundle.target}] SDA UC Metadata Reader"
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+      tags:
+        workload: sda
+        stage: metadata
+      parameters:
+        - name: catalog_allowlist
+          default: ${var.sda_catalog_allowlist}
+        - name: schema_allowlist
+          default: ${var.sda_schema_allowlist}
+        - name: table_patterns
+          default: ${var.sda_table_patterns}
+        - name: max_metadata_objects
+          default: ${var.sda_max_metadata_objects}
+        - name: output_table
+          default: ${var.sda_metadata_inventory_table}
 
       tasks:
         - task_key: read_uc_metadata
@@ -9,22 +25,31 @@ resources:
             python_file: ../src/sda/job_entrypoints/metadata_read_spark.py
             parameters:
               - --catalog-allowlist
-              - ${var.sda_catalog_allowlist}
+              - "{{job.parameters.catalog_allowlist}}"
               - --schema-allowlist
-              - ${var.sda_schema_allowlist}
+              - "{{job.parameters.schema_allowlist}}"
               - --table-patterns
-              - ${var.sda_table_patterns}
+              - "{{job.parameters.table_patterns}}"
               - --max-metadata-objects
-              - ${var.sda_max_metadata_objects}
+              - "{{job.parameters.max_metadata_objects}}"
+              - --output-table
+              - "{{job.parameters.output_table}}"
           environment_key: uc_metadata_reader_environment
 
       environments:
         - environment_key: uc_metadata_reader_environment
           spec:
             environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
 
     table_profiler:
       name: "[${bundle.target}] SDA Table Profiler"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      tags:
+        workload: sda
+        stage: profiling
       parameters:
         - name: source_table
           default: ${var.sda_profile_source_table}
@@ -64,6 +89,10 @@ resources:
           default: ${var.sda_profile_catalog}
         - name: profile_schema
           default: ${var.sda_profile_schema}
+        - name: metadata_inventory_id
+          default: ""
+        - name: metadata_inventory_table
+          default: ""
       tasks:
         - task_key: profile_table
           spark_python_task:
@@ -107,8 +136,152 @@ resources:
               - "{{job.parameters.profile_catalog}}"
               - --profile-schema
               - "{{job.parameters.profile_schema}}"
+              - --metadata-inventory-id
+              - "{{job.parameters.metadata_inventory_id}}"
+              - --metadata-inventory-table
+              - "{{job.parameters.metadata_inventory_table}}"
           environment_key: table_profiler_environment
       environments:
         - environment_key: table_profiler_environment
           spec:
             environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
+    relationship_detector:
+      name: "[${bundle.target}] SDA Relationship Detector"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      tags:
+        workload: sda
+        stage: relationships
+      tasks:
+        - task_key: detect_relationships
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/relationship_detect_spark.py
+            parameters:
+              - --parent-table
+              - "{{job.parameters.parent_table}}"
+              - --child-table
+              - "{{job.parameters.child_table}}"
+              - --parent-columns
+              - "{{job.parameters.parent_columns}}"
+              - --child-columns
+              - "{{job.parameters.child_columns}}"
+              - --output-table
+              - "{{job.parameters.output_table}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --dry-run
+              - "{{job.parameters.dry_run}}"
+          environment_key: relationship_detector_environment
+      parameters:
+        - name: parent_table
+          default: ${var.sda_relationship_parent_table}
+        - name: child_table
+          default: ${var.sda_relationship_child_table}
+        - name: parent_columns
+          default: id
+        - name: child_columns
+          default: id
+        - name: output_table
+          default: ${var.sda_relationship_output_table}
+        - name: run_id
+          default: ""
+        - name: dry_run
+          default: "true"
+      environments:
+        - environment_key: relationship_detector_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
+    analyze_scope:
+      name: "[${bundle.target}] SDA Analyze Scope"
+      max_concurrent_runs: 1
+      timeout_seconds: 10800
+      tags:
+        workload: sda
+        stage: scope
+      tasks:
+        - task_key: analyze_scope
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/analyze_scope_spark.py
+            parameters:
+              - --catalog
+              - "{{job.parameters.catalog}}"
+              - --schema
+              - "{{job.parameters.schema}}"
+              - --tables
+              - "{{job.parameters.tables}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --dry-run
+              - "{{job.parameters.dry_run}}"
+              - --profile
+              - "{{job.parameters.profile}}"
+              - --parent-table
+              - "{{job.parameters.parent_table}}"
+              - --child-table
+              - "{{job.parameters.child_table}}"
+              - --parent-columns
+              - "{{job.parameters.parent_columns}}"
+              - --child-columns
+              - "{{job.parameters.child_columns}}"
+              - --profile-catalog
+              - "{{job.parameters.profile_catalog}}"
+              - --profile-schema
+              - "{{job.parameters.profile_schema}}"
+              - --metadata-inventory-id
+              - "{{job.parameters.metadata_inventory_id}}"
+              - --metadata-inventory-table
+              - "{{job.parameters.metadata_inventory_table}}"
+              - --manifest-table
+              - "{{job.parameters.manifest_table}}"
+              - --relationship-output-table
+              - "{{job.parameters.relationship_output_table}}"
+              - --graph-output-table
+              - "{{job.parameters.graph_output_table}}"
+          environment_key: analyze_scope_environment
+      parameters:
+        - name: catalog
+          default: ${var.sda_scope_catalog}
+        - name: schema
+          default: ${var.sda_scope_schema}
+        - name: tables
+          default: sample_customers
+        - name: run_id
+          default: ""
+        - name: dry_run
+          default: "false"
+        - name: profile
+          default: "true"
+        - name: parent_table
+          default: ""
+        - name: child_table
+          default: ""
+        - name: parent_columns
+          default: ""
+        - name: child_columns
+          default: ""
+        - name: profile_catalog
+          default: ${var.sda_profile_catalog}
+        - name: profile_schema
+          default: ${var.sda_profile_schema}
+        - name: metadata_inventory_id
+          default: ""
+        - name: metadata_inventory_table
+          default: ""
+        - name: manifest_table
+          default: ""
+        - name: relationship_output_table
+          default: ${var.sda_relationship_output_table}
+        - name: graph_output_table
+          default: ${var.sda_graph_output_table}
+      environments:
+        - environment_key: analyze_scope_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl

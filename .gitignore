@@ -2,9 +2,12 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+build/
+dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.testdeps/
 .coverage
 htmlcov/
 
@@ -19,6 +22,7 @@ venv/
 
 # Databricks bundle local state
 .databricks/
+.release-check/
 
 # OS/editor
 .DS_Store

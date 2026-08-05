@@ -1,8 +1,11 @@
-# Synthetic Data Agent — Article 05
+# Synthetic Data Agent — SDA 06
 
-This branch extends the governed Article 04 foundation with the deterministic SDA 05 `table_profiler` tool.
+This branch extends the governed Articles 04–05 foundation with relationship
+discovery, key validation, join evidence, and dependency-graph planning.
 
-The project still does **not** generate synthetic rows. SDA 05 adds governed value-level profiling while preserving the Article 04 metadata contract.
+The project still does **not** generate synthetic rows. SDA 06 produces
+governed metadata, profile, and relationship evidence while preserving the
+tool boundaries established by Articles 04–05.
 
 ## Current status
 
@@ -11,6 +14,8 @@ This branch now supports three execution modes:
 - **Local demo mode** with deterministic sample metadata.
 - **Local Databricks SQL Warehouse mode** through the Databricks SQL Connector.
 - **Databricks Bundle serverless mode** for Databricks Free/serverless workspaces.
+- **SDA 06 relationship evidence workflow** through the Databricks bundle, including
+  persisted scope relationship and dependency-graph artifacts.
 
 Bundle validation and deployment are environment-dependent; local checks cover compilation and deterministic reader contracts. A successful run may still return an empty inventory when the configured catalog/schema scope does not contain visible matching tables.
 
@@ -32,12 +37,13 @@ Bundle validation and deployment are environment-dependent; local checks cover c
 - CLI `metadata-read-sql` command for local SQL Warehouse execution.
 - CLI `metadata-read-spark` command for Databricks Spark/serverless execution.
 - Tests for metadata contracts, reader behavior, orchestration integration, and configuration.
+- Relationship candidates, exact join metrics, scoring, graph cycles, bridges, and artifact contracts.
 
 ## What it deliberately does not add
 
 - Source table value reads.
-- Statistical profiling.
-- Relationship validation.
+- Privacy approval logic.
+- Synthetic row generation and publishing.
 - Privacy approval logic.
 - Synthetic row generation.
 - Publishing.
@@ -178,6 +184,26 @@ databricks bundle deploy -t dev --profile <profile-name>
 databricks bundle run uc_metadata_reader -t dev --profile <profile-name>
 ```
 
+Run the SDA 06 relationship detector in serverless dry-run mode:
+
+```bash
+databricks bundle run relationship_detector -t dev --profile <profile-name> \
+  --params="dry_run=true,parent_columns=customer_id,child_columns=customer_id"
+```
+
+The checked-in dev sample relation is `sda_dev.sample_source.sample_customers`.
+Serverless dependencies are declared as environment string dependencies; task-level
+`libraries` are not supported by Databricks serverless jobs.
+
+Run governed scope validation against one or more Unity Catalog tables:
+
+```powershell
+databricks bundle run analyze_scope -t dev --profile <profile-name> --params="catalog=<catalog>,schema=<schema>,tables=<table>,dry_run=false,run_id=<run-id>"
+```
+
+The non-dry-run path reads the requested scope from Unity Catalog metadata and
+fails closed if any requested table is not visible in the governed inventory.
+
 Run the SDA 05 profiler against one approved relation:
 
 ```bash
@@ -267,15 +293,11 @@ Before committing, verify that no personal or workspace-specific values are pres
 - no local virtual environments or caches.
 
 Use placeholders such as `<profile-name>`, `<workspace-host>`, `<warehouse-id>`, `<catalog>`, and `<schema>` in documentation.
-## SDA 05 milestone
+## Milestone boundary
 
-Implemented through SDA 05: declarative bundle deployment with environment-specific
-guardrails, a deterministic Unity Catalog metadata reader, and a one-relation
-`table_profiler` that produces versioned numeric, categorical, string, temporal,
-missingness, outlier, complex-type, freshness, provenance, and governed Delta evidence.
-
-Designed but intentionally deferred: relationship validation/inference, broad
-cross-column pattern detection, durable operational state, generation, quality
-validation, and publishing. A missing metadata signal is not proof that data is safe;
+This development milestone implements governed metadata discovery, table profiling,
+scope-level relationship evidence, dependency-graph artifacts, and linked run manifests.
+Synthetic row generation, privacy approval, publishing, and durable operational state
+remain later roadmap stages. A missing metadata signal is not proof that data is safe;
 declared constraints remain unvalidated, and profiling remains evidence rather than a
 business-rule or privacy verdict.

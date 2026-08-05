@@ -6,6 +6,12 @@ include:
   - bundle/resources.yml
   - bundle/targets/*.yml
 
+artifacts:
+  default:
+    type: whl
+    build: python -m pip wheel --no-deps --no-build-isolation -w dist .
+    path: .
+
 variables:
   catalog_name:
     description: Unity Catalog catalog used by the bootstrap workflow.
@@ -70,3 +76,24 @@ variables:
   sda_allow_profile_schema_create:
     description: Permit the profiler to create its output schema automatically.
     default: "true"
+  sda_metadata_inventory_table:
+    description: Delta table containing canonical metadata inventory payloads.
+    default: sda_dev.profiles.metadata_inventory
+  sda_scope_catalog:
+    description: Catalog used by the scope workflow.
+    default: sda_dev
+  sda_scope_schema:
+    description: Schema used by the scope workflow.
+    default: sample_source
+  sda_relationship_parent_table:
+    description: Parent relation for the explicit relationship job.
+    default: main.sample_source.sample_customers
+  sda_relationship_child_table:
+    description: Child relation for the explicit relationship job.
+    default: main.sample_source.sample_customers
+  sda_relationship_output_table:
+    description: Delta table for relationship evidence.
+    default: sda_dev.profiles.relationship_analysis_scope
+  sda_graph_output_table:
+    description: Delta table for dependency graph evidence.
+    default: sda_dev.profiles.dependency_graph_scope
