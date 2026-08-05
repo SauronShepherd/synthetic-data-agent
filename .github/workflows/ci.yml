@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install project
-        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,spark]"
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,spark]" jsonschema
       - name: Compile
         run: python -m compileall -q src tests notebooks
       - name: Release hygiene
