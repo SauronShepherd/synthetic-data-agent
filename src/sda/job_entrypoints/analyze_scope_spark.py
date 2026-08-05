@@ -206,6 +206,17 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     origin = "inferred_common_name"
                 if not parent_columns:
                     continue
+                evidence = measure_spark_join(
+                    scoped_frames[parent_table.full_name],
+                    scoped_frames[child_table.full_name],
+                    parent_columns,
+                    child_columns,
+                )
+                hard_gates_pass = (
+                    float(evidence.get("parent_uniqueness_ratio", 0.0)) >= 1.0
+                    and float(evidence.get("orphan_rate", 1.0)) <= 0.05
+                    and evidence.get("cardinality") != "parent_key_invalid"
+                )
                 candidates.append(
                     {
                         "parent_table": parent_table.full_name,
@@ -214,12 +225,10 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                         "parent_columns": list(parent_columns),
                         "child_columns": list(child_columns),
                         "origin": origin,
-                        "evidence": measure_spark_join(
-                            scoped_frames[parent_table.full_name],
-                            scoped_frames[child_table.full_name],
-                            parent_columns,
-                            child_columns,
-                        ),
+                        "evidence": evidence,
+                        "system_decision": "accepted" if origin == "declared" and hard_gates_pass else "awaiting_review",
+                        "review_status": "not_required" if origin == "declared" and hard_gates_pass else "required",
+                        "reason_codes": ([] if hard_gates_pass else ["relationship_hard_gate_failed"]),
                     }
                 )
             metadata_summary["candidate_relationships"] = candidates
@@ -269,6 +278,8 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                         "child_table": candidate["child_table"],
                         "columns": candidate["columns"],
                         "accepted_for_graph": (
+                            candidate.get("origin") == "declared"
+                            and
                             candidate.get("evidence", {}).get("cardinality") != "parent_key_invalid"
                             and float(candidate.get("evidence", {}).get("parent_uniqueness_ratio", 0.0)) >= 1.0
                             and float(candidate.get("evidence", {}).get("orphan_rate", 1.0)) <= 0.05
