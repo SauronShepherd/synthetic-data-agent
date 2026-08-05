@@ -78,6 +78,20 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 max_objects=len(tables),
                 )
             )
+            if args.metadata_inventory_table:
+                from sda.artifacts.fingerprint import fingerprint
+
+                inventory_payload = inventory.to_dict()
+                args.metadata_inventory_id = f"metadata_inventory_{fingerprint(inventory_payload)}"
+                inventory_row = {
+                    "inventory_id": args.metadata_inventory_id,
+                    "artifact_schema_version": "1.0",
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "payload": json.dumps(inventory_payload, sort_keys=True),
+                }
+                spark.createDataFrame([inventory_row]).write.format("delta").mode("append").saveAsTable(
+                    args.metadata_inventory_table
+                )
         discovered = {table.full_name for table in inventory.tables}
         requested = {name.full_name for name in names}
         missing = sorted(requested - discovered)
@@ -88,6 +102,7 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
             "metadata_tables": len(inventory.tables),
             "metadata_artifact_status": "complete",
             "metadata_warnings": list(inventory.warnings),
+            "metadata_inventory_id": args.metadata_inventory_id,
         }
         if args.profile:
             from sda.profile_models import ProfileMode, TableProfileRequest
