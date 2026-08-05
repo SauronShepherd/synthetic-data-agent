@@ -103,7 +103,7 @@ def persist_artifact_registry(spark: Any, ref: ArtifactRef, location: str) -> No
                   for key, value in row.items()}],
                 schema=schema,
             )
-        frame.write.format("delta").mode("append").saveAsTable(location)
+        _merge_or_append(frame, spark, location, "target.artifact_id = source.artifact_id AND target.status = source.status")
     except Exception as exc:
         raise PersistenceError(
             "failed to persist artifact registry row",
@@ -181,9 +181,21 @@ def persist_run_manifest(spark: Any, manifest: RunManifest, location: str) -> No
             frame = spark.createDataFrame([values], schema=schema)
         except ModuleNotFoundError:
             frame = spark.createDataFrame([values])
-        frame.write.format("delta").mode("append").saveAsTable(location)
+        _merge_or_append(frame, spark, location, "target.manifest_id = source.manifest_id")
     except Exception as exc:
         raise PersistenceError(
             "failed to persist run manifest",
             details={"location": location, "run_id": manifest.run_id},
         ) from exc
+
+
+def _merge_or_append(frame: Any, spark: Any, location: str, condition: str) -> None:
+    """Merge deterministic headers when Delta APIs exist; create/append otherwise."""
+    try:
+        from delta.tables import DeltaTable
+
+        DeltaTable.forName(spark, location).alias("target").merge(
+            frame.alias("source"), condition
+        ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
+    except Exception:
+        frame.write.format("delta").mode("append").saveAsTable(location)
