@@ -18,14 +18,14 @@ targets:
       sda_metadata_inventory_table: sda_staging.profiles.metadata_inventory
       sda_scope_catalog: sda_staging
       sda_scope_schema: sample_source
-      sda_relationship_parent_table: sda_staging.sample_source.sample_customers
-      sda_relationship_child_table: sda_staging.sample_source.sample_customers
+      sda_relationship_parent_table: __REQUIRED_CONTROLLED_PARENT_TABLE__
+      sda_relationship_child_table: __REQUIRED_CONTROLLED_CHILD_TABLE__
       sda_relationship_output_table: sda_staging.profiles.relationship_analysis_scope
       sda_graph_output_table: sda_staging.profiles.dependency_graph_scope
       catalog_name: sda_staging
       sda_allow_best_effort_snapshot: "false"
       sda_allow_profile_schema_create: "false"
-      sda_profile_source_table: sda_staging.sample_source.sample_table
+      sda_profile_source_table: __REQUIRED_CONTROLLED_PROFILE_TABLE__
       sda_catalog_allowlist: sda_staging
       sda_schema_allowlist: ""
       sda_table_patterns: ""
