@@ -115,8 +115,9 @@ def persist_artifact_lifecycle(
         raise ValueError("lifecycle publication must start with a writing artifact")
     # Keep a lightweight pre-publication receipt for operational observability;
     # raw evidence is written only once below, at COMPLETE.
+    receipt = {key: None for key in (rows[0] if rows else {"receipt": None})}
     persist_rows(
-        spark, [{"_lifecycle_receipt": "writing"}], evidence_location, artifact_id=ref.artifact_id,
+        spark, [receipt], evidence_location, artifact_id=ref.artifact_id,
         status=ArtifactStatus.WRITING.value,
     )
     persist_artifact_registry(spark, ref, registry_location)
