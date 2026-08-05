@@ -8,7 +8,6 @@ from typing import Any, Protocol
 
 from sda.artifacts.compatibility import require_supported_schema
 from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType, SourceReference
-from sda.runtime.errors import ArtifactCompatibilityError, ArtifactNotFoundError
 from sda.metadata_models import (
     ColumnMetadata,
     ConstraintKind,
@@ -16,6 +15,7 @@ from sda.metadata_models import (
     ObjectType,
     TableMetadata,
 )
+from sda.runtime.errors import ArtifactCompatibilityError, ArtifactNotFoundError
 
 
 class ArtifactStore(Protocol):

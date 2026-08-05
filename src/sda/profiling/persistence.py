@@ -43,7 +43,10 @@ def find_reusable_profile(
             .where(
                 "metadata_inventory_id IS NULL"
                 if metadata_inventory_id is None
-                else f"metadata_inventory_id = '{metadata_inventory_id.replace(chr(39), chr(39) * 2)}'"
+                else (
+                    "metadata_inventory_id = "
+                    f"'{metadata_inventory_id.replace(chr(39), chr(39) * 2)}'"
+                )
             )
             .limit(1)
             .collect()

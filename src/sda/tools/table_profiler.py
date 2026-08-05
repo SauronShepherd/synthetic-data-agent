@@ -19,9 +19,9 @@ from sda.artifacts.models import ArtifactStatus, ArtifactType
 from sda.metadata_models import TableMetadata
 from sda.models import AgentState, ArtifactRef, RunStage, ToolName, ToolResult
 from sda.profile_models import (
+    CalculationMethod,
     ColumnProfile,
     ColumnProfileKind,
-    CalculationMethod,
     MetricEvidence,
     MetricMethod,
     PopulationScope,
