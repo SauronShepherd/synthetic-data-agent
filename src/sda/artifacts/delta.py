@@ -45,7 +45,22 @@ def persist_rows(
             frame = spark.createDataFrame(values, schema=schema)
         except ModuleNotFoundError:
             frame = spark.createDataFrame(values)
-        frame.write.format("delta").mode("append").saveAsTable(location)
+        try:
+            from delta.tables import DeltaTable
+
+            frame.createOrReplaceTempView("__sda_artifact_write")
+            target = DeltaTable.forName(spark, location)
+            (
+                target.alias("target")
+                .merge(
+                    frame.alias("source"),
+                    "target.artifact_id = source.artifact_id AND target.status = source.status",
+                )
+                .whenNotMatchedInsertAll()
+                .execute()
+            )
+        except Exception:
+            frame.write.format("delta").mode("append").saveAsTable(location)
     except Exception as exc:
         raise PersistenceError(
             "failed to persist Delta artifact",
