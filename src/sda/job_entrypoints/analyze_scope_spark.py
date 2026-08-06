@@ -398,7 +398,9 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 )
                 parents_by_child: dict[str, set[str]] = {}
                 for edge in accepted_edges:
-                    parents_by_child.setdefault(edge["child_table"], set()).add(edge["parent_table"])
+                    parents_by_child.setdefault(edge["child_table"], set()).add(
+                        edge["parent_table"]
+                    )
                 bridge_tables = sorted(
                     table for table, parents in parents_by_child.items() if len(parents) >= 2
                 )
