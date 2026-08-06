@@ -136,6 +136,7 @@ class RelationshipDetector:
             table for table, parents in parents_by_child.items() if len(parents) >= 2
         )
         cycles = graph.cycles()
+        cycle_nodes = sorted({node for cycle in cycles for node in cycle})
         payload = {
             "tables": sorted(tables),
             "relationships": relationships,
@@ -163,6 +164,8 @@ class RelationshipDetector:
             "self_references": list(graph.self_references()),
             "components": [list(component) for component in graph.components()],
             "cycles": [list(c) for c in cycles],
+            "blocked_by_cycle": cycle_nodes,
+            "unresolved_cycle": bool(cycles),
             "bridge_tables": bridge_tables,
             "warnings": [
                 warning
