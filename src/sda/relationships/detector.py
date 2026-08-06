@@ -127,8 +127,6 @@ class RelationshipDetector:
             if accepted
             else ()
         )
-        if not order and accepted:
-            order = tuple(sorted(accepted_nodes))
         parents_by_child: dict[str, set[str]] = {}
         for relationship in accepted:
             parents_by_child.setdefault(relationship["child_table"], set()).add(

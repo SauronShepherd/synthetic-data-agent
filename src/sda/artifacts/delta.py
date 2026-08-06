@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from sda.artifacts.manifest import RunManifest
+from sda.artifacts.fingerprint import fingerprint
 from sda.artifacts.models import ArtifactRef, ArtifactStatus
 from sda.runtime.errors import PersistenceError
 
@@ -29,7 +30,15 @@ def persist_rows(
     if not location or "." not in location:
         raise ValueError("location must be a qualified table name")
     try:
-        values = [{**row, "artifact_id": artifact_id, "status": status} for row in rows]
+        values = [
+            {
+                **row,
+                "artifact_id": artifact_id,
+                "status": status,
+                "evidence_id": fingerprint({"index": index, "row": row}),
+            }
+            for index, row in enumerate(rows)
+        ]
         values = [
             {
                 key: json.dumps(value, default=str) if isinstance(value, (list, dict)) else value
@@ -54,7 +63,7 @@ def persist_rows(
                 target.alias("target")
                 .merge(
                     frame.alias("source"),
-                    "target.artifact_id = source.artifact_id AND target.status = source.status",
+                    "target.artifact_id = source.artifact_id AND target.status = source.status AND target.evidence_id = source.evidence_id",
                 )
                 .whenNotMatchedInsertAll()
                 .execute()
