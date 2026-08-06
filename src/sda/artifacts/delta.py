@@ -68,8 +68,14 @@ def persist_rows(
                 .whenNotMatchedInsertAll()
                 .execute()
             )
-        except Exception:
+        except (ImportError, ModuleNotFoundError):
             frame.write.format("delta").mode("append").saveAsTable(location)
+        except Exception as exc:
+            if not _is_missing_table_error(exc):
+                raise
+            frame.write.format("delta").mode("append").saveAsTable(location)
+    except (ImportError, ModuleNotFoundError):
+        frame.write.format("delta").mode("append").saveAsTable(location)
     except Exception as exc:
         raise PersistenceError(
             "failed to persist Delta artifact",
@@ -218,5 +224,15 @@ def _merge_or_append(frame: Any, spark: Any, location: str, condition: str) -> N
         DeltaTable.forName(spark, location).alias("target").merge(
             frame.alias("source"), condition
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
-    except Exception:
+    except Exception as exc:
+        if not _is_missing_table_error(exc):
+            raise
         frame.write.format("delta").mode("append").saveAsTable(location)
+
+
+def _is_missing_table_error(exc: Exception) -> bool:
+    message = str(exc).upper()
+    return any(
+        marker in message
+        for marker in ("TABLE_OR_VIEW_NOT_FOUND", "TABLE_NOT_FOUND", "NOT A DELTA TABLE")
+    )
