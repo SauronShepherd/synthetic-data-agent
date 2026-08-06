@@ -367,15 +367,21 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     ) >= 1.0
                     and float(candidate.get("evidence", {}).get("orphan_rate", 1.0)) <= 0.05
                 ]
-                parents = {edge["parent_table"] for edge in accepted_edges}
-                children = {edge["child_table"] for edge in accepted_edges}
+                from sda.relationships.graph import DependencyGraph
+
+                dependency_graph = DependencyGraph()
+                for table in tables:
+                    dependency_graph.add_node(table)
+                for edge in accepted_edges:
+                    dependency_graph.add_edge(edge["parent_table"], edge["child_table"])
                 graph_rows.append({
                     "kind": "graph_summary",
-                    "isolates": sorted(set(tables) - parents - children),
-                    "components": [sorted(set(tables))] if tables else [],
-                    "dependency_levels": {
-                        table: (0 if table not in children else 1) for table in sorted(set(tables))
-                    },
+                    "isolates": list(dependency_graph.isolates()),
+                    "components": [list(component) for component in dependency_graph.components()],
+                    "dependency_levels": dependency_graph.dependency_levels(),
+                    "generation_order": list(dependency_graph.topological_order()),
+                    "cycles": [list(cycle) for cycle in dependency_graph.cycles()],
+                    "self_references": list(dependency_graph.self_references()),
                     "accepted_edge_count": len(accepted_edges),
                     "relationship_analysis_id": relationship_id,
                 })
