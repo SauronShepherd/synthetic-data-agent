@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sda.artifacts.manifest import RunManifest
 from sda.artifacts.fingerprint import fingerprint
+from sda.artifacts.manifest import RunManifest
 from sda.artifacts.models import ArtifactRef, ArtifactStatus
 from sda.runtime.errors import PersistenceError
 
@@ -63,7 +63,8 @@ def persist_rows(
                 target.alias("target")
                 .merge(
                     frame.alias("source"),
-                    "target.artifact_id = source.artifact_id AND target.status = source.status AND target.evidence_id = source.evidence_id",
+                    "target.artifact_id = source.artifact_id AND target.status = source.status "
+                    "AND target.evidence_id = source.evidence_id",
                 )
                 .whenNotMatchedInsertAll()
                 .execute()

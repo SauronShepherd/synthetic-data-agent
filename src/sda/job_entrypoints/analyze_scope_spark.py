@@ -198,9 +198,15 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
             metadata_summary["candidate_relationships"] = [{
                 "parent_table": args.parent_table,
                 "child_table": args.child_table,
-                "parent_columns": [item.strip() for item in args.parent_columns.split(",") if item.strip()],
-                "child_columns": [item.strip() for item in args.child_columns.split(",") if item.strip()],
-                "columns": [item.strip() for item in args.child_columns.split(",") if item.strip()],
+                "parent_columns": [
+                    item.strip() for item in args.parent_columns.split(",") if item.strip()
+                ],
+                "child_columns": [
+                    item.strip() for item in args.child_columns.split(",") if item.strip()
+                ],
+                "columns": [
+                    item.strip() for item in args.child_columns.split(",") if item.strip()
+                ],
                 "origin": "declared",
                 "evidence": metadata_summary["relationship"],
                 "system_decision": "accepted",
