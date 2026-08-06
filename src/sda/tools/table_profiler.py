@@ -701,10 +701,51 @@ class TableProfiler:
                     value_retention_policy=self.request.sensitive_value_retention_policy
                     if column.tags or column.sensitivity_signals
                     else self.request.value_retention_policy,
-                    row_count_basis=evidence(row_count),
-                    non_null_count=evidence(row_count - null_count),
-                    null_count=evidence(null_count),
-                    null_rate=evidence(null_count / row_count if row_count else 0.0),
+                    row_count_basis=evidence(
+                        row_count,
+                        method=MetricMethod.EXACT
+                        if self.request.mode is ProfileMode.FULL
+                        else MetricMethod.SAMPLED,
+                        population_scope=PopulationScope.FULL
+                        if self.request.mode is ProfileMode.FULL
+                        else PopulationScope.SAMPLE,
+                        calculation_method=CalculationMethod.EXACT
+                        if self.request.mode is ProfileMode.FULL
+                        else CalculationMethod.APPROXIMATE,
+                        sample_fraction=None
+                        if self.request.mode is ProfileMode.FULL
+                        else self.request.sample_fraction,
+                        sample_seed=None
+                        if self.request.mode is ProfileMode.FULL
+                        else self.request.sample_seed,
+                    ),
+                    non_null_count=evidence(
+                        row_count - null_count,
+                        method=MetricMethod.EXACT
+                        if self.request.mode is ProfileMode.FULL
+                        else MetricMethod.SAMPLED,
+                        population_scope=PopulationScope.FULL
+                        if self.request.mode is ProfileMode.FULL
+                        else PopulationScope.SAMPLE,
+                    ),
+                    null_count=evidence(
+                        null_count,
+                        method=MetricMethod.EXACT
+                        if self.request.mode is ProfileMode.FULL
+                        else MetricMethod.SAMPLED,
+                        population_scope=PopulationScope.FULL
+                        if self.request.mode is ProfileMode.FULL
+                        else PopulationScope.SAMPLE,
+                    ),
+                    null_rate=evidence(
+                        null_count / row_count if row_count else 0.0,
+                        method=MetricMethod.EXACT
+                        if self.request.mode is ProfileMode.FULL
+                        else MetricMethod.SAMPLED,
+                        population_scope=PopulationScope.FULL
+                        if self.request.mode is ProfileMode.FULL
+                        else PopulationScope.SAMPLE,
+                    ),
                     metrics=metrics,
                     outlier_findings=outliers,
                     warnings=("unsupported_type_profile",)
