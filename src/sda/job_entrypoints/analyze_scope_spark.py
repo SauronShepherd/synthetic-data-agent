@@ -214,12 +214,12 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 "reason_codes": [],
             }]
         else:
-            from itertools import combinations
+            from itertools import permutations
 
             from sda.relationships.spark_metrics import measure_spark_join
 
             candidates: list[dict[str, Any]] = []
-            for parent_table, child_table in combinations(scoped_tables, 2):
+            for parent_table, child_table in permutations(scoped_tables, 2):
                 declared = [
                     constraint
                     for constraint in child_table.constraints
