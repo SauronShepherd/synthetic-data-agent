@@ -373,6 +373,16 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     ) >= 1.0
                     and float(candidate.get("evidence", {}).get("orphan_rate", 1.0)) <= 0.05
                 ]
+                review_only_count = sum(
+                    1 for candidate in metadata_summary.get("candidate_relationships", [])
+                    if candidate.get("review_status") == "required"
+                )
+                parents_by_child: dict[str, set[str]] = {}
+                for edge in accepted_edges:
+                    parents_by_child.setdefault(edge["child_table"], set()).add(edge["parent_table"])
+                bridge_tables = sorted(
+                    table for table, parents in parents_by_child.items() if len(parents) >= 2
+                )
                 from sda.relationships.graph import DependencyGraph
 
                 dependency_graph = DependencyGraph()
@@ -388,6 +398,8 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     "generation_order": list(dependency_graph.topological_order()),
                     "cycles": [list(cycle) for cycle in dependency_graph.cycles()],
                     "self_references": list(dependency_graph.self_references()),
+                    "bridge_tables": bridge_tables,
+                    "review_only_edge_count": review_only_count,
                     "accepted_edge_count": len(accepted_edges),
                     "relationship_analysis_id": relationship_id,
                 })
