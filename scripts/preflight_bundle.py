@@ -23,6 +23,7 @@ CONTROLLED_SCOPE_ENV = {
     "SDA_PROFILE_SOURCE_TABLE": "sda_profile_source_table",
     "SDA_SCOPE_CATALOG": "sda_scope_catalog",
     "SDA_SCOPE_SCHEMA": "sda_scope_schema",
+    "SDA_SCOPE_TABLES": "sda_scope_tables",
     "SDA_RELATIONSHIP_PARENT_TABLE": "sda_relationship_parent_table",
     "SDA_RELATIONSHIP_CHILD_TABLE": "sda_relationship_child_table",
 }
@@ -41,7 +42,9 @@ def main() -> int:
             print("Controlled-target identity variables are missing or placeholders", file=sys.stderr)
             return 2
         scope_values = {name: os.getenv(name, "").strip() for name in CONTROLLED_SCOPE_ENV}
-        if any(not value for value in scope_values.values()):
+        if any(not value for value in scope_values.values()) or any(
+            "__REQUIRED_" in value for value in scope_values.values()
+        ):
             print("Controlled-target source scope variables are required", file=sys.stderr)
             return 2
         if scope_values["SDA_RELATIONSHIP_PARENT_TABLE"] == scope_values["SDA_RELATIONSHIP_CHILD_TABLE"]:

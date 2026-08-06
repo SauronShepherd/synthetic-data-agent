@@ -14,6 +14,7 @@ targets:
       sda_profile_source_table: samples.bakehouse.sales_transactions
       sda_scope_catalog: samples
       sda_scope_schema: bakehouse
+      sda_scope_tables: sales_franchises,sales_transactions
       sda_relationship_parent_table: samples.bakehouse.sales_franchises
       sda_relationship_child_table: samples.bakehouse.sales_transactions
       sda_relationship_output_table: sda_dev.profiles.relationship_analysis_scope

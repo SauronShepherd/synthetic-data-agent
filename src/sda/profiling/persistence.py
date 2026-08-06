@@ -51,8 +51,13 @@ def find_reusable_profile(
             .limit(1)
             .collect()
         )
-    except Exception:
-        return None
+    except Exception as exc:
+        # A missing/uncreated repository is a cache miss; malformed queries,
+        # schema drift, and permission failures must remain visible.
+        message = str(exc).upper()
+        if any(marker in message for marker in ("TABLE_OR_VIEW_NOT_FOUND", "TABLE_NOT_FOUND")):
+            return None
+        raise
     if not matches:
         return None
     row = matches[0]

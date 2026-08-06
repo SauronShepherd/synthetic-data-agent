@@ -85,6 +85,9 @@ variables:
   sda_scope_schema:
     description: Schema used by the scope workflow.
     default: sample_source
+  sda_scope_tables:
+    description: Comma-separated tables used by the scope workflow.
+    default: __REQUIRED_CONTROLLED_SCOPE_TABLES__
   sda_relationship_parent_table:
     description: Parent relation for the explicit relationship job.
     default: main.sample_source.sample_customers

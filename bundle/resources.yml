@@ -250,7 +250,7 @@ resources:
         - name: schema
           default: ${var.sda_scope_schema}
         - name: tables
-          default: sample_customers
+          default: ${var.sda_scope_tables}
         - name: run_id
           default: ""
         - name: dry_run
