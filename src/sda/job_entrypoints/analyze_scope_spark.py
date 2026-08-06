@@ -135,7 +135,7 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
         }
         if args.profile:
             from sda.profile_models import ProfileMode, TableProfileRequest
-            from sda.profiling.persistence import persist_profile
+            from sda.profiling.persistence import find_reusable_profile, persist_profile
             from sda.tools.table_profiler import TableProfiler
 
             profiled: list[dict[str, Any]] = []
@@ -145,6 +145,25 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     mode=ProfileMode.QUICK,
                     allow_best_effort_snapshot=False,
                 )
+                profile_target = f"`{args.profile_catalog}`.`{args.profile_schema}`.profile"
+                reusable = find_reusable_profile(
+                    spark,
+                    profile_target,
+                    source_table=table.full_name,
+                    source_version=source_versions[table.full_name],
+                    configuration_hash=request.configuration_hash,
+                    metadata_inventory_id=args.metadata_inventory_id or None,
+                )
+                if reusable:
+                    profiled.append(
+                        {
+                            "source_table": table.full_name,
+                            "profile_id": str(reusable.get("profile_id")),
+                            "locations": {"table_profiles": f"{profile_target}_table_profiles"},
+                            "reused": True,
+                        }
+                    )
+                    continue
                 profile = TableProfiler(request, table).profile_spark(
                     scoped_frames[table.full_name],
                     source_version=source_versions[table.full_name],
@@ -165,7 +184,7 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 locations = persist_profile(
                     spark,
                     profile,
-                    f"`{args.profile_catalog}`.`{args.profile_schema}`.profile",
+                    profile_target,
                     reuse_existing=True,
                 )
                 profiled.append(
