@@ -14,6 +14,14 @@ class NoiseProfile(StrEnum):
     STRESS = "stress"
 
 
+SUPPORTED_DEFECTS = frozenset({
+    "null_injection",
+    "casing",
+    "malformed_value",
+    "out_of_range",
+})
+
+
 class NoiseError(ValueError):
     """Raised when a noise plan is invalid or exceeds its budget."""
 
@@ -34,6 +42,8 @@ class NoisePlan:
             raise ValueError("noise budget and seed must not be negative")
         if not self.defect_type.strip():
             raise ValueError("defect_type must not be empty")
+        if self.defect_type not in SUPPORTED_DEFECTS:
+            raise ValueError(f"unsupported defect_type: {self.defect_type}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,4 +85,36 @@ def inject_nulls(
         before = rows[index][column]
         rows[index][column] = None
         mutations.append(Mutation(plan.noise_id, index, column, plan.defect_type, before, None))
+    return NoiseResult(tuple(rows), tuple(mutations), plan.baseline_fingerprint)
+
+
+def apply_noise(
+    baseline: tuple[dict[str, Any], ...], plan: NoisePlan, *, column: str
+) -> NoiseResult:
+    """Apply one deterministic, bounded defect class to an immutable baseline."""
+    if plan.defect_type == "null_injection":
+        return inject_nulls(baseline, plan, column=column)
+    if any(column not in row for row in baseline):
+        raise NoiseError(f"column not present in baseline: {column}")
+    candidates = sorted(
+        range(len(baseline)),
+        key=lambda index: hashlib.sha256(f"{plan.noise_id}|{plan.seed}|{index}".encode()).digest(),
+    )[: min(plan.budget, len(baseline))]
+    rows = [dict(row) for row in baseline]
+    mutations: list[Mutation] = []
+    for index in sorted(candidates):
+        before = rows[index][column]
+        after: Any
+        if plan.defect_type == "casing":
+            if not isinstance(before, str):
+                raise NoiseError("casing defects require a string column")
+            after = before.swapcase()
+        elif plan.defect_type == "malformed_value":
+            after = f"{before}__MALFORMED"
+        else:
+            if not isinstance(before, (int, float)) or isinstance(before, bool):
+                raise NoiseError("out_of_range defects require a numeric column")
+            after = before * 10 + 1
+        rows[index][column] = after
+        mutations.append(Mutation(plan.noise_id, index, column, plan.defect_type, before, after))
     return NoiseResult(tuple(rows), tuple(mutations), plan.baseline_fingerprint)
