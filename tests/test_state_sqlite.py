@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sda.state import RunRecord, StateError, WorkflowStatus
+from sda.state import Approval, AttemptStatus, ExecutionAttempt, RunRecord, StateError, WorkflowStatus
 from sda.state_sqlite import SQLiteStateRepository
 
 
@@ -24,4 +24,20 @@ def test_sqlite_state_enforces_idempotency_and_version() -> None:
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
     with pytest.raises(StateError, match="concurrency"):
         repo.transition_run("run-1", WorkflowStatus.APPROVED, expected_version=0)
+    repo.close()
+
+
+def test_sqlite_state_persists_approvals_and_attempts() -> None:
+    repo = SQLiteStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    approval = Approval("run-1", "human", "approved", "reviewer", "looks good")
+    assert repo.record_approval(approval) == approval
+    with pytest.raises(StateError, match="approval"):
+        repo.record_approval(approval)
+    attempt = repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "generate"))
+    assert attempt.status is AttemptStatus.RUNNING
+    completed = repo.complete_attempt("attempt-1", success=True)
+    assert completed.status is AttemptStatus.SUCCEEDED
+    with pytest.raises(StateError, match="already complete"):
+        repo.complete_attempt("attempt-1", success=True)
     repo.close()
