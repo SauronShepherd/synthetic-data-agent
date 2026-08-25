@@ -122,5 +122,7 @@ How does one approved table actually behave?
 Article 06 validates relationships using structural and statistical evidence. The
 current implementation supports declared constraints, bounded Spark-native inferred
 single/composite candidates, cycle-aware graph summaries, and durable development
-artifacts. It does not yet provide synthetic row generation, a complete human-review
-workflow, or managed Unity Catalog integration-test proof.
+artifacts. It now provides bounded deterministic generation, validation/privacy/publication
+contracts, and local durable-state references. Production-scale generation, external human
+review, managed Lakebase integration, and governed Unity Catalog integration-test proof are
+still outstanding.

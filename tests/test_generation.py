@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from dataclasses import replace
+
+import pytest
+
+from sda.generation import GenerationError, generate_rows
+from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus
+
+
+def plan() -> GenerationPlan:
+    return GenerationPlan(
+        plan_id="p", plan_version=1, request_id="r", source_snapshot_ids=("s",),
+        input_artifact_ids=("a",), target_catalog="c", target_schema="s", tables=("t",),
+        columns=(
+            ColumnGenerationSpec("t", "id", "string", nullable=False, model="identifier"),
+            ColumnGenerationSpec("t", "segment", "string", model="categorical"),
+            ColumnGenerationSpec("t", "amount", "double", model="uniform", parameters={"min": 10, "max": 10}),
+        ), budgets={"max_rows": 3},
+    ).transition(PlanStatus.AWAITING_APPROVAL).transition(PlanStatus.APPROVED)
+
+
+def test_generation_is_reproducible_and_bounded() -> None:
+    first = generate_rows(plan(), row_count=3, vocabularies={"segment": ("a", "b")})
+    second = generate_rows(plan(), row_count=3, vocabularies={"segment": ("a", "b")})
+    assert first == second
+    assert len({row["id"] for row in first}) == 3
+    assert [row["segment"] for row in first] == ["a", "b", "a"]
+
+
+def test_generation_rejects_unapproved_and_over_budget_plans() -> None:
+    with pytest.raises(GenerationError, match="approved"):
+        generate_rows(replace(plan(), status=PlanStatus.DRAFT, plan_fingerprint=""), row_count=1)
+    with pytest.raises(GenerationError, match="max_rows"):
+        generate_rows(plan(), row_count=4)

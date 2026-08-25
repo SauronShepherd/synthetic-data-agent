@@ -46,8 +46,6 @@ resources:
               - "{{job.parameters.output_table}}"
               - --artifact-registry-table
               - "{{job.parameters.artifact_registry_table}}"
-              - --artifact-registry-table
-              - "{{job.parameters.artifact_registry_table}}"
           environment_key: uc_metadata_reader_environment
 
       environments:
@@ -410,6 +408,95 @@ resources:
           environment_key: pattern_detector_environment
       environments:
         - environment_key: pattern_detector_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
+    standalone_generator:
+      name: "[${bundle.target}] SDA Standalone Generator"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      tags:
+        workload: sda
+        stage: generation
+      parameters:
+        - name: output_table
+          default: ${var.output_schema_name}.generated_data
+        - name: run_id
+          default: ""
+        - name: request_id
+          default: ""
+        - name: plan_id
+          default: ""
+        - name: plan_fingerprint
+          default: ""
+        - name: source_snapshot_ids
+          default: ""
+        - name: input_artifact_ids
+          default: ""
+        - name: target_catalog
+          default: ${var.catalog_name}
+        - name: target_schema
+          default: ${var.output_schema_name}
+        - name: tables
+          default: generated_data
+        - name: columns_json
+          default: "[]"
+        - name: row_count
+          default: "0"
+        - name: max_rows
+          default: "100000"
+        - name: intended_use
+          default: qa
+        - name: privacy_policy_ref
+          default: strict-default
+        - name: seed
+          default: "1729"
+        - name: approved
+          default: "false"
+      tasks:
+        - task_key: generate_standalone
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/generate_spark.py
+            parameters:
+              - --output-table
+              - "{{job.parameters.output_table}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --request-id
+              - "{{job.parameters.request_id}}"
+              - --plan-id
+              - "{{job.parameters.plan_id}}"
+              - --plan-fingerprint
+              - "{{job.parameters.plan_fingerprint}}"
+              - --source-snapshot-ids
+              - "{{job.parameters.source_snapshot_ids}}"
+              - --input-artifact-ids
+              - "{{job.parameters.input_artifact_ids}}"
+              - --target-catalog
+              - "{{job.parameters.target_catalog}}"
+              - --target-schema
+              - "{{job.parameters.target_schema}}"
+              - --tables
+              - "{{job.parameters.tables}}"
+              - --columns-json
+              - "{{job.parameters.columns_json}}"
+              - --row-count
+              - "{{job.parameters.row_count}}"
+              - --max-rows
+              - "{{job.parameters.max_rows}}"
+              - --intended-use
+              - "{{job.parameters.intended_use}}"
+              - --privacy-policy-ref
+              - "{{job.parameters.privacy_policy_ref}}"
+              - --seed
+              - "{{job.parameters.seed}}"
+              - --approved
+              - "{{job.parameters.approved}}"
+          environment_key: standalone_generator_environment
+      environments:
+        - environment_key: standalone_generator_environment
           spec:
             environment_version: "2"
             dependencies:

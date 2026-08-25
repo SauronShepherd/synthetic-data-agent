@@ -1,15 +1,17 @@
 # Synthetic Data Agent — SDA 07 (`0.7.0.dev0`)
 
-The implemented deterministic evidence pipeline is metadata -> profiles -> relationships -> patterns.
-SDA 07 emits review-safe, versioned pattern registry/evidence artifacts. Synthetic
-generation, validation, and publishing remain later milestones.
+The implemented deterministic pipeline is metadata -> profiles -> relationships -> patterns ->
+approved-plan generation -> validation/privacy gates -> publication contracts. SDA 07 emits
+review-safe, versioned pattern registry/evidence artifacts; the repository now also contains
+bounded local generation, relational/streaming/topology/noise contracts, and a Spark generation
+boundary.
 
 This branch extends the governed Articles 04–05 foundation with relationship
 discovery, key validation, join evidence, and dependency-graph planning.
 
-The project still does **not** generate synthetic rows. SDA 06 produces
-governed metadata, profile, and relationship evidence while preserving the
-tool boundaries established by Articles 04–05.
+The project does not yet claim a production-complete synthetic data service. Local generation
+is deterministic and bounded, while Databricks/Lakebase execution, large-scale validation,
+privacy review, and governed publication still require workspace-backed integration tests.
 
 ## Current status
 
@@ -47,9 +49,9 @@ Bundle validation and deployment are environment-dependent; local checks cover c
 
 - Source table value reads.
 - Privacy approval execution.
-- Synthetic row generation and publishing.
-- A complete external human-review workflow; review fields are emitted, but reviewer
-  decisions are not yet managed as a separate governed process.
+- Production-scale synthetic row generation and publishing.
+- A complete external human-review workflow; local approval and publication contracts exist,
+  but reviewer identity and decisions are not yet integrated with a governed external system.
 
 Metadata is evidence, not truth. Declared constraints are captured as claims and
 marked unvalidated; profiling and relationship checks add bounded behavioral evidence.
@@ -302,7 +304,7 @@ Use placeholders such as `<profile-name>`, `<workspace-host>`, `<warehouse-id>`,
 
 This development milestone implements governed metadata discovery, table profiling,
 scope-level relationship evidence, dependency-graph artifacts, and linked run manifests.
-Synthetic row generation, privacy approval, publishing, and durable operational state
+Production-scale generation, external privacy approval, and managed operational state
 remain later roadmap stages. A missing metadata signal is not proof that data is safe;
 declared constraints remain unvalidated, and profiling remains evidence rather than a
 business-rule or privacy verdict.

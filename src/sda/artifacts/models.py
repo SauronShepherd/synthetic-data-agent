@@ -16,6 +16,9 @@ class ArtifactType(StrEnum):
     DEPENDENCY_GRAPH = "dependency_graph"
     RUN_MANIFEST = "run_manifest"
     PATTERN_REGISTRY = "pattern_registry"
+    GENERATION_PLAN = "generation_plan"
+    VALIDATION_REPORT = "validation_report"
+    PUBLICATION = "publication"
 
 
 class ArtifactStatus(StrEnum):

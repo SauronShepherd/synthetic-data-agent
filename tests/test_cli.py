@@ -33,3 +33,12 @@ def test_design_demo(capsys) -> None:  # type: ignore[no-untyped-def]
         "accounts",
         "transactions",
     ]
+
+
+def test_generate_demo(capsys) -> None:  # type: ignore[no-untyped-def]
+    assert main(["generate-demo"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert len(payload["rows"]) == 3
+    assert payload["validation"] == "PASS"
+    assert payload["privacy"] == "approved"
+    assert payload["publication"] == "published"

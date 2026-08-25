@@ -26,6 +26,8 @@ def test_design_demo_stops_at_plan() -> None:
         ToolName.GENERATION_PLANNER,
     ]
     assert len(state.artifacts) == 5
+    assert "plan_fingerprint" in state.artifacts[-1].metadata
+    assert state.artifacts[-1].metadata["plan_status"] == "draft"
 
 
 def test_illegal_transition_is_rejected() -> None:

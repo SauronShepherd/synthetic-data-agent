@@ -10,6 +10,8 @@ from typing import Any, NoReturn
 
 from sda.config import Settings
 from sda.demo import run_design_demo, run_metadata_demo
+from sda.pipeline import run_standalone
+from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus
 from sda.logging import configure_logging
 from sda.tools.uc_metadata_reader import (
     read_uc_metadata_with_databricks_sql,
@@ -35,6 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "metadata-demo",
         help="Run the Article 04 local metadata-reader demo.",
+    )
+    subparsers.add_parser(
+        "generate-demo",
+        help="Run the bounded approved-plan generation and publication demo.",
     )
     subparsers.add_parser(
         "metadata-read",
@@ -71,6 +77,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         _print_json(run_design_demo().to_dict())
     elif args.command == "metadata-demo":
         _print_json(run_metadata_demo())
+    elif args.command == "generate-demo":
+        _print_json(_run_generation_demo())
     elif args.command == "metadata-read":
         try:
             inventory = _read_metadata_auto(settings)
@@ -104,6 +112,25 @@ def _read_metadata_auto(settings: Settings) -> Any:
     if settings.has_databricks_sql_credentials():
         return _read_metadata_with_databricks_sql(settings)
     return _read_metadata_with_spark(settings)
+
+
+def _run_generation_demo() -> dict[str, object]:
+    plan = GenerationPlan(
+        plan_id="cli-demo-plan", plan_version=1, request_id="cli-demo", source_snapshot_ids=("demo-snapshot",),
+        input_artifact_ids=("demo-profile",), target_catalog="main", target_schema="synthetic_sales",
+        tables=("customers",), columns=(ColumnGenerationSpec("customers", "customer_id", "string", nullable=False, model="identifier"),),
+        intended_use="demo", budgets={"max_rows": 10},
+    ).transition(PlanStatus.AWAITING_APPROVAL).transition(PlanStatus.APPROVED)
+    result = run_standalone(
+        plan, row_count=3, dataset_id="cli-demo", dataset_version="v1", location="main.synthetic_sales.customers",
+        actor="local-demo", unique_key="customer_id",
+    )
+    return {
+        "rows": result.rows,
+        "validation": result.validation.technical_disposition.value,
+        "privacy": result.privacy.decision.value,
+        "publication": result.publication.status.value if result.publication else None,
+    }
 
 
 def _read_metadata_with_databricks_sql(settings: Settings) -> Any:

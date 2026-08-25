@@ -1,0 +1,84 @@
+"""Deterministic bounded streaming workload contracts."""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Any
+
+
+class StreamMode(StrEnum):
+    BOUNDED = "bounded"
+    ACCELERATED = "accelerated"
+    CONTINUOUS = "continuous"
+
+
+class StreamError(ValueError):
+    """Raised for incompatible stream plans or unsafe bounds."""
+
+
+@dataclass(frozen=True, slots=True)
+class StreamingPlan:
+    stream_id: str
+    plan_fingerprint: str
+    mode: StreamMode = StreamMode.BOUNDED
+    event_count: int = 0
+    events_per_second: float = 1.0
+    start_time: str = "2020-01-01T00:00:00+00:00"
+    schema_version: str = "1"
+    checkpoint_id: str = ""
+    max_events: int = 100_000
+
+    def __post_init__(self) -> None:
+        if not self.stream_id.strip() or not self.plan_fingerprint.strip():
+            raise ValueError("stream_id and plan_fingerprint must not be empty")
+        if self.event_count < 0 or self.max_events < 1:
+            raise ValueError("event_count must not be negative and max_events must be positive")
+        if self.events_per_second <= 0:
+            raise ValueError("events_per_second must be positive")
+        if self.event_count > self.max_events:
+            raise ValueError("event_count exceeds max_events")
+        if self.mode is StreamMode.CONTINUOUS and not self.checkpoint_id.strip():
+            raise ValueError("continuous streams require checkpoint_id")
+
+
+@dataclass(frozen=True, slots=True)
+class StreamManifest:
+    stream_id: str
+    plan_fingerprint: str
+    event_count: int
+    first_event_id: str | None
+    last_event_id: str | None
+    checkpoint_id: str | None
+    replay_fingerprint: str
+
+
+def generate_bounded_events(plan: StreamingPlan, *, start_offset: int = 0) -> tuple[dict[str, Any], ...]:
+    """Generate a deterministic bounded event slice, suitable for replay tests."""
+    if start_offset < 0 or start_offset > plan.event_count:
+        raise StreamError("start_offset must be within the event range")
+    if plan.mode is StreamMode.CONTINUOUS:
+        raise StreamError("continuous mode requires a Structured Streaming adapter")
+    events = tuple(_event(plan, offset) for offset in range(start_offset, plan.event_count))
+    return events
+
+
+def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamManifest:
+    ids = [str(event["event_id"]) for event in events]
+    replay = hashlib.sha256("|".join(ids).encode()).hexdigest()
+    return StreamManifest(
+        plan.stream_id, plan.plan_fingerprint, len(events), ids[0] if ids else None,
+        ids[-1] if ids else None, plan.checkpoint_id or None, replay,
+    )
+
+
+def _event(plan: StreamingPlan, offset: int) -> dict[str, Any]:
+    event_id = hashlib.sha256(f"{plan.plan_fingerprint}|{plan.stream_id}|{offset}".encode()).hexdigest()[:32]
+    return {
+        "event_id": event_id,
+        "stream_id": plan.stream_id,
+        "offset": offset,
+        "event_time": plan.start_time,
+        "schema_version": plan.schema_version,
+    }
