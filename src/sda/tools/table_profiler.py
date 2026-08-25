@@ -336,10 +336,10 @@ class TableProfiler:
                     else F.lit([]).alias(f"{safe}_patterns")
                 )
                 if patterns:
-                    matches = None
+                    matches = F.lit(False)
                     for pattern in patterns:
                         expression = col.rlike(pattern)
-                        matches = expression if matches is None else (matches | expression)
+                        matches = matches | expression
                     expressions.append(
                         F.sum(F.when(col.isNotNull() & ~matches, 1).otherwise(0)).alias(
                             f"{safe}_parse_failures"

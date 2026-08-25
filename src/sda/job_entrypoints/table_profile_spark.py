@@ -112,23 +112,23 @@ def main(argv: Sequence[str] | None = None) -> None:
     from pyspark.sql import SparkSession
 
     from sda.artifacts.loaders import load_metadata_inventory
-    from sda.metadata_models import MetadataReadConfig
+    from sda.metadata_models import MetadataInventory, MetadataReadConfig
     from sda.profiling.persistence import find_reusable_profile, persist_profile
     from sda.tools.table_profiler import TableProfiler
     from sda.tools.uc_metadata_reader import InformationSchemaMetadataAdapter, SparkSqlExecutor
 
     spark = SparkSession.builder.getOrCreate()
     catalog, schema, _ = source_name.full_name.split(".")
-    persisted_inventory = None
+    persisted_inventory: MetadataInventory | None = None
     if args.metadata_inventory_id:
         if not args.metadata_inventory_table:
             raise ValueError("metadata inventory table is required with metadata inventory ID")
-        persisted_inventory = load_metadata_inventory(
+        persisted_payload = load_metadata_inventory(
             spark, args.metadata_inventory_table, args.metadata_inventory_id
         )
         from sda.artifacts.loaders import metadata_inventory_from_payload
 
-        persisted_inventory = metadata_inventory_from_payload(persisted_inventory)
+        persisted_inventory = metadata_inventory_from_payload(persisted_payload)
         persisted_tables = {table.full_name for table in persisted_inventory.tables}
         if source_name.full_name not in persisted_tables:
             raise RuntimeError("metadata inventory does not contain the requested source table")
@@ -173,6 +173,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         # Constructing the relation is lazy; actions remain below the reuse
         # check, so compatible profiles can still return before a scan.
         dataframe = spark.table(source_name.quoted)
+        assert governed_table is not None
         metadata_table = governed_table
     available_columns = {column.name: column for column in metadata_table.columns}
     requested_columns = set(request.column_allowlist) | set(request.column_denylist)

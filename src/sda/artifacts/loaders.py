@@ -14,6 +14,7 @@ from sda.metadata_models import (
     ConstraintMetadata,
     ObjectType,
     TableMetadata,
+    MetadataInventory,
 )
 from sda.runtime.errors import ArtifactCompatibilityError, ArtifactNotFoundError
 
@@ -56,7 +57,7 @@ def load_metadata_inventory(spark: Any, table: str, inventory_id: str) -> Mappin
     return cast(Mapping[str, Any], decoded)
 
 
-def metadata_inventory_from_payload(payload: Mapping[str, Any]) -> Any:
+def metadata_inventory_from_payload(payload: Mapping[str, Any]) -> MetadataInventory:
     """Rehydrate the exact persisted inventory, without re-querying Unity Catalog."""
     tables = []
     for raw in payload.get("tables", []):
@@ -106,8 +107,6 @@ def metadata_inventory_from_payload(payload: Mapping[str, Any]) -> Any:
                 metadata_warnings=tuple(raw.get("metadata_warnings", ())),
             )
         )
-    from sda.metadata_models import MetadataInventory
-
     return MetadataInventory(
         tables=tuple(tables),
         visible_catalogs=tuple(payload.get("visible_catalogs", ())),

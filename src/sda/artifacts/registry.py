@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType
 from sda.runtime.errors import ArtifactCompatibilityError, ArtifactNotFoundError
@@ -43,23 +43,7 @@ class InMemoryArtifactRegistry:
 
     def require_latest_complete(self, artifact_id: str) -> ArtifactRef:
         """Read the newest complete legacy row when historical duplicates exist."""
-        from pyspark.sql import functions as F
-
-        rows = (
-            self.spark.table(self.table)
-            .where(
-                (F.col("artifact_id") == F.lit(artifact_id))
-                & (F.col("status") == F.lit(ArtifactStatus.COMPLETE.value))
-            )
-            .orderBy(F.col("completed_at").desc_nulls_last(), F.col("created_at").desc())
-            .limit(1)
-            .collect()
-        )
-        if not rows:
-            raise ArtifactNotFoundError(
-                "artifact was not found", details={"artifact_id": artifact_id}
-            )
-        return _artifact_ref_from_row(rows[0])
+        return self.require_complete(artifact_id)
 
     def find_reusable(
         self, *, artifact_type: ArtifactType, reuse_fingerprint: str, environment: str
@@ -83,7 +67,7 @@ class InMemoryArtifactRegistry:
 class SparkArtifactRegistry:
     """Spark-backed registry with exact filters and bounded uniqueness checks."""
 
-    def __init__(self, spark: object, table: str) -> None:
+    def __init__(self, spark: Any, table: str) -> None:
         if not table or table.count(".") != 2:
             raise ValueError("registry table must be a catalog.schema.table FQN")
         self.spark = spark
@@ -94,7 +78,7 @@ class SparkArtifactRegistry:
 
         persist_artifact_registry(self.spark, ref, self.table)
 
-    def _rows(self, condition: object, limit: int = 2) -> list[object]:
+    def _rows(self, condition: object, limit: int = 2) -> list[Any]:
         frame = self.spark.table(self.table).where(condition).limit(limit)
         return list(frame.collect())
 
@@ -161,18 +145,18 @@ class SparkArtifactRegistry:
         return _artifact_ref_from_row(rows[0]) if rows else None
 
 
-def _artifact_ref_from_row(row: object) -> ArtifactRef:
+def _artifact_ref_from_row(row: Any) -> ArtifactRef:
     from sda.artifacts.loaders import _ref_from_mapping
 
-    mapping = row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row)
+    mapping = cast(dict[str, Any], row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row))
     # Registry v2 has no legacy checksum column; content checksum is the effective checksum.
     mapping.setdefault("checksum", mapping.get("content_checksum") or "unverified")
     return _ref_from_mapping(mapping)
 
 
-def artifact_ref_from_registry_row(row: object) -> ArtifactRef:
+def artifact_ref_from_registry_row(row: Any) -> ArtifactRef:
     """Public v2/legacy registry reader with an explicit compatibility warning."""
-    mapping = row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row)
+    mapping = cast(dict[str, Any], row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row))
     legacy = (
         not mapping.get("registry_schema_version")
         or str(mapping.get("registry_schema_version")) == "1"
