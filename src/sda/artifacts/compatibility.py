@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sda.artifacts.models import ArtifactRef, ArtifactStatus
+from sda.artifacts.models import ArtifactRef, ArtifactStatus, SourceReference
 from sda.runtime.errors import ArtifactCompatibilityError
 
 
@@ -27,6 +27,46 @@ def require_same_environment(*refs: ArtifactRef) -> None:
         raise ArtifactCompatibilityError(
             "artifact environments do not match",
             details={"environments": ",".join(sorted(environments))},
+        )
+
+
+def require_complete(ref: ArtifactRef) -> None:
+    require_supported_schema(ref, {ref.artifact_schema_version})
+
+
+def require_environment(ref: ArtifactRef, expected_environment: str) -> None:
+    require_complete(ref)
+    if ref.environment != expected_environment:
+        raise ArtifactCompatibilityError(
+            "artifact environment does not match execution environment",
+            details={
+                "artifact_environment": ref.environment,
+                "expected_environment": expected_environment,
+            },
+        )
+
+
+def require_input_lineage(ref: ArtifactRef, expected_input_artifact_ids: set[str]) -> None:
+    actual = set(ref.input_artifact_ids)
+    if actual != expected_input_artifact_ids:
+        raise ArtifactCompatibilityError(
+            "artifact input lineage does not match",
+            details={"artifact_id": ref.artifact_id},
+        )
+
+
+def require_source_scope(ref: ArtifactRef, expected_source_refs: Iterable[SourceReference]) -> None:
+    expected = {
+        (source.full_name, source.source_version, source.snapshot_kind)
+        for source in expected_source_refs
+    }
+    actual = {
+        (source.full_name, source.source_version, source.snapshot_kind)
+        for source in ref.source_references
+    }
+    if not expected.issubset(actual):
+        raise ArtifactCompatibilityError(
+            "artifact source scope does not match", details={"artifact_id": ref.artifact_id}
         )
 
 

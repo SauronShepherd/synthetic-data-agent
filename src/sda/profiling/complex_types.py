@@ -7,7 +7,7 @@ from typing import Any
 def complex_metrics(values: Iterable[Any], kind: str) -> tuple[dict[str, Any], tuple[str, ...]]:
     present = [value for value in values if value is not None]
     if kind == "array":
-        sizes = [len(value) for value in present if isinstance(value, (list, tuple))]
+        sizes = [len(value) for value in present if isinstance(value, list | tuple)]
         return (
             {
                 "present_count": len(present),

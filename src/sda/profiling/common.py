@@ -45,7 +45,7 @@ def finite(values: Iterable[Any]) -> list[float]:
     return [
         float(value)
         for value in values
-        if isinstance(value, (int, float))
+        if isinstance(value, int | float)
         and not isinstance(value, bool)
         and not (isinstance(value, float) and math.isnan(value))
         and math.isfinite(float(value))

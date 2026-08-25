@@ -27,7 +27,8 @@ def load_metadata_inventory(spark: Any, table: str, inventory_id: str) -> Mappin
     """Load one complete persisted metadata inventory by deterministic ID."""
     if not table or "." not in table:
         raise ValueError("metadata inventory table must be qualified")
-    rows = spark.table(table).where(f"inventory_id = '{inventory_id}'").collect()
+    safe_inventory_id = inventory_id.replace("'", "''")
+    rows = spark.table(table).where(f"inventory_id = '{safe_inventory_id}'").limit(2).collect()
     if not rows:
         raise ArtifactNotFoundError(
             "metadata inventory was not found", details={"inventory_id": inventory_id}
@@ -64,6 +65,7 @@ def metadata_inventory_from_payload(payload: Mapping[str, Any]):
                 ordinal_position=int(column["ordinal_position"]),
                 comment=column.get("comment"),
                 tags=tuple(column.get("tags", ())),
+                sensitivity_signals=tuple(column.get("sensitivity_signals", ())),
             )
             for column in raw.get("columns", [])
         )
@@ -171,7 +173,17 @@ def find_complete_artifact_by_fingerprint(
 
 
 def _ref_from_mapping(raw: Mapping[str, Any]) -> ArtifactRef:
-    sources = tuple(SourceReference(**source) for source in raw.get("source_references", ()))
+    def decoded(name: str, default: Any) -> Any:
+        value = raw.get(name, default)
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return default
+        return value
+
+    source_values = decoded("source_references", decoded("source_references_json", ()))
+    sources = tuple(SourceReference(**source) for source in source_values)
     return ArtifactRef(
         artifact_id=str(raw["artifact_id"]),
         artifact_type=ArtifactType(str(raw["artifact_type"])),
@@ -184,15 +196,18 @@ def _ref_from_mapping(raw: Mapping[str, Any]) -> ArtifactRef:
         created_at=str(raw["created_at"]),
         configuration_hash=str(raw["configuration_hash"]),
         primary_location=str(raw["primary_location"]),
-        related_locations=dict(raw.get("related_locations", {})),
+        related_locations=dict(decoded("related_locations", decoded("related_locations_json", {}))),
         source_references=sources,
         checksum=str(raw["checksum"]),
         summary=str(raw["summary"]),
-        warnings=tuple(raw.get("warnings", ())),
+        warnings=tuple(decoded("warnings", decoded("warnings_json", ()))),
         strategy_version=str(raw.get("strategy_version", "v1")),
         completed_at=raw.get("completed_at"),
         reuse_fingerprint=str(raw.get("reuse_fingerprint", "")),
         content_checksum=raw.get("content_checksum"),
-        input_artifact_ids=tuple(raw.get("input_artifact_ids", ())),
+        input_artifact_ids=tuple(
+            decoded("input_artifact_ids", decoded("input_artifact_ids_json", ()))
+        ),
         error_code=raw.get("error_code"),
+        error_message_safe=raw.get("error_message_safe"),
     )

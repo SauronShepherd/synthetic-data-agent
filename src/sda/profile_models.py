@@ -84,6 +84,7 @@ class TableProfileRequest:
     column_denylist: tuple[str, ...] = ()
     sample_fraction: float = 0.1
     sample_seed: int = 42
+    stable_key_column: str | None = None
     max_category_values: int = 100
     category_cardinality_threshold: int = 100
     category_ratio_threshold: float = 0.05
@@ -192,6 +193,7 @@ class TableProfile:
     agent_summary: str = ""
     artifact_locations: dict[str, str] = field(default_factory=dict)
     metadata_inventory_id: str | None = None
+    execution_receipt: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)

@@ -9,7 +9,7 @@ from sda.artifacts.fingerprint import fingerprint
 from sda.relationships.candidates import discover_candidates
 from sda.relationships.graph import DependencyGraph
 from sda.relationships.metrics import measure_join
-from sda.relationships.scoring import POLICY_VERSION, score_relationship
+from sda.relationships.scoring import RelationshipScoringPolicy, score_relationship
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +20,7 @@ class RelationshipDiscoveryConfig:
     detector_version: str = "sda06-v1"
     max_relationship_candidates: int = 1_000
     max_verified_candidates: int = 1_000
+    scoring_policy: RelationshipScoringPolicy = RelationshipScoringPolicy()
 
     def __post_init__(self) -> None:
         if self.max_composite_key_width < 1:
@@ -96,7 +97,12 @@ class RelationshipDetector:
                 rows[c.parent_table], rows[c.child_table], c.parent_columns, c.child_columns
             )
             verified += 1
-            scored = score_relationship(metrics, declared=c.origin == "declared", hints=c.hints)
+            scored = score_relationship(
+                metrics,
+                declared=c.origin == "declared",
+                hints=c.hints,
+                policy=self.config.scoring_policy,
+            )
             if metrics.parent_uniqueness_ratio < 1.0:
                 scored = {**scored, "decision": "rejected", "confidence_band": "low"}
             if scored["decision"] == "accepted":
@@ -115,6 +121,10 @@ class RelationshipDetector:
                     "review_status": (
                         "required" if scored["decision"] == "awaiting_review" else "not_required"
                     ),
+                    "review_decision": None,
+                    "reviewer_identity": None,
+                    "review_decided_at": None,
+                    "review_reason": None,
                     "accepted_for_graph": scored["decision"] == "accepted",
                     **metrics.to_dict(),
                     **scored,
@@ -136,7 +146,7 @@ class RelationshipDetector:
             table for table, parents in parents_by_child.items() if len(parents) >= 2
         )
         cycles = graph.cycles()
-        cycle_nodes = sorted({node for cycle in cycles for node in cycle})
+        cycle_nodes = list(graph.blocked_by_cycles())
         payload = {
             "tables": sorted(tables),
             "relationships": relationships,
@@ -147,13 +157,13 @@ class RelationshipDetector:
                 "verified": verified,
                 "untested": sum(1 for item in relationships if item.get("decision") == "untested"),
             },
-            "scoring_policy_version": POLICY_VERSION,
+            "scoring_policy_version": self.config.scoring_policy.version,
         }
         return {
             "artifact_version": "sda06-relationship-v1",
             "analysis_id": f"relationship_analysis_{fingerprint(payload)}",
             "detector_version": self.config.detector_version,
-            "scoring_policy_version": POLICY_VERSION,
+            "scoring_policy_version": self.config.scoring_policy.version,
             "run_id": run_id,
             "configuration": asdict(self.config),
             "relationships": relationships,

@@ -3,8 +3,56 @@
 from __future__ import annotations
 
 from functools import reduce
+from itertools import combinations
 from operator import and_
 from typing import Any
+
+
+def discover_spark_key_candidates(
+    parent_columns: tuple[Any, ...],
+    child_columns: tuple[Any, ...],
+    *,
+    max_width: int = 2,
+    max_candidates: int = 20,
+) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
+    """Return bounded, metadata-compatible key candidates for Spark validation.
+
+    This produces only column-name combinations; values remain in Spark and are
+    evaluated later by :func:`measure_spark_join`. Matching requires compatible
+    declared types and either equal names or a shared normalized identifier
+    stem (for example ``customer_id`` and ``customer_key``).
+    """
+    if max_width < 1 or max_candidates < 1:
+        return []
+
+    def stem(name: str) -> str:
+        lowered = name.casefold()
+        for suffix in ("_id", "_key", "_code"):
+            if lowered.endswith(suffix):
+                return lowered[: -len(suffix)]
+        return lowered
+
+    matches = [
+        (str(parent.name), str(child.name))
+        for parent in parent_columns
+        for child in child_columns
+        if str(parent.data_type).casefold() == str(child.data_type).casefold()
+        and (
+            str(parent.name).casefold() == str(child.name).casefold()
+            or stem(str(parent.name)) == stem(str(child.name))
+        )
+    ]
+    matches.sort(key=lambda item: (item[0].casefold(), item[1].casefold()))
+    candidates: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    for width in range(1, min(max_width, len(matches)) + 1):
+        for selected in combinations(matches, width):
+            parent_key = tuple(item[0] for item in selected)
+            child_key = tuple(item[1] for item in selected)
+            if parent_key not in {candidate[0] for candidate in candidates}:
+                candidates.append((parent_key, child_key))
+            if len(candidates) >= max_candidates:
+                return candidates
+    return candidates
 
 
 def measure_spark_join(
@@ -87,6 +135,9 @@ def measure_spark_join(
         )
         .first()
     )
+    fanout_mean = float(fanout_stats["mean"] or 0.0)
+    fanout_p95 = int(fanout_stats["p95"] or 0)
+    fanout_max = int(fanout_stats["max"] or 0)
     warnings = []
     if child_total and child_total != child_any_null:
         warnings.append("child_key_contains_nulls")
@@ -116,10 +167,15 @@ def measure_spark_join(
             (child_total - child_any_null - child_all_null) / child_total if child_total else 0.0
         ),
         "cardinality": cardinality,
-        "fanout_mean": float(fanout_stats["mean"] or 0.0),
+        "fanout_mean": fanout_mean,
         "fanout_median": int(fanout_stats["median"] or 0),
-        "fanout_p95": int(fanout_stats["p95"] or 0),
-        "fanout_max": int(fanout_stats["max"] or 0),
+        "fanout_p95": fanout_p95,
+        "fanout_max": fanout_max,
         "parents_with_no_children": distinct_parent - referenced_parents,
+        "zero_child_parent_rate": (
+            (distinct_parent - referenced_parents) / distinct_parent if distinct_parent else 0.0
+        ),
+        "fanout_p95_to_mean": fanout_p95 / fanout_mean if fanout_mean else None,
+        "fanout_max_to_mean": fanout_max / fanout_mean if fanout_mean else None,
         "warnings": warnings,
     }

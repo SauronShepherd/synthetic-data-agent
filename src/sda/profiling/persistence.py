@@ -76,7 +76,7 @@ def persist_profile(
     header = {
         key: (
             json.dumps(value, sort_keys=True, default=str)
-            if isinstance(value, (dict, list, tuple))
+            if isinstance(value, dict | list | tuple)
             else (None if value is None else str(value))
         )
         for key, value in payload.items()
@@ -122,6 +122,8 @@ def persist_profile(
             spark.sql(f"ALTER TABLE {table_name} ADD COLUMNS (status STRING)")
         with suppress(Exception):
             spark.sql(f"ALTER TABLE {table_name} ADD COLUMNS (metadata_inventory_id STRING)")
+        with suppress(Exception):
+            spark.sql(f"ALTER TABLE {table_name} ADD COLUMNS (execution_receipt STRING)")
     can_reuse = reuse_existing and profile.snapshot_reproducible
     if can_reuse and hasattr(spark, "table"):
         try:
@@ -133,8 +135,12 @@ def persist_profile(
             )
             if existing:
                 return locations
-        except Exception:
-            pass
+        except Exception as exc:
+            message = str(exc).upper()
+            if not any(
+                marker in message for marker in ("TABLE_OR_VIEW_NOT_FOUND", "TABLE_NOT_FOUND")
+            ):
+                raise
 
     column_schema = (
         StructType([StructField(key, StringType(), True) for key in columns[0]])

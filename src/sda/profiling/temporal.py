@@ -9,7 +9,7 @@ from typing import Any
 def temporal_metrics(
     values: Iterable[Any], reference_time: datetime | None = None
 ) -> dict[str, Any]:
-    dates = [value for value in values if isinstance(value, (date, datetime))]
+    dates = [value for value in values if isinstance(value, date | datetime)]
     if not dates:
         return {"available": False, "reason": "no_temporal_values"}
     reference = reference_time or datetime.now(UTC)
@@ -19,6 +19,18 @@ def temporal_metrics(
         else value
         for value in dates
     ]
+    ordered = sorted(normalized)
+    gaps = [
+        (right - left).total_seconds()
+        for left, right in zip(ordered, ordered[1:], strict=False)
+    ]
+    positive_gaps = [gap for gap in gaps if gap >= 0]
+
+    def gap_percentile(percent: float) -> float | None:
+        if not positive_gaps:
+            return None
+        index = min(len(positive_gaps) - 1, int((len(positive_gaps) - 1) * percent))
+        return sorted(positive_gaps)[index]
     return {
         "available": True,
         "min": min(dates).isoformat(),
@@ -39,4 +51,10 @@ def temporal_metrics(
             and value.second == 0
             for value in dates
         ),
+        "gap_seconds": {
+            "count": len(gaps), "min": min(positive_gaps) if positive_gaps else None,
+            "p25": gap_percentile(0.25), "p50": gap_percentile(0.5),
+            "p75": gap_percentile(0.75), "p95": gap_percentile(0.95),
+            "max": max(positive_gaps) if positive_gaps else None,
+        },
     }

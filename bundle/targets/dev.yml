@@ -20,3 +20,5 @@ targets:
       sda_relationship_output_table: sda_dev.profiles.relationship_analysis_scope
       sda_graph_output_table: sda_dev.profiles.dependency_graph_scope
       sda_metadata_inventory_table: sda_dev.profiles.metadata_inventory
+      sda_manifest_table: sda_dev.profiles.run_manifests
+      sda_artifact_registry_table: sda_dev.profiles.artifact_registry

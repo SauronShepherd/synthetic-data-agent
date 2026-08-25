@@ -26,6 +26,7 @@ SKIP_DIRECTORIES = {
     ".venv",
     "venv",
     ".testdeps",
+    ".testdeps2",
     ".release-check",
     "__pycache__",
     "*.egg-info",

@@ -119,4 +119,8 @@ Article 05 answers:
 How does one approved table actually behave?
 ```
 
-Article 06 will validate relationships using the structural and statistical evidence.
+Article 06 validates relationships using structural and statistical evidence. The
+current implementation supports declared constraints, bounded Spark-native inferred
+single/composite candidates, cycle-aware graph summaries, and durable development
+artifacts. It does not yet provide synthetic row generation, a complete human-review
+workflow, or managed Unity Catalog integration-test proof.

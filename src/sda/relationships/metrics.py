@@ -25,6 +25,8 @@ class JoinMetrics:
     matched_distinct_child_keys: int = 0
     validation_mode: str = "exact"
     warnings: tuple[str, ...] = ()
+    parent_to_child_cardinality: str = "unknown"
+    child_to_parent_cardinality: str = "unknown"
 
     def to_dict(self) -> dict[str, Any]:
         return {**asdict(self), "warnings": list(self.warnings)}
@@ -82,6 +84,11 @@ def measure_join(
         warnings = tuple(
             dict.fromkeys((*warnings, "parent_key_is_not_unique", "candidate_rejected"))
         )
+    fanout_mean = sum(fanout) / len(fanout) if fanout else 0.0
+    fanout_p95 = sorted_fanout[p95_index] if sorted_fanout else 0
+    fanout_max = max(fanout, default=0)
+    parent_to_child = "one_to_many" if duplicated_child else "one_to_one"
+    child_to_parent = "many_to_one" if not duplicated_parent else "many_to_many"
     return JoinMetrics(
         unique_ratio,
         1 - len(nonnull_c) / len(ckeys) if ckeys else 0.0,
@@ -93,8 +100,13 @@ def measure_join(
         {
             "median": sorted(fanout)[len(fanout) // 2] if fanout else 0,
             "max": max(fanout, default=0),
-            "mean": sum(fanout) / len(fanout) if fanout else 0.0,
-            "p95": sorted_fanout[p95_index] if sorted_fanout else 0,
+            "mean": fanout_mean,
+            "p95": fanout_p95,
+            "zero_child_parent_rate": (
+                len(pset - set(child_reference_counts)) / len(pset) if pset else 0.0
+            ),
+            "p95_to_mean": fanout_p95 / fanout_mean if fanout_mean else None,
+            "max_to_mean": fanout_max / fanout_mean if fanout_mean else None,
             "parent_count": len(pset),
             "parents_with_no_children": len(pset - set(child_reference_counts)),
         },
@@ -104,4 +116,6 @@ def measure_join(
         len(cset),
         len(set(matched)),
         warnings=warnings,
+        parent_to_child_cardinality=parent_to_child,
+        child_to_parent_cardinality=child_to_parent,
     )

@@ -1,4 +1,8 @@
-# Synthetic Data Agent — SDA 06
+# Synthetic Data Agent — SDA 07 (`0.7.0.dev0`)
+
+The implemented deterministic evidence pipeline is metadata -> profiles -> relationships -> patterns.
+SDA 07 emits review-safe, versioned pattern registry/evidence artifacts. Synthetic
+generation, validation, and publishing remain later milestones.
 
 This branch extends the governed Articles 04–05 foundation with relationship
 discovery, key validation, join evidence, and dependency-graph planning.
@@ -39,16 +43,17 @@ Bundle validation and deployment are environment-dependent; local checks cover c
 - Tests for metadata contracts, reader behavior, orchestration integration, and configuration.
 - Relationship candidates, exact join metrics, scoring, graph cycles, bridges, and artifact contracts.
 
-## What it deliberately does not add
+## Current limitations
 
 - Source table value reads.
-- Privacy approval logic.
+- Privacy approval execution.
 - Synthetic row generation and publishing.
-- Privacy approval logic.
-- Synthetic row generation.
-- Publishing.
+- A complete external human-review workflow; review fields are emitted, but reviewer
+  decisions are not yet managed as a separate governed process.
 
-Metadata is evidence, not truth. Declared constraints are captured as claims and marked unvalidated; profiling will validate actual behavior in Article 05.
+Metadata is evidence, not truth. Declared constraints are captured as claims and
+marked unvalidated; profiling and relationship checks add bounded behavioral evidence.
+Spark-native inference is bounded by configured candidate and composite-key budgets.
 
 ## Requirements and installation
 

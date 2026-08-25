@@ -1,0 +1,67 @@
+name: SDA Databricks Integration
+
+on:
+  workflow_dispatch:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project and quality dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Compile source and tests
+        run: python -m compileall -q src tests
+      - name: Run tests with coverage
+        run: python -m pytest --cov=src/sda --cov-report=term-missing
+      - name: Run Ruff
+        run: ruff check src tests
+      - name: Run mypy
+        run: mypy src tests
+      - name: Build wheel
+        run: python -m pip wheel --no-deps --no-build-isolation -w dist .
+      - name: Check release hygiene
+        run: rm -rf dist build && python scripts/check_release.py
+
+  dev-smoke:
+    runs-on: ubuntu-latest
+    environment: databricks-dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: databricks/setup-cli@main
+      - name: Configure Databricks profile
+        shell: bash
+        env:
+          DATABRICKS_HOST: ${{ secrets.SDA_DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.SDA_DATABRICKS_TOKEN }}
+        run: |
+          test -n "$DATABRICKS_HOST"
+          test -n "$DATABRICKS_TOKEN"
+          mkdir -p "$HOME/.databricks"
+          cat > "$HOME/.databrickscfg" <<EOF
+          [sda]
+          host = $DATABRICKS_HOST
+          token = $DATABRICKS_TOKEN
+          EOF
+      - name: Validate and deploy dev bundle
+        run: |
+          databricks bundle validate -t dev --profile sda
+          databricks bundle deploy -t dev --profile sda
+      - name: Run metadata, profiler, relationship, and scope smoke jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for job in uc_metadata_reader table_profiler relationship_detector analyze_scope; do
+            databricks bundle run "$job" -t dev --profile sda
+          done
+      - name: Run pattern detector smoke job
+        if: ${{ vars.SDA_PATTERN_METADATA_ID != '' && vars.SDA_PATTERN_PROFILE_ID != '' && vars.SDA_PATTERN_RELATIONSHIP_ID != '' && vars.SDA_PATTERN_GRAPH_ID != '' }}
+        run: |
+          databricks bundle run pattern_detector -t dev --profile sda \
+            --params="metadata_artifact_id=${{ vars.SDA_PATTERN_METADATA_ID }},profile_artifact_ids_json=[${{ vars.SDA_PATTERN_PROFILE_ID }}],relationship_artifact_id=${{ vars.SDA_PATTERN_RELATIONSHIP_ID }},dependency_graph_artifact_id=${{ vars.SDA_PATTERN_GRAPH_ID }}"

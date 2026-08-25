@@ -8,8 +8,10 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
+from sda.artifacts.fingerprint import fingerprint
 from sda.artifacts.manifest import RunManifest
 from sda.runtime.identifiers import QualifiedName
+from sda.version import __version__
 
 
 def parse_args() -> argparse.Namespace:
@@ -18,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--schema", required=True)
     parser.add_argument("--tables", required=True)
     parser.add_argument("--run-id", default="")
+    parser.add_argument("--environment", default="dev")
     parser.add_argument("--dry-run", type=lambda value: value.lower() == "true", default=False)
     parser.add_argument("--profile", type=lambda value: value.lower() == "true", default=True)
     parser.add_argument("--parent-table", default="")
@@ -43,12 +46,11 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
     manifest = RunManifest(
         run_id=run_id,
         tool_name="analyze_scope",
-        tool_version="0.6.0.dev0",
+        tool_version=__version__,
         artifact_schema_version="1.0",
-        environment="databricks",
-        configuration_hash=json.dumps(
+        environment=getattr(args, "environment", "dev"),
+        configuration_hash=fingerprint(
             {"catalog": args.catalog, "schema": args.schema, "tables": tables},
-            sort_keys=True,
         ),
         status="complete" if args.dry_run else "running",
         started_at=datetime.now(UTC).isoformat(),
@@ -85,8 +87,6 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 )
             )
             if args.metadata_inventory_table:
-                from sda.artifacts.fingerprint import fingerprint
-
                 inventory_payload = inventory.to_dict()
                 args.metadata_inventory_id = f"metadata_inventory_{fingerprint(inventory_payload)}"
                 inventory_row = {
@@ -200,7 +200,10 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 (args.parent_table, args.child_table, args.parent_columns, args.child_columns)
             ):
                 raise ValueError("relationship parameters must be supplied together")
-            from sda.relationships.spark_metrics import measure_spark_join
+            from sda.relationships.spark_metrics import (
+                discover_spark_key_candidates,
+                measure_spark_join,
+            )
 
             parent = scoped_frames.get(
                 args.parent_table, spark.table(QualifiedName.parse(args.parent_table).quoted)
@@ -214,28 +217,37 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 tuple(item.strip() for item in args.parent_columns.split(",") if item.strip()),
                 tuple(item.strip() for item in args.child_columns.split(",") if item.strip()),
             )
-            metadata_summary["candidate_relationships"] = [{
-                "parent_table": args.parent_table,
-                "child_table": args.child_table,
-                "parent_columns": [
-                    item.strip() for item in args.parent_columns.split(",") if item.strip()
-                ],
-                "child_columns": [
-                    item.strip() for item in args.child_columns.split(",") if item.strip()
-                ],
-                "columns": [
-                    item.strip() for item in args.child_columns.split(",") if item.strip()
-                ],
-                "origin": "declared",
-                "evidence": metadata_summary["relationship"],
-                "system_decision": "accepted",
-                "review_status": "not_required",
-                "reason_codes": [],
-            }]
+            metadata_summary["candidate_relationships"] = [
+                {
+                    "parent_table": args.parent_table,
+                    "child_table": args.child_table,
+                    "parent_columns": [
+                        item.strip() for item in args.parent_columns.split(",") if item.strip()
+                    ],
+                    "child_columns": [
+                        item.strip() for item in args.child_columns.split(",") if item.strip()
+                    ],
+                    "columns": [
+                        item.strip() for item in args.child_columns.split(",") if item.strip()
+                    ],
+                    "origin": "declared",
+                    "evidence": metadata_summary["relationship"],
+                    "system_decision": "accepted",
+                    "review_status": "not_required",
+                    "review_decision": None,
+                    "reviewer_identity": None,
+                    "review_decided_at": None,
+                    "review_reason": None,
+                    "reason_codes": [],
+                }
+            ]
         else:
             from itertools import permutations
 
-            from sda.relationships.spark_metrics import measure_spark_join
+            from sda.relationships.spark_metrics import (
+                discover_spark_key_candidates,
+                measure_spark_join,
+            )
 
             candidates: list[dict[str, Any]] = []
             for parent_table, child_table in permutations(scoped_tables, 2):
@@ -246,55 +258,62 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     and constraint.referenced_table == parent_table.full_name
                     and len(constraint.columns) == len(constraint.referenced_columns)
                 ]
-                if declared:
-                    child_columns = tuple(declared[0].columns)
-                    parent_columns = tuple(declared[0].referenced_columns)
-                    origin = "declared"
-                else:
-                    parent_names = {column.name for column in parent_table.columns}
-                    child_names = {column.name for column in child_table.columns}
-                    common = sorted(parent_names & child_names)
-                    if not common:
+                candidate_specs: list[tuple[tuple[str, ...], tuple[str, ...], str]] = [
+                    (tuple(item.referenced_columns), tuple(item.columns), "declared")
+                    for item in declared
+                ]
+                if not candidate_specs:
+                    inferred = discover_spark_key_candidates(
+                        parent_table.columns,
+                        child_table.columns,
+                        max_width=2,
+                        max_candidates=20,
+                    )
+                    if not inferred:
                         continue
-                    parent_columns = child_columns = (common[0],)
-                    origin = "inferred_common_name"
-                if not parent_columns:
-                    continue
-                evidence = measure_spark_join(
-                    scoped_frames[parent_table.full_name],
-                    scoped_frames[child_table.full_name],
-                    parent_columns,
-                    child_columns,
-                )
-                hard_gates_pass = (
-                    float(evidence.get("parent_uniqueness_ratio", 0.0)) >= 1.0
-                    and float(evidence.get("orphan_rate", 1.0)) <= 0.05
-                    and evidence.get("cardinality") != "parent_key_invalid"
-                )
-                candidates.append(
-                    {
-                        "parent_table": parent_table.full_name,
-                        "child_table": child_table.full_name,
-                        "columns": list(child_columns),
-                        "parent_columns": list(parent_columns),
-                        "child_columns": list(child_columns),
-                        "origin": origin,
-                        "evidence": evidence,
-                        "system_decision": "accepted"
-                        if origin == "declared" and hard_gates_pass
-                        else "awaiting_review",
-                        "review_status": "not_required"
-                        if origin == "declared" and hard_gates_pass
-                        else "required",
-                        "reason_codes": (
-                            [] if hard_gates_pass else ["relationship_hard_gate_failed"]
-                        ),
-                    }
-                )
+                    candidate_specs.extend(
+                        (parent_columns, child_columns, "inferred_spark")
+                        for parent_columns, child_columns in inferred
+                    )
+                for parent_columns, child_columns, origin in candidate_specs:
+                    evidence = measure_spark_join(
+                        scoped_frames[parent_table.full_name],
+                        scoped_frames[child_table.full_name],
+                        parent_columns,
+                        child_columns,
+                    )
+                    hard_gates_pass = (
+                        float(evidence.get("parent_uniqueness_ratio", 0.0)) >= 1.0
+                        and float(evidence.get("orphan_rate", 1.0)) <= 0.05
+                        and evidence.get("cardinality") != "parent_key_invalid"
+                    )
+                    candidates.append(
+                        {
+                            "parent_table": parent_table.full_name,
+                            "child_table": child_table.full_name,
+                            "columns": list(child_columns),
+                            "parent_columns": list(parent_columns),
+                            "child_columns": list(child_columns),
+                            "origin": origin,
+                            "evidence": evidence,
+                            "system_decision": "accepted"
+                            if origin == "declared" and hard_gates_pass
+                            else "awaiting_review",
+                            "review_status": "not_required"
+                            if origin == "declared" and hard_gates_pass
+                            else "required",
+                            "review_decision": None,
+                            "reviewer_identity": None,
+                            "review_decided_at": None,
+                            "review_reason": None,
+                            "reason_codes": (
+                                [] if hard_gates_pass else ["relationship_hard_gate_failed"]
+                            ),
+                        }
+                    )
             metadata_summary["candidate_relationships"] = candidates
         if args.relationship_output_table:
             from sda.artifacts.delta import persist_artifact_lifecycle
-            from sda.artifacts.fingerprint import fingerprint
             from sda.artifacts.models import (
                 ArtifactRef,
                 ArtifactStatus,
@@ -315,6 +334,15 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 "run_id": run_id,
                 "scope": [n.full_name for n in names],
                 "inventory": args.metadata_inventory_id,
+                "source_versions": source_versions,
+                "profile_ids": [
+                    item.get("profile_id") for item in metadata_summary.get("profiled_tables", [])
+                ],
+                "thresholds": {"orphan_rate_max": 0.05, "parent_uniqueness_min": 1.0},
+                "candidate_policy": {
+                    "max_inferred_width": 2,
+                    "max_inferred_candidates": 20,
+                },
             }
             relationship_id = f"relationship_analysis_{fingerprint(relationship_identity)}"
             relationship_ref = ArtifactRef(
@@ -323,11 +351,11 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 artifact_schema_version="1.0",
                 status=ArtifactStatus.WRITING,
                 tool_name="relationship_detector",
-                tool_version="0.6.0.dev0",
+                tool_version=__version__,
                 run_id=run_id,
-                environment="databricks",
+                environment=getattr(args, "environment", "dev"),
                 created_at=datetime.now(UTC).isoformat(),
-                configuration_hash=fingerprint({"scope": tables}),
+                configuration_hash=fingerprint(relationship_identity),
                 primary_location=args.relationship_output_table,
                 related_locations={},
                 source_references=tuple(
@@ -384,16 +412,17 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     for candidate in metadata_summary.get("candidate_relationships", [])
                 )
                 accepted_edges = [
-                    candidate for candidate in metadata_summary.get("candidate_relationships", [])
+                    candidate
+                    for candidate in metadata_summary.get("candidate_relationships", [])
                     if candidate.get("origin") == "declared"
                     and candidate.get("evidence", {}).get("cardinality") != "parent_key_invalid"
-                    and float(
-                        candidate.get("evidence", {}).get("parent_uniqueness_ratio", 0.0)
-                    ) >= 1.0
+                    and float(candidate.get("evidence", {}).get("parent_uniqueness_ratio", 0.0))
+                    >= 1.0
                     and float(candidate.get("evidence", {}).get("orphan_rate", 1.0)) <= 0.05
                 ]
                 review_only_count = sum(
-                    1 for candidate in metadata_summary.get("candidate_relationships", [])
+                    1
+                    for candidate in metadata_summary.get("candidate_relationships", [])
                     if candidate.get("review_status") == "required"
                 )
                 parents_by_child: dict[str, set[str]] = {}
@@ -404,6 +433,26 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 bridge_tables = sorted(
                     table for table, parents in parents_by_child.items() if len(parents) >= 2
                 )
+                bridge_validation: dict[str, dict[str, Any]] = {}
+                for bridge in bridge_tables:
+                    bridge_edges = [
+                        edge for edge in accepted_edges if edge["child_table"] == bridge
+                    ]
+                    link_columns = sorted(
+                        {column for edge in bridge_edges for column in edge["child_columns"]}
+                    )
+                    frame = scoped_frames[bridge]
+                    total_rows = frame.count()
+                    distinct_links = frame.select(*link_columns).dropDuplicates().count()
+                    bridge_validation[bridge] = {
+                        "link_columns": link_columns,
+                        "total_rows": total_rows,
+                        "distinct_link_tuples": distinct_links,
+                        "duplicate_rate": (
+                            (total_rows - distinct_links) / total_rows if total_rows else 0.0
+                        ),
+                        "pair_unique": total_rows == distinct_links,
+                    }
                 from sda.relationships.graph import DependencyGraph
 
                 dependency_graph = DependencyGraph()
@@ -411,19 +460,28 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     dependency_graph.add_node(table)
                 for edge in accepted_edges:
                     dependency_graph.add_edge(edge["parent_table"], edge["child_table"])
-                graph_rows.append({
-                    "kind": "graph_summary",
-                    "isolates": list(dependency_graph.isolates()),
-                    "components": [list(component) for component in dependency_graph.components()],
-                    "dependency_levels": dependency_graph.dependency_levels(),
-                    "generation_order": list(dependency_graph.topological_order()),
-                    "cycles": [list(cycle) for cycle in dependency_graph.cycles()],
-                    "self_references": list(dependency_graph.self_references()),
-                    "bridge_tables": bridge_tables,
-                    "review_only_edge_count": review_only_count,
-                    "accepted_edge_count": len(accepted_edges),
-                    "relationship_analysis_id": relationship_id,
-                })
+                cycles = dependency_graph.cycles()
+                blocked_by_cycle = list(dependency_graph.blocked_by_cycles())
+                graph_rows.append(
+                    {
+                        "kind": "graph_summary",
+                        "isolates": list(dependency_graph.isolates()),
+                        "components": [
+                            list(component) for component in dependency_graph.components()
+                        ],
+                        "dependency_levels": dependency_graph.dependency_levels(),
+                        "generation_order": list(dependency_graph.topological_order()),
+                        "cycles": [list(cycle) for cycle in cycles],
+                        "blocked_by_cycle": blocked_by_cycle,
+                        "unresolved_cycle": bool(cycles),
+                        "self_references": list(dependency_graph.self_references()),
+                        "bridge_tables": bridge_tables,
+                        "bridge_validation": bridge_validation,
+                        "review_only_edge_count": review_only_count,
+                        "accepted_edge_count": len(accepted_edges),
+                        "relationship_analysis_id": relationship_id,
+                    }
+                )
                 graph_ref = replace(
                     relationship_ref,
                     artifact_id=graph_id,
@@ -481,6 +539,8 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
         from sda.artifacts.delta import persist_run_manifest
 
         persist_run_manifest(spark, manifest, args.manifest_table)
+    elif not args.dry_run:
+        raise ValueError("manifest_table is required for non-dry-run scope analysis")
     print(json.dumps(result, sort_keys=True))
     return result
 

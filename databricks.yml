@@ -79,6 +79,11 @@ variables:
   sda_metadata_inventory_table:
     description: Delta table containing canonical metadata inventory payloads.
     default: sda_dev.profiles.metadata_inventory
+  sda_manifest_table:
+    description: Delta table containing mandatory non-dry-run scope manifests.
+    default: sda_dev.profiles.run_manifests
+  sda_artifact_registry_table:
+    description: Target-scoped durable artifact registry.
   sda_scope_catalog:
     description: Catalog used by the scope workflow.
     default: sda_dev
@@ -100,3 +105,24 @@ variables:
   sda_graph_output_table:
     description: Delta table for dependency graph evidence.
     default: sda_dev.profiles.dependency_graph_scope
+  sda_pattern_registry_table:
+    description: Compact SDA 07 pattern registry.
+    default: sda_dev.profiles.pattern_registry
+  sda_pattern_evidence_table:
+    description: Distributed SDA 07 pattern evidence.
+    default: sda_dev.profiles.pattern_evidence
+  sda_pattern_mode:
+    description: SDA 07 execution mode.
+    default: quick
+  sda_pattern_min_support_rows:
+    description: Minimum support rows for a pattern candidate.
+    default: "100"
+  sda_pattern_min_support_rate:
+    description: Minimum support rate for a pattern candidate.
+    default: "0.001"
+  sda_pattern_sample_fraction:
+    description: Deterministic quick-mode sample fraction.
+    default: "0.1"
+  sda_pattern_sample_seed:
+    description: Deterministic quick-mode sample seed.
+    default: "1729"

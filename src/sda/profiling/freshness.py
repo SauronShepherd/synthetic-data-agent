@@ -8,7 +8,7 @@ from typing import Any
 def business_freshness(
     values: Iterable[Any], reference_time: datetime, windows: Iterable[int]
 ) -> dict[str, Any]:
-    timestamps = [value for value in values if isinstance(value, (date, datetime))]
+    timestamps = [value for value in values if isinstance(value, date | datetime)]
     if not timestamps:
         return {"available": False, "warning": "business_event_column_missing_or_unreadable"}
     normalized = [

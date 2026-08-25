@@ -28,6 +28,25 @@ CONTROLLED_SCOPE_ENV = {
     "SDA_RELATIONSHIP_CHILD_TABLE": "sda_relationship_child_table",
 }
 
+FQN_OUTPUT_VARIABLES = (
+    "sda_manifest_table",
+    "sda_metadata_inventory_table",
+    "sda_relationship_output_table",
+    "sda_graph_output_table",
+    "sda_artifact_registry_table",
+    "sda_pattern_registry_table",
+    "sda_pattern_evidence_table",
+)
+
+
+def validate_output_prefixes(target: str, values: dict[str, str]) -> list[str]:
+    expected = {"dev": "sda_dev.", "staging": "sda_staging.", "prod": "sda_prod."}[target]
+    return [
+        name
+        for name in FQN_OUTPUT_VARIABLES
+        if values.get(name, "").strip() and not values[name].strip().startswith(expected)
+    ]
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -39,7 +58,9 @@ def main() -> int:
         if any(not value for value in values.values()) or any(
             "__REQUIRED_" in value for value in values.values()
         ):
-            print("Controlled-target identity variables are missing or placeholders", file=sys.stderr)
+            print(
+                "Controlled-target identity variables are missing or placeholders", file=sys.stderr
+            )
             return 2
         scope_values = {name: os.getenv(name, "").strip() for name in CONTROLLED_SCOPE_ENV}
         if any(not value for value in scope_values.values()) or any(
@@ -47,8 +68,19 @@ def main() -> int:
         ):
             print("Controlled-target source scope variables are required", file=sys.stderr)
             return 2
-        if scope_values["SDA_RELATIONSHIP_PARENT_TABLE"] == scope_values["SDA_RELATIONSHIP_CHILD_TABLE"]:
+        if (
+            scope_values["SDA_RELATIONSHIP_PARENT_TABLE"]
+            == scope_values["SDA_RELATIONSHIP_CHILD_TABLE"]
+        ):
             print("Controlled-target relationship parent and child must differ", file=sys.stderr)
+            return 2
+        output_values = {name: os.getenv(name, "").strip() for name in FQN_OUTPUT_VARIABLES}
+        invalid = validate_output_prefixes(args.target, output_values)
+        if invalid:
+            print(
+                f"Controlled-target outputs use the wrong catalog: {', '.join(invalid)}",
+                file=sys.stderr,
+            )
             return 2
     command = ["databricks", "bundle", "validate", "-t", args.target]
     if args.target in {"staging", "prod"}:

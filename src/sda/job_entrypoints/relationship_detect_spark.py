@@ -12,6 +12,7 @@ from sda.artifacts.fingerprint import fingerprint
 from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType, SourceReference
 from sda.relationships.spark_metrics import measure_spark_join
 from sda.runtime.identifiers import QualifiedName
+from sda.version import __version__
 
 
 def parse_args() -> argparse.Namespace:
@@ -21,8 +22,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--parent-columns", required=True)
     parser.add_argument("--child-columns", required=True)
     parser.add_argument("--output-table", default="")
+    parser.add_argument("--artifact-registry-table", default="")
     parser.add_argument("--dry-run", type=lambda value: value.lower() == "true", default=False)
     parser.add_argument("--run-id", default="")
+    parser.add_argument("--environment", default="dev")
     return parser.parse_args()
 
 
@@ -63,10 +66,10 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
             artifact_schema_version="1.0",
             status=ArtifactStatus.WRITING,
             tool_name="relationship_detector",
-            tool_version="0.6.0.dev0",
+            tool_version=__version__,
             strategy_version="spark-join-v1",
             run_id=run_id,
-            environment="databricks",
+            environment=args.environment,
             created_at=datetime.now(UTC).isoformat(),
             configuration_hash=fingerprint(identity),
             primary_location=args.output_table,
@@ -84,8 +87,16 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
             artifact,
             [record],
             evidence_location=args.output_table,
-            registry_location=registry_table,
+            registry_location=args.artifact_registry_table or registry_table,
         )
+        if args.artifact_registry_table:
+            from sda.artifacts.delta import persist_artifact_registry
+
+            persist_artifact_registry(
+                spark,
+                artifact.transition(ArtifactStatus.COMPLETE),
+                args.artifact_registry_table,
+            )
     elif not args.dry_run:
         raise ValueError("--output-table is required unless --dry-run is explicitly set")
     print(json.dumps(record, sort_keys=True))

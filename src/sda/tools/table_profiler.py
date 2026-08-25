@@ -116,7 +116,7 @@ class TableProfiler:
             warnings: list[str] = []
             if kind is ColumnProfileKind.NUMERIC or kind is ColumnProfileKind.IDENTIFIER_LIKE:
                 metrics = numeric_metrics(values)
-                outliers = numeric_outliers(values)
+                outliers = numeric_outliers(values, self.request.outlier_methods)
             elif kind is ColumnProfileKind.CATEGORICAL:
                 metrics = categorical_metrics(
                     values,
@@ -231,7 +231,18 @@ class TableProfiler:
                 self.request.recent_windows_days,
             )
             profile = replace(profile, business_freshness=freshness)
-        return profile
+        return replace(
+            profile,
+            execution_receipt={
+                "mode": self.request.mode.value,
+                "sampling_method": profile.sampling_method,
+                "sample_fraction": self.request.sample_fraction,
+                "sample_seed": self.request.sample_seed,
+                "stable_key_column": self.request.stable_key_column,
+                "source_row_count_available": True,
+                "profiled_column_count": len(profiles),
+            },
+        )
 
     def profile_spark(self, dataframe: Any, *, source_version: str | None = None) -> TableProfile:
         """Profile one Spark DataFrame with one grouped aggregate action.
@@ -241,15 +252,30 @@ class TableProfiler:
         """
         from pyspark.sql import functions as F
 
-        scan = (
-            dataframe
-            if self.request.mode is ProfileMode.FULL
-            else dataframe.sample(
+        if self.request.mode is ProfileMode.FULL:
+            scan = dataframe
+        elif self.request.stable_key_column:
+            if self.request.stable_key_column not in dataframe.columns:
+                raise ValueError(
+                    f"stable sampling key is not present: {self.request.stable_key_column}"
+                )
+            threshold = int(self.request.sample_fraction * 1_000_000)
+            scan = dataframe.where(
+                F.pmod(
+                    F.xxhash64(
+                        F.col(self.request.stable_key_column),
+                        F.lit(self.request.sample_seed),
+                    ),
+                    F.lit(1_000_000),
+                )
+                < F.lit(threshold)
+            )
+        else:
+            scan = dataframe.sample(
                 withReplacement=False,
                 fraction=self.request.sample_fraction,
                 seed=self.request.sample_seed,
             )
-        )
         live_types = {
             field.name: field.dataType.simpleString().lower() for field in dataframe.schema.fields
         }
@@ -272,6 +298,13 @@ class TableProfiler:
                     F.approx_count_distinct(col).alias(f"{safe}_distinct"),
                 )
             )
+            sentinels = self.request.sentinel_candidates.get(column.name, ())
+            aliases[column.name]["sentinel"] = f"{safe}_sentinel"
+            expressions.append(
+                F.sum(
+                    F.when(col.isin(*sentinels), 1).otherwise(0) if sentinels else F.lit(0)
+                ).alias(f"{safe}_sentinel")
+            )
             dtype = live_types.get(column.name, column.data_type.lower())
             if "string" in dtype or "char" in dtype or "varchar" in dtype:
                 aliases[column.name].update(
@@ -289,6 +322,7 @@ class TableProfiler:
                 )
                 patterns = self.request.expected_string_patterns.get(column.name, ())
                 aliases[column.name]["patterns"] = f"{safe}_patterns"
+                aliases[column.name]["parse_failures"] = f"{safe}_parse_failures"
                 expressions.append(
                     F.array(
                         *[
@@ -301,6 +335,18 @@ class TableProfiler:
                     if patterns
                     else F.lit([]).alias(f"{safe}_patterns")
                 )
+                if patterns:
+                    matches = None
+                    for pattern in patterns:
+                        expression = col.rlike(pattern)
+                        matches = expression if matches is None else (matches | expression)
+                    expressions.append(
+                        F.sum(F.when(col.isNotNull() & ~matches, 1).otherwise(0)).alias(
+                            f"{safe}_parse_failures"
+                        )
+                    )
+                else:
+                    expressions.append(F.lit(0).alias(f"{safe}_parse_failures"))
             if _is_numeric_dtype(dtype):
                 aliases[column.name].update(
                     {
@@ -356,6 +402,14 @@ class TableProfiler:
                         "length_mean": f"{safe}_length_mean",
                         "length_min": f"{safe}_length_min",
                         "length_max": f"{safe}_length_max",
+                        "length_percentiles": f"{safe}_length_percentiles",
+                        "uppercase": f"{safe}_uppercase",
+                        "lowercase": f"{safe}_lowercase",
+                        "leading_trailing_whitespace": f"{safe}_leading_trailing_whitespace",
+                        "digit_only": f"{safe}_digit_only",
+                        "alphabetic": f"{safe}_alphabetic",
+                        "alphanumeric": f"{safe}_alphanumeric",
+                        "contains_whitespace": f"{safe}_contains_whitespace",
                     }
                 )
                 expressions.extend(
@@ -363,6 +417,30 @@ class TableProfiler:
                         F.avg(F.length(col)).alias(f"{safe}_length_mean"),
                         F.min(F.length(col)).alias(f"{safe}_length_min"),
                         F.max(F.length(col)).alias(f"{safe}_length_max"),
+                        F.percentile_approx(
+                            F.length(col), [0.25, 0.5, 0.75, 0.95], self.request.percentile_accuracy
+                        ).alias(f"{safe}_length_percentiles"),
+                        F.sum(F.when(col == F.upper(col), 1).otherwise(0)).alias(
+                            f"{safe}_uppercase"
+                        ),
+                        F.sum(F.when(col == F.lower(col), 1).otherwise(0)).alias(
+                            f"{safe}_lowercase"
+                        ),
+                        F.sum(F.when(col != F.trim(col), 1).otherwise(0)).alias(
+                            f"{safe}_leading_trailing_whitespace"
+                        ),
+                        F.sum(F.when(col.rlike(r"^[0-9]+$"), 1).otherwise(0)).alias(
+                            f"{safe}_digit_only"
+                        ),
+                        F.sum(F.when(col.rlike(r"^[A-Za-z]+$"), 1).otherwise(0)).alias(
+                            f"{safe}_alphabetic"
+                        ),
+                        F.sum(F.when(col.rlike(r"^[A-Za-z0-9]+$"), 1).otherwise(0)).alias(
+                            f"{safe}_alphanumeric"
+                        ),
+                        F.sum(F.when(col.rlike(r"\s"), 1).otherwise(0)).alias(
+                            f"{safe}_contains_whitespace"
+                        ),
                     )
                 )
             elif "date" in dtype or "timestamp" in dtype:
@@ -387,6 +465,23 @@ class TableProfiler:
                                 1,
                             ).otherwise(0)
                         ).alias(f"{safe}_midnight"),
+                    )
+                )
+            elif dtype.startswith("array") or dtype.startswith("map"):
+                aliases[column.name].update(
+                    {
+                        "complex_size_mean": f"{safe}_complex_size_mean",
+                        "complex_size_max": f"{safe}_complex_size_max",
+                        "complex_size_p95": f"{safe}_complex_size_p95",
+                    }
+                )
+                expressions.extend(
+                    (
+                        F.avg(F.size(col)).alias(f"{safe}_complex_size_mean"),
+                        F.max(F.size(col)).alias(f"{safe}_complex_size_max"),
+                        F.percentile_approx(
+                            F.size(col), 0.95, self.request.percentile_accuracy
+                        ).alias(f"{safe}_complex_size_p95"),
                     )
                 )
         result = scan.agg(*expressions).first().asDict(recursive=True)
@@ -475,6 +570,24 @@ class TableProfiler:
                                 "count_method": "spark_filter_count",
                             },
                         )
+                frequency_summary = (
+                    scan.where(col.isNotNull())
+                    .groupBy(col)
+                    .count()
+                    .agg(
+                        F.max("count").alias("max_frequency"),
+                        F.sum(F.when(F.col("count") > 1, F.col("count")).otherwise(0)).alias(
+                            "repeated_rows"
+                        ),
+                    )
+                    .first()
+                )
+                metrics["dominant_value_share"] = evidence(
+                    float(frequency_summary["max_frequency"] or 0) / row_count if row_count else 0.0
+                )
+                metrics["repeated_value_rows"] = evidence(
+                    int(frequency_summary["repeated_rows"] or 0)
+                )
             elif "string" in dtype or "char" in dtype or "varchar" in dtype:
                 distinct_value = int(result.get(names["distinct"]) or 0)
                 kind = (
@@ -491,8 +604,18 @@ class TableProfiler:
                     "mean_length": evidence(result.get(names["length_mean"])),
                     "min_length": evidence(result.get(names["length_min"])),
                     "max_length": evidence(result.get(names["length_max"])),
+                    "length_percentiles": evidence(result.get(names["length_percentiles"])),
                     "blank_count": evidence(result.get(names["blank"])),
                     "whitespace_count": evidence(result.get(names["whitespace"])),
+                    "uppercase_count": evidence(result.get(names["uppercase"])),
+                    "lowercase_count": evidence(result.get(names["lowercase"])),
+                    "leading_trailing_whitespace_count": evidence(
+                        result.get(names["leading_trailing_whitespace"])
+                    ),
+                    "digit_only_count": evidence(result.get(names["digit_only"])),
+                    "alphabetic_count": evidence(result.get(names["alphabetic"])),
+                    "alphanumeric_count": evidence(result.get(names["alphanumeric"])),
+                    "contains_whitespace_count": evidence(result.get(names["contains_whitespace"])),
                 }
                 pattern_counts = result.get(names["patterns"]) or []
                 patterns = self.request.expected_string_patterns.get(column.name, ())
@@ -502,6 +625,19 @@ class TableProfiler:
                             pattern: (int(count or 0) / row_count if row_count else 0.0)
                             for pattern, count in zip(patterns, pattern_counts, strict=True)
                         }
+                    )
+                    metrics["parse_failure_count"] = evidence(
+                        result.get(names["parse_failures"]),
+                        method=(
+                            MetricMethod.EXACT
+                            if self.request.mode is ProfileMode.FULL
+                            else MetricMethod.SAMPLED
+                        ),
+                        population_scope=(
+                            PopulationScope.FULL
+                            if self.request.mode is ProfileMode.FULL
+                            else PopulationScope.SAMPLE
+                        ),
                     )
                 if kind is ColumnProfileKind.CATEGORICAL:
                     policy = (
@@ -573,6 +709,29 @@ class TableProfiler:
                     metrics[bucket_name] = evidence(
                         {str(row["bucket"]): int(row["count"]) for row in bucket_rows}
                     )
+                from pyspark.sql.window import Window
+
+                ordered = (
+                    scan.where(col.isNotNull())
+                    .select(col.alias("event_time"))
+                    .withColumn(
+                        "previous_event_time",
+                        F.lag("event_time").over(Window.orderBy("event_time")),
+                    )
+                    .where(F.col("previous_event_time").isNotNull())
+                    .withColumn(
+                        "gap_seconds",
+                        F.unix_timestamp("event_time") - F.unix_timestamp("previous_event_time"),
+                    )
+                )
+                gap_summary = ordered.agg(
+                    F.max("gap_seconds").alias("max_gap_seconds"),
+                    F.sum(F.when(F.col("gap_seconds") > 0, 1).otherwise(0)).alias(
+                        "positive_gap_count"
+                    ),
+                ).first()
+                metrics["max_gap_seconds"] = evidence(gap_summary["max_gap_seconds"])
+                metrics["positive_gap_count"] = evidence(gap_summary["positive_gap_count"])
             elif dtype in {"boolean", "bool"}:
                 kind = ColumnProfileKind.CATEGORICAL
                 metrics = {
@@ -585,12 +744,26 @@ class TableProfiler:
             elif dtype.startswith("array"):
                 kind = ColumnProfileKind.ARRAY
                 metrics = {
-                    "complex_type_evidence": evidence(None, warning="array_values_not_retained")
+                    "complex_type_evidence": evidence(
+                        {
+                            "size_mean": result.get(names["complex_size_mean"]),
+                            "size_max": result.get(names["complex_size_max"]),
+                            "size_p95": result.get(names["complex_size_p95"]),
+                        },
+                        warning="array_values_not_retained",
+                    )
                 }
             elif dtype.startswith("map"):
                 kind = ColumnProfileKind.MAP
                 metrics = {
-                    "complex_type_evidence": evidence(None, warning="map_values_not_retained")
+                    "complex_type_evidence": evidence(
+                        {
+                            "size_mean": result.get(names["complex_size_mean"]),
+                            "size_max": result.get(names["complex_size_max"]),
+                            "size_p95": result.get(names["complex_size_p95"]),
+                        },
+                        warning="map_values_not_retained",
+                    )
                 }
             elif dtype.startswith("struct"):
                 kind = ColumnProfileKind.STRUCT
@@ -670,6 +843,20 @@ class TableProfiler:
                     }
                 if conditional:
                     metrics["conditional_nulls"] = evidence(conditional)
+            if self.request.sentinel_candidates.get(column.name):
+                metrics["sentinel_count"] = evidence(
+                    result.get(names["sentinel"]),
+                    method=(
+                        MetricMethod.EXACT
+                        if self.request.mode is ProfileMode.FULL
+                        else MetricMethod.SAMPLED
+                    ),
+                    population_scope=(
+                        PopulationScope.FULL
+                        if self.request.mode is ProfileMode.FULL
+                        else PopulationScope.SAMPLE
+                    ),
+                )
             metrics = {
                 key: value if isinstance(value, MetricEvidence) else evidence(value)
                 for key, value in metrics.items()
@@ -727,6 +914,15 @@ class TableProfiler:
                         population_scope=PopulationScope.FULL
                         if self.request.mode is ProfileMode.FULL
                         else PopulationScope.SAMPLE,
+                        calculation_method=CalculationMethod.EXACT
+                        if self.request.mode is ProfileMode.FULL
+                        else CalculationMethod.APPROXIMATE,
+                        sample_fraction=None
+                        if self.request.mode is ProfileMode.FULL
+                        else self.request.sample_fraction,
+                        sample_seed=None
+                        if self.request.mode is ProfileMode.FULL
+                        else self.request.sample_seed,
                     ),
                     null_count=evidence(
                         null_count,
@@ -736,6 +932,15 @@ class TableProfiler:
                         population_scope=PopulationScope.FULL
                         if self.request.mode is ProfileMode.FULL
                         else PopulationScope.SAMPLE,
+                        calculation_method=CalculationMethod.EXACT
+                        if self.request.mode is ProfileMode.FULL
+                        else CalculationMethod.APPROXIMATE,
+                        sample_fraction=None
+                        if self.request.mode is ProfileMode.FULL
+                        else self.request.sample_fraction,
+                        sample_seed=None
+                        if self.request.mode is ProfileMode.FULL
+                        else self.request.sample_seed,
                     ),
                     null_rate=evidence(
                         null_count / row_count if row_count else 0.0,
@@ -745,6 +950,15 @@ class TableProfiler:
                         population_scope=PopulationScope.FULL
                         if self.request.mode is ProfileMode.FULL
                         else PopulationScope.SAMPLE,
+                        calculation_method=CalculationMethod.EXACT
+                        if self.request.mode is ProfileMode.FULL
+                        else CalculationMethod.APPROXIMATE,
+                        sample_fraction=None
+                        if self.request.mode is ProfileMode.FULL
+                        else self.request.sample_fraction,
+                        sample_seed=None
+                        if self.request.mode is ProfileMode.FULL
+                        else self.request.sample_seed,
                     ),
                     metrics=metrics,
                     outlier_findings=outliers,
@@ -754,7 +968,7 @@ class TableProfiler:
                     if kind is ColumnProfileKind.CATEGORICAL
                     and (
                         self.request.sensitive_value_retention_policy
-                    if column.tags or column.sensitivity_signals
+                        if column.tags or column.sensitivity_signals
                         else self.request.value_retention_policy
                     )
                     is not ValueRetentionPolicy.ALLOW_SAFE_VALUES
@@ -889,7 +1103,18 @@ class TableProfiler:
                         "warning": "business_event_column_missing_or_unreadable",
                     },
                 )
-        return profile
+        return replace(
+            profile,
+            execution_receipt={
+                "mode": self.request.mode.value,
+                "sampling_method": profile.sampling_method,
+                "sample_fraction": self.request.sample_fraction,
+                "sample_seed": self.request.sample_seed,
+                "stable_key_column": self.request.stable_key_column,
+                "source_row_count_available": self.request.mode is ProfileMode.FULL,
+                "profiled_column_count": len(profiles),
+            },
+        )
 
     def run(self, state: AgentState, rows: Iterable[Mapping[str, Any]]) -> ToolResult:
         profile = self.profile_rows(rows)

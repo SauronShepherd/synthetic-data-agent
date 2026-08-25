@@ -15,6 +15,7 @@ class ArtifactType(StrEnum):
     RELATIONSHIP_ANALYSIS = "relationship_analysis"
     DEPENDENCY_GRAPH = "dependency_graph"
     RUN_MANIFEST = "run_manifest"
+    PATTERN_REGISTRY = "pattern_registry"
 
 
 class ArtifactStatus(StrEnum):
@@ -74,6 +75,7 @@ class ArtifactRef:
     content_checksum: str | None = None
     input_artifact_ids: tuple[str, ...] = ()
     error_code: str | None = None
+    error_message_safe: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)

@@ -9,6 +9,7 @@ from sda.artifacts.manifest import RunManifest
 from sda.models import AgentState
 from sda.orchestrator import SyntheticDataAgent
 from sda.tools.base import AgentTool
+from sda.version import __version__
 
 
 def analyze_scope(
@@ -16,7 +17,7 @@ def analyze_scope(
     tools: Iterable[AgentTool],
     *,
     environment: str = "local",
-    tool_version: str = "0.6.0.dev0",
+    tool_version: str = __version__,
     configuration_hash: str = "workflow-default",
 ) -> tuple[AgentState, RunManifest]:
     """Run supplied deterministic tools and return a linked run manifest.

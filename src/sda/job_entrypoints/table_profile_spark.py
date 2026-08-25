@@ -36,6 +36,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--column-denylist", default="")
     parser.add_argument("--sample-fraction", type=float, default=0.1)
     parser.add_argument("--sample-seed", type=int, default=42)
+    parser.add_argument("--stable-key-column", default=None)
     parser.add_argument("--max-category-values", type=int, default=100)
     parser.add_argument("--percentile-accuracy", type=int, default=10000)
     parser.add_argument("--business-event-column", default="")
@@ -65,6 +66,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--profile-schema", default=os.getenv("SDA_PROFILE_SCHEMA", "profiles"))
     parser.add_argument("--metadata-inventory-id", default="")
     parser.add_argument("--metadata-inventory-table", default="")
+    parser.add_argument(
+        "--artifact-registry-table", default=os.getenv("SDA_ARTIFACT_REGISTRY_TABLE", "")
+    )
+    parser.add_argument("--run-id", default=os.getenv("SDA_RUN_ID", "table-profile-local"))
+    parser.add_argument("--environment", default=os.getenv("DATABRICKS_BUNDLE_TARGET", "dev"))
     return parser.parse_args(argv)
 
 
@@ -76,6 +82,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         mode=ProfileMode(args.mode),
         sample_fraction=1.0 if args.mode == "full" else args.sample_fraction,
         sample_seed=args.sample_seed,
+        stable_key_column=args.stable_key_column or None,
         column_allowlist=tuple(
             name.strip() for name in re.split(r"[,;]", args.column_allowlist) if name.strip()
         ),
@@ -196,17 +203,35 @@ def main(argv: Sequence[str] | None = None) -> None:
         history = (
             spark.sql(f"DESCRIBE HISTORY {source_name.quoted}")
             .select("version", "timestamp", "operation")
-            .limit(1)
+            .orderBy("version", ascending=False)
+            .limit(100)
             .collect()
         )
         if history:
-            source_version = str(history[0]["version"])
+            latest = history[0]
+            data_operations = {
+                "WRITE",
+                "CREATE TABLE AS SELECT",
+                "REPLACE TABLE AS SELECT",
+                "MERGE",
+                "UPDATE",
+                "DELETE",
+                "COPY INTO",
+            }
+            latest_data_change = next(
+                (item for item in history if str(item["operation"]).upper() in data_operations),
+                latest,
+            )
+            source_version = str(latest["version"])
             storage_freshness = {
                 "available": True,
                 "method": "metadata_derived",
                 "latest_version": source_version,
-                "latest_commit_timestamp": str(history[0]["timestamp"]),
-                "latest_operation": str(history[0]["operation"]),
+                "latest_commit_timestamp": str(latest["timestamp"]),
+                "latest_operation": str(latest["operation"]),
+                "latest_data_change_version": str(latest_data_change["version"]),
+                "latest_data_change_timestamp": str(latest_data_change["timestamp"]),
+                "latest_data_change_operation": str(latest_data_change["operation"]),
             }
             snapshot_warning = ""
     except Exception:
@@ -296,6 +321,51 @@ def main(argv: Sequence[str] | None = None) -> None:
         f"`{args.profile_catalog}`.`{args.profile_schema}`.profile",
         reuse_existing=request.reuse_existing,
     )
+    if args.artifact_registry_table:
+        from datetime import UTC, datetime
+
+        from sda.artifacts.delta import persist_artifact_registry
+        from sda.artifacts.fingerprint import fingerprint
+        from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType, SourceReference
+        from sda.version import __version__
+
+        profile_artifact = ArtifactRef(
+            artifact_id=profile.profile_id,
+            artifact_type=ArtifactType.TABLE_PROFILE,
+            artifact_schema_version=profile.profile_schema_version,
+            status=ArtifactStatus.COMPLETE,
+            tool_name="table_profiler",
+            tool_version=__version__,
+            strategy_version="table-profile-v1",
+            run_id=args.run_id,
+            environment=args.environment,
+            created_at=datetime.now(UTC).isoformat(),
+            configuration_hash=profile.configuration_hash,
+            primary_location=locations["table_profiles"],
+            related_locations={
+                "column_profiles": locations["column_profiles"],
+                "distributions": locations["profile_distributions"],
+                "registry": args.artifact_registry_table,
+            },
+            source_references=(
+                SourceReference(
+                    profile.source_table,
+                    "TABLE",
+                    "delta_version" if profile.source_version else "best_effort",
+                    profile.source_version,
+                    None,
+                    None,
+                    metadata_inventory_id=profile.metadata_inventory_id,
+                ),
+            ),
+            checksum=fingerprint(profile.to_dict()),
+            summary=profile.agent_summary,
+            warnings=profile.warnings,
+            input_artifact_ids=(
+                (profile.metadata_inventory_id,) if profile.metadata_inventory_id else ()
+            ),
+        )
+        persist_artifact_registry(spark, profile_artifact, args.artifact_registry_table)
     print(
         json.dumps(
             {

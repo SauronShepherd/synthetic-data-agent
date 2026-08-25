@@ -95,7 +95,7 @@ def information_schema_queries(catalog: str, schema: str | None = None) -> tuple
         (
             "SELECT constraint_catalog, constraint_schema, constraint_name, "
             "table_catalog AS catalog, table_schema AS schema, table_name AS name, "
-            "constraint_type, enforced "
+            "constraint_type, enforced, rely "
             "FROM system.information_schema.table_constraints "
             f"WHERE {catalog_predicate}{schema_predicate}"
         ),
@@ -389,7 +389,10 @@ class InformationSchemaMetadataAdapter:
         columns = self._executor.execute(_restrict_query(queries[3], selected))
         table_tags = self._safe_execute(_restrict_query(queries[4], selected))
         column_tags = self._safe_execute(_restrict_query(queries[5], selected))
-        constraints = self._safe_execute(_restrict_query(queries[6], selected))
+        constraints = self._safe_execute_with_fallback(
+            _restrict_query(queries[6], selected),
+            _restrict_query(queries[6].replace(", rely ", " "), selected),
+        )
         key_columns = self._safe_execute(_restrict_query(queries[7], selected))
         referential_constraints = self._safe_execute(queries[8])
         constraint_tables = self._safe_execute(queries[9])
@@ -433,6 +436,20 @@ class InformationSchemaMetadataAdapter:
             self._query_errors[source] = type(exc).__name__
             self._query_warnings.append(f"{source}_metadata_unavailable")
             return ()
+
+    def _safe_execute_with_fallback(
+        self, primary_sql: str, fallback_sql: str
+    ) -> Sequence[Mapping[str, Any]]:
+        try:
+            rows = self._executor.execute(primary_sql)
+            self._query_status[_metadata_source_name(primary_sql)] = "success"
+            return rows
+        except Exception as exc:  # pragma: no cover - Databricks-version dependent
+            source = _metadata_source_name(primary_sql)
+            self._query_status[source] = "fallback"
+            self._query_errors[source] = type(exc).__name__
+            self._query_warnings.append("constraint_rely_metadata_unavailable")
+            return self._safe_execute(fallback_sql)
 
 
 class UcMetadataReader:
@@ -840,18 +857,36 @@ def _build_constraints_by_table(
                 enforced=str(row.get("enforced", "NO")).upper() == "YES",
                 validated=False,
                 match_option=_optional_str(
-                    next((item.get("match_option") for item in referential_constraints
-                          if _constraint_key(item) == constraint_key), None)
+                    next(
+                        (
+                            item.get("match_option")
+                            for item in referential_constraints
+                            if _constraint_key(item) == constraint_key
+                        ),
+                        None,
+                    )
                 ),
                 update_rule=_optional_str(
-                    next((item.get("update_rule") for item in referential_constraints
-                          if _constraint_key(item) == constraint_key), None)
+                    next(
+                        (
+                            item.get("update_rule")
+                            for item in referential_constraints
+                            if _constraint_key(item) == constraint_key
+                        ),
+                        None,
+                    )
                 ),
                 delete_rule=_optional_str(
-                    next((item.get("delete_rule") for item in referential_constraints
-                          if _constraint_key(item) == constraint_key), None)
+                    next(
+                        (
+                            item.get("delete_rule")
+                            for item in referential_constraints
+                            if _constraint_key(item) == constraint_key
+                        ),
+                        None,
+                    )
                 ),
-                rely=None,
+                rely=_optional_bool(row.get("rely")),
             )
         )
     return {key: tuple(values) for key, values in grouped.items()}
@@ -948,6 +983,19 @@ def _optional_str(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _optional_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"true", "yes", "y", "1"}:
+        return True
+    if text in {"false", "no", "n", "0"}:
+        return False
+    return None
 
 
 def _row_to_mapping(row: Any) -> Mapping[str, Any]:

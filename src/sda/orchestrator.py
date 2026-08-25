@@ -70,3 +70,5 @@ class SyntheticDataAgent:
         state.durable_artifacts.extend(result.durable_artifacts)
         state.warnings.extend(result.warnings)
         state.completed_tools.append(result.tool)
+        if result.stage is RunStage.PATTERNS_DETECTED and result.durable_artifacts:
+            state.pattern_artifact_id = result.durable_artifacts[-1].artifact_id

@@ -187,6 +187,7 @@ class AgentState:
     durable_artifacts: list[Any] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     completed_tools: list[ToolName] = field(default_factory=list)
+    pattern_artifact_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable state snapshot."""

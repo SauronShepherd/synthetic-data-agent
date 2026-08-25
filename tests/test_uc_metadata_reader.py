@@ -47,6 +47,27 @@ def test_check_constraint_expression_is_normalized() -> None:
     assert result[("main", "sales", "orders")][0].check_clause == "amount > 0"
 
 
+def test_constraint_rely_is_preserved_as_context_not_validation() -> None:
+    from sda.tools.uc_metadata_reader import _build_constraints_by_table
+
+    result = _build_constraints_by_table(
+        [{
+            "constraint_catalog": "main", "constraint_schema": "sales",
+            "constraint_name": "pk_orders", "catalog": "main", "schema": "sales",
+            "name": "orders", "constraint_type": "PRIMARY KEY", "enforced": "YES",
+            "rely": "YES",
+        }],
+        [{
+            "constraint_catalog": "main", "constraint_schema": "sales",
+            "constraint_name": "pk_orders", "column_name": "order_id",
+            "ordinal_position": 1,
+        }], [], [], [], [],
+    )
+    constraint = result[("main", "sales", "orders")][0]
+    assert constraint.rely is True
+    assert constraint.validated is False
+
+
 def make_reader() -> UcMetadataReader:
     return UcMetadataReader(
         MetadataReadConfig(catalog_allowlist=("main",), table_patterns=("customers",)),
@@ -248,3 +269,20 @@ def test_information_schema_adapter_reads_real_query_results() -> None:
     assert table.constraints[0].name == "pk_customers"
     assert table.relationship_hints == ("PRIMARY KEY:customer_id",)
     assert any("information_schema.tables" in query.lower() for query in executor.queries)
+
+
+def test_information_schema_adapter_falls_back_when_rely_column_is_unsupported() -> None:
+    from sda.tools.uc_metadata_reader import InformationSchemaMetadataAdapter
+
+    class RelyUnsupported(FakeExecutor):
+        def execute(self, sql: str) -> tuple[dict[str, object], ...]:
+            if "table_constraints" in sql.lower() and "rely" in sql.lower():
+                raise RuntimeError("RELY column unavailable")
+            return super().execute(sql)
+
+    executor = RelyUnsupported()
+    inventory = InformationSchemaMetadataAdapter(executor).read_inventory(
+        MetadataReadConfig(catalog_allowlist=("main",), schema_allowlist=("sales",))
+    )
+    assert inventory.tables
+    assert any("rely" in warning for warning in inventory.warnings)

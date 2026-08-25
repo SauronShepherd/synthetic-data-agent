@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Any
 
 from sda.artifacts.fingerprint import fingerprint
@@ -41,7 +42,7 @@ def persist_rows(
         ]
         values = [
             {
-                key: json.dumps(value, default=str) if isinstance(value, (list, dict)) else value
+                key: json.dumps(value, default=str) if isinstance(value, list | dict) else value
                 for key, value in row.items()
             }
             for row in values
@@ -52,21 +53,31 @@ def persist_rows(
             keys = tuple(values[0]) if values else ("artifact_id", "status")
             schema = StructType([StructField(key, StringType(), True) for key in keys])
             frame = spark.createDataFrame(values, schema=schema)
-        except ModuleNotFoundError:
+        except (ModuleNotFoundError, TypeError):
             frame = spark.createDataFrame(values)
         try:
             from delta.tables import DeltaTable
 
             frame.createOrReplaceTempView("__sda_artifact_write")
             target = DeltaTable.forName(spark, location)
+            target_columns = {column.lower() for column in target.toDF().columns}
+            merge_condition = (
+                "target.artifact_id = source.artifact_id AND target.status = source.status"
+            )
+            if "evidence_id" in target_columns:
+                merge_condition += " AND target.evidence_id = source.evidence_id"
+            insert_values = {
+                column: f"source.{column}"
+                for column in frame.columns
+                if column.lower() in target_columns
+            }
             (
                 target.alias("target")
                 .merge(
                     frame.alias("source"),
-                    "target.artifact_id = source.artifact_id AND target.status = source.status "
-                    "AND target.evidence_id = source.evidence_id",
+                    merge_condition,
                 )
-                .whenNotMatchedInsertAll()
+                .whenNotMatchedInsert(values=insert_values)
                 .execute()
             )
         except (ImportError, ModuleNotFoundError):
@@ -106,6 +117,13 @@ def persist_artifact_registry(spark: Any, ref: ArtifactRef, location: str) -> No
         "primary_location": ref.primary_location,
         "summary": ref.summary,
         "error_code": ref.error_code,
+        "error_message_safe": ref.error_message_safe,
+        "related_locations_json": json.dumps(ref.related_locations, sort_keys=True),
+        "source_references_json": json.dumps(
+            [asdict(source) for source in ref.source_references], sort_keys=True, default=str
+        ),
+        "warnings_json": json.dumps(ref.warnings),
+        "input_artifact_ids_json": json.dumps(sorted(ref.input_artifact_ids)),
     }
     try:
         try:
@@ -146,34 +164,48 @@ def persist_artifact_lifecycle(
 ) -> ArtifactRef:
     """Publish one idempotent COMPLETE publication for bounded evidence.
 
-    Delta tables are append-only at the storage layer, so publication carries
-    a deterministic artifact id and writes the evidence/header once.  Readers
-    must select the unique COMPLETE row for that id; retries therefore do not
-    create a second writing/complete evidence pair.
+    The registry is the lifecycle header; the evidence table contains only
+    COMPLETE detail rows. Readers must select the unique COMPLETE registry
+    entry before loading details.
     """
     if ref.status is not ArtifactStatus.WRITING:
         raise ValueError("lifecycle publication must start with a writing artifact")
-    # Keep a lightweight pre-publication receipt for operational observability;
-    # raw evidence is written only once below, at COMPLETE.
-    receipt = {key: None for key in (rows[0] if rows else {"receipt": None})}
-    persist_rows(
-        spark,
-        [receipt],
-        evidence_location,
-        artifact_id=ref.artifact_id,
-        status=ArtifactStatus.WRITING.value,
-    )
     persist_artifact_registry(spark, ref, registry_location)
-    completed = ref.transition(ArtifactStatus.COMPLETE)
-    persist_rows(
-        spark,
-        rows,
-        evidence_location,
-        artifact_id=completed.artifact_id,
-        status=ArtifactStatus.COMPLETE.value,
-    )
-    persist_artifact_registry(spark, completed, registry_location)
-    return completed
+    try:
+        completed = ref.transition(ArtifactStatus.COMPLETE)
+        persist_rows(
+            spark,
+            rows,
+            evidence_location,
+            artifact_id=completed.artifact_id,
+            status=ArtifactStatus.COMPLETE.value,
+        )
+        persist_artifact_registry(spark, completed, registry_location)
+        return completed
+    except Exception as exc:
+        failed = ref.transition(ArtifactStatus.FAILED)
+        persist_artifact_registry(spark, failed, registry_location)
+        raise PersistenceError(
+            "failed to persist artifact lifecycle",
+            details={"artifact_id": ref.artifact_id, "error_code": "artifact_write_failed"},
+        ) from exc
+
+
+def persist_distributed_evidence(
+    spark: Any, frame: Any, location: str, *, analysis_id: str
+) -> None:
+    """Persist a Spark DataFrame without collecting distributed evidence to the driver."""
+    if not location or "." not in location:
+        raise ValueError("location must be a qualified table name")
+    try:
+        frame.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(
+            location
+        )
+    except Exception as exc:
+        raise PersistenceError(
+            "failed to persist distributed pattern evidence",
+            details={"location": location, "analysis_id": analysis_id},
+        ) from exc
 
 
 def persist_run_manifest(spark: Any, manifest: RunManifest, location: str) -> None:
@@ -199,7 +231,7 @@ def persist_run_manifest(spark: Any, manifest: RunManifest, location: str) -> No
     }
     try:
         values = {
-            key: json.dumps(value, default=str) if isinstance(value, (list, dict)) else value
+            key: json.dumps(value, default=str) if isinstance(value, list | dict) else value
             for key, value in row.items()
         }
         try:
@@ -207,7 +239,7 @@ def persist_run_manifest(spark: Any, manifest: RunManifest, location: str) -> No
 
             schema = StructType([StructField(key, StringType(), True) for key in row])
             frame = spark.createDataFrame([values], schema=schema)
-        except ModuleNotFoundError:
+        except (ModuleNotFoundError, TypeError):
             frame = spark.createDataFrame([values])
         _merge_or_append(frame, spark, location, "target.manifest_id = source.manifest_id")
     except Exception as exc:
@@ -225,6 +257,8 @@ def _merge_or_append(frame: Any, spark: Any, location: str, condition: str) -> N
         DeltaTable.forName(spark, location).alias("target").merge(
             frame.alias("source"), condition
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
+    except (ImportError, ModuleNotFoundError):
+        frame.write.format("delta").mode("append").saveAsTable(location)
     except Exception as exc:
         if not _is_missing_table_error(exc):
             raise

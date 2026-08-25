@@ -42,3 +42,28 @@ def numeric_metrics(values: Iterable[Any]) -> dict[str, Any]:
         "positive_infinity_count": sum(value == math.inf for value in raw),
         "negative_infinity_count": sum(value == -math.inf for value in raw),
     }
+
+
+def numeric_histogram(values: Iterable[Any], bins: int = 10) -> dict[str, Any]:
+    """Return deterministic equal-width bins without retaining source values."""
+    if bins < 1:
+        raise ValueError("bins must be positive")
+    nums = finite(values)
+    if not nums:
+        return {"available": False, "reason": "no_finite_numeric_values"}
+    lo, hi = min(nums), max(nums)
+    if lo == hi:
+        return {
+            "available": True,
+            "min": lo,
+            "max": hi,
+            "bins": [{"lower": lo, "upper": hi, "count": len(nums)}],
+        }
+    width = (hi - lo) / bins
+    counts = [0] * bins
+    for value in nums:
+        counts[min(bins - 1, int((value - lo) / width))] += 1
+    return {"available": True, "min": lo, "max": hi, "bins": [
+        {"lower": lo + i * width, "upper": lo + (i + 1) * width, "count": count}
+        for i, count in enumerate(counts)
+    ]}

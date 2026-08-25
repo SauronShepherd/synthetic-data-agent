@@ -44,28 +44,80 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     from pyspark.sql import SparkSession
 
+    from sda.artifacts.delta import persist_artifact_registry
+    from sda.artifacts.fingerprint import fingerprint
+    from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType, SourceReference
     from sda.config import load_settings
     from sda.tools.uc_metadata_reader import read_uc_metadata_with_spark
+    from sda.version import __version__
 
     args = _parse_args(argv)
     _apply_env_overrides(args)
+    if not args.run_id:
+        args.run_id = f"metadata-read-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
 
     settings = load_settings()
     spark = SparkSession.builder.getOrCreate()
     inventory = read_uc_metadata_with_spark(settings.metadata_read_config(), spark)
     payload = inventory.to_dict()
-    from sda.artifacts.fingerprint import fingerprint
-
     inventory_id = f"metadata_inventory_{fingerprint(payload)}"
     output_table = os.getenv("SDA_METADATA_OUTPUT_TABLE", "")
+    registry_table = args.artifact_registry_table or os.getenv("SDA_ARTIFACT_REGISTRY_TABLE", "")
     if output_table:
         row = {
             "inventory_id": inventory_id,
             "artifact_schema_version": "1.0",
             "created_at": datetime.now(UTC).isoformat(),
+            "status": "complete",
             "payload": json.dumps(payload, sort_keys=True),
         }
-        spark.createDataFrame([row]).write.format("delta").mode("append").saveAsTable(output_table)
+        frame = spark.createDataFrame([row])
+        try:
+            from delta.tables import DeltaTable
+
+            target = DeltaTable.forName(spark, output_table)
+            target_columns = {column.lower() for column in target.toDF().columns}
+            condition = "target.inventory_id = source.inventory_id"
+            if "status" in target_columns:
+                condition += " AND target.status = source.status"
+            values = {
+                column: f"source.{column}"
+                for column in frame.columns
+                if column.lower() in target_columns
+            }
+            target.alias("target").merge(frame.alias("source"), condition).whenMatchedUpdate(
+                set=values
+            ).whenNotMatchedInsert(values=values).execute()
+        except (ImportError, ModuleNotFoundError):
+            frame.write.format("delta").mode("append").saveAsTable(output_table)
+        except Exception as exc:
+            if "TABLE_OR_VIEW_NOT_FOUND" not in str(exc).upper():
+                raise
+            frame.write.format("delta").mode("append").saveAsTable(output_table)
+        if registry_table:
+            artifact = ArtifactRef(
+                artifact_id=inventory_id,
+                artifact_type=ArtifactType.METADATA_INVENTORY,
+                artifact_schema_version="1.0",
+                status=ArtifactStatus.COMPLETE,
+                tool_name="uc_metadata_reader",
+                tool_version=__version__,
+                strategy_version="metadata-read-v1",
+                run_id=args.run_id,
+                environment=args.environment,
+                created_at=datetime.now(UTC).isoformat(),
+                configuration_hash=fingerprint(vars(args)),
+                primary_location=output_table,
+                related_locations={"registry": registry_table},
+                source_references=(
+                    SourceReference(
+                        "unity_catalog", "METADATA", "metadata_only", None, None, None
+                    ),
+                ),
+                checksum=fingerprint(payload),
+                summary="Normalized Unity Catalog metadata inventory",
+            )
+            persist_artifact_registry(spark, artifact, registry_table)
     print(
         json.dumps(
             {**payload, "inventory_id": inventory_id, "output_table": output_table},
@@ -82,6 +134,9 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--table-patterns", default="")
     parser.add_argument("--max-metadata-objects", default="100")
     parser.add_argument("--output-table", default="")
+    parser.add_argument("--artifact-registry-table", default="")
+    parser.add_argument("--run-id", default="metadata-read-local")
+    parser.add_argument("--environment", default=os.getenv("DATABRICKS_BUNDLE_TARGET", "dev"))
     return parser.parse_args(argv)
 
 

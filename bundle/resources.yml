@@ -8,6 +8,10 @@ resources:
         workload: sda
         stage: metadata
       parameters:
+        - name: run_id
+          default: ""
+        - name: environment
+          default: ${bundle.target}
         - name: catalog_allowlist
           default: ${var.sda_catalog_allowlist}
         - name: schema_allowlist
@@ -18,12 +22,18 @@ resources:
           default: ${var.sda_max_metadata_objects}
         - name: output_table
           default: ${var.sda_metadata_inventory_table}
+        - name: artifact_registry_table
+          default: ${var.sda_artifact_registry_table}
 
       tasks:
         - task_key: read_uc_metadata
           spark_python_task:
             python_file: ../src/sda/job_entrypoints/metadata_read_spark.py
             parameters:
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --environment
+              - "{{job.parameters.environment}}"
               - --catalog-allowlist
               - "{{job.parameters.catalog_allowlist}}"
               - --schema-allowlist
@@ -34,6 +44,10 @@ resources:
               - "{{job.parameters.max_metadata_objects}}"
               - --output-table
               - "{{job.parameters.output_table}}"
+              - --artifact-registry-table
+              - "{{job.parameters.artifact_registry_table}}"
+              - --artifact-registry-table
+              - "{{job.parameters.artifact_registry_table}}"
           environment_key: uc_metadata_reader_environment
 
       environments:
@@ -63,6 +77,8 @@ resources:
           default: "0.1"
         - name: sample_seed
           default: "42"
+        - name: stable_key_column
+          default: ""
         - name: max_category_values
           default: "100"
         - name: percentile_accuracy
@@ -93,6 +109,12 @@ resources:
           default: ""
         - name: metadata_inventory_table
           default: ""
+        - name: artifact_registry_table
+          default: ${var.sda_artifact_registry_table}
+        - name: run_id
+          default: ""
+        - name: environment
+          default: ${bundle.target}
       tasks:
         - task_key: profile_table
           spark_python_task:
@@ -110,6 +132,8 @@ resources:
               - "{{job.parameters.sample_fraction}}"
               - --sample-seed
               - "{{job.parameters.sample_seed}}"
+              - --stable-key-column
+              - "{{job.parameters.stable_key_column}}"
               - --max-category-values
               - "{{job.parameters.max_category_values}}"
               - --percentile-accuracy
@@ -140,6 +164,12 @@ resources:
               - "{{job.parameters.metadata_inventory_id}}"
               - --metadata-inventory-table
               - "{{job.parameters.metadata_inventory_table}}"
+              - --artifact-registry-table
+              - "{{job.parameters.artifact_registry_table}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --environment
+              - "{{job.parameters.environment}}"
           environment_key: table_profiler_environment
       environments:
         - environment_key: table_profiler_environment
@@ -172,6 +202,8 @@ resources:
               - "{{job.parameters.output_table}}"
               - --run-id
               - "{{job.parameters.run_id}}"
+              - --environment
+              - "${bundle.target}"
               - --dry-run
               - "{{job.parameters.dry_run}}"
           environment_key: relationship_detector_environment
@@ -181,11 +213,13 @@ resources:
         - name: child_table
           default: ${var.sda_relationship_child_table}
         - name: parent_columns
-          default: id
+          default: franchiseID
         - name: child_columns
-          default: id
+          default: franchiseID
         - name: output_table
           default: ${var.sda_relationship_output_table}
+        - name: artifact_registry_table
+          default: ${var.sda_artifact_registry_table}
         - name: run_id
           default: ""
         - name: dry_run
@@ -217,6 +251,8 @@ resources:
               - "{{job.parameters.tables}}"
               - --run-id
               - "{{job.parameters.run_id}}"
+              - --environment
+              - "${bundle.target}"
               - --dry-run
               - "{{job.parameters.dry_run}}"
               - --profile
@@ -274,13 +310,106 @@ resources:
         - name: metadata_inventory_table
           default: ""
         - name: manifest_table
-          default: ""
+          default: ${var.sda_manifest_table}
         - name: relationship_output_table
           default: ${var.sda_relationship_output_table}
         - name: graph_output_table
           default: ${var.sda_graph_output_table}
       environments:
         - environment_key: analyze_scope_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
+    pattern_detector:
+      name: "[${bundle.target}] SDA Pattern Detector"
+      max_concurrent_runs: 1
+      timeout_seconds: 10800
+      tags:
+        workload: sda
+        stage: patterns
+      parameters:
+        - name: run_id
+          default: ""
+        - name: environment
+          default: ${bundle.target}
+        - name: artifact_registry_table
+          default: ${var.sda_artifact_registry_table}
+        - name: metadata_artifact_id
+          default: ""
+        - name: profile_artifact_ids_json
+          default: "[]"
+        - name: relationship_artifact_id
+          default: ""
+        - name: relationship_registry_table
+          default: ${var.sda_relationship_output_table}_registry
+        - name: dependency_graph_registry_table
+          default: ${var.sda_graph_output_table}_registry
+        - name: dependency_graph_artifact_id
+          default: ""
+        - name: source_table
+          default: ${var.sda_profile_source_table}
+        - name: mode
+          default: ${var.sda_pattern_mode}
+        - name: analysis_id
+          default: ""
+        - name: output_table
+          default: ${var.sda_pattern_registry_table}
+        - name: pattern_evidence_table
+          default: ${var.sda_pattern_evidence_table}
+        - name: min_support_rows
+          default: ${var.sda_pattern_min_support_rows}
+        - name: min_support_rate
+          default: ${var.sda_pattern_min_support_rate}
+        - name: sample_fraction
+          default: ${var.sda_pattern_sample_fraction}
+        - name: sample_seed
+          default: ${var.sda_pattern_sample_seed}
+      tasks:
+        - task_key: detect_patterns
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/pattern_detect_spark.py
+            parameters:
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --environment
+              - "{{job.parameters.environment}}"
+              - --artifact-registry-table
+              - "{{job.parameters.artifact_registry_table}}"
+              - --metadata-artifact-id
+              - "{{job.parameters.metadata_artifact_id}}"
+              - --profile-artifact-ids-json
+              - "{{job.parameters.profile_artifact_ids_json}}"
+              - --relationship-artifact-id
+              - "{{job.parameters.relationship_artifact_id}}"
+              - --relationship-registry-table
+              - "{{job.parameters.relationship_registry_table}}"
+              - --dependency-graph-registry-table
+              - "{{job.parameters.dependency_graph_registry_table}}"
+              - --dependency-graph-artifact-id
+              - "{{job.parameters.dependency_graph_artifact_id}}"
+              - --source-table
+              - "{{job.parameters.source_table}}"
+              - --mode
+              - "{{job.parameters.mode}}"
+              - --analysis-id
+              - "{{job.parameters.analysis_id}}"
+              - --output-table
+              - "{{job.parameters.output_table}}"
+              - --pattern-evidence-table
+              - "{{job.parameters.pattern_evidence_table}}"
+              - --min-support-rows
+              - "{{job.parameters.min_support_rows}}"
+              - --min-support-rate
+              - "{{job.parameters.min_support_rate}}"
+              - --sample-fraction
+              - "{{job.parameters.sample_fraction}}"
+              - --sample-seed
+              - "{{job.parameters.sample_seed}}"
+          environment_key: pattern_detector_environment
+      environments:
+        - environment_key: pattern_detector_environment
           spec:
             environment_version: "2"
             dependencies:

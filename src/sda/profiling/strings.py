@@ -6,7 +6,8 @@ from typing import Any
 
 
 def string_metrics(values: Iterable[Any], expected_patterns: Iterable[str] = ()) -> dict[str, Any]:
-    strings = [str(value) for value in values if value is not None]
+    raw = list(values)
+    strings = [str(value) for value in raw if value is not None]
     lengths = [len(value) for value in strings]
     patterns = tuple(expected_patterns)
     signature_counts: dict[str, int] = {}
@@ -41,4 +42,15 @@ def string_metrics(values: Iterable[Any], expected_patterns: Iterable[str] = ())
             else 0.0
             for pattern in patterns
         },
+        "null_count": sum(value is None for value in raw),
+        "punctuation_only_count": sum(
+            bool(value)
+            and not any(char.isalnum() for char in value)
+            and not value.isspace()
+            for value in strings
+        ),
+        "contains_punctuation_count": sum(
+            any(not char.isalnum() and not char.isspace() for char in value)
+            for value in strings
+        ),
     }

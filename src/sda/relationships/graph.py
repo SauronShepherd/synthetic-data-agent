@@ -10,11 +10,18 @@ class DependencyGraph:
         self.edges: dict[str, set[str]] = defaultdict(set)
 
     def add_edge(self, parent: str, child: str) -> None:
+        parent = self._canonical(parent)
+        child = self._canonical(child)
         self.edges[parent].add(child)
         self.edges.setdefault(child, set())
 
     def add_node(self, node: str) -> None:
-        self.edges.setdefault(node, set())
+        self.edges.setdefault(self._canonical(node), set())
+
+    @staticmethod
+    def _canonical(node: str) -> str:
+        """Normalize qualified identifiers while retaining legacy names safely."""
+        return ".".join(part.strip() for part in node.split(".") if part.strip())
 
     def isolates(self) -> tuple[str, ...]:
         incoming = {child for children in self.edges.values() for child in children}
@@ -106,3 +113,15 @@ class DependencyGraph:
             if node not in indices:
                 visit(node)
         return tuple(sorted(components))
+
+    def blocked_by_cycles(self) -> tuple[str, ...]:
+        """Return cycle members and every downstream node they cannot precede safely."""
+        blocked = {node for cycle in self.cycles() for node in cycle}
+        pending = list(blocked)
+        while pending:
+            node = pending.pop()
+            for child in self.edges[node]:
+                if child not in blocked:
+                    blocked.add(child)
+                    pending.append(child)
+        return tuple(sorted(blocked))

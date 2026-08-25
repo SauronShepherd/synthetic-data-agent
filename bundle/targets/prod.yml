@@ -16,6 +16,10 @@ targets:
       sda_profile_catalog: sda_prod
       sda_profile_schema: profiles
       sda_metadata_inventory_table: sda_prod.profiles.metadata_inventory
+      sda_manifest_table: sda_prod.profiles.run_manifests
+      sda_artifact_registry_table: sda_prod.profiles.artifact_registry
+      sda_pattern_registry_table: sda_prod.profiles.pattern_registry
+      sda_pattern_evidence_table: sda_prod.profiles.pattern_evidence
       sda_scope_catalog: sda_prod
       sda_scope_schema: sample_source
       sda_relationship_parent_table: __REQUIRED_CONTROLLED_PARENT_TABLE__
