@@ -12,9 +12,9 @@ from sda.metadata_models import (
     ColumnMetadata,
     ConstraintKind,
     ConstraintMetadata,
+    MetadataInventory,
     ObjectType,
     TableMetadata,
-    MetadataInventory,
 )
 from sda.runtime.errors import ArtifactCompatibilityError, ArtifactNotFoundError
 

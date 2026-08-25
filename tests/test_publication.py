@@ -10,9 +10,12 @@ from sda.validation import CheckStatus, ValidationCheck, ValidationReport
 def reports(*, valid: bool = True, private: bool = True) -> tuple[ValidationReport, PrivacyReport]:
     validation = ValidationReport(
         (ValidationCheck("schema", CheckStatus.PASS if valid else CheckStatus.FAIL, "ok", {}),),
-        "qa", CheckStatus.PASS if valid else CheckStatus.FAIL,
+        "qa",
+        CheckStatus.PASS if valid else CheckStatus.FAIL,
     )
-    privacy = PrivacyReport(PrivacyDecision.APPROVED if private else PrivacyDecision.REVIEW_REQUIRED, (), "strict")
+    privacy = PrivacyReport(
+        PrivacyDecision.APPROVED if private else PrivacyDecision.REVIEW_REQUIRED, (), "strict"
+    )
     return validation, privacy
 
 
@@ -25,7 +28,9 @@ def staged() -> tuple[PublicationRegistry, Publication]:
 def test_publication_requires_both_gates_and_supports_alias() -> None:
     registry, _ = staged()
     validation, privacy = reports()
-    result = registry.publish("dataset", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest")
+    result = registry.publish(
+        "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest"
+    )
     assert result.status is PublicationStatus.PUBLISHED
     assert result.published_by == "reviewer"
 
@@ -45,6 +50,8 @@ def test_publication_rejects_failed_validation_or_privacy() -> None:
 def test_revoke_removes_alias() -> None:
     registry, _ = staged()
     validation, privacy = reports()
-    registry.publish("dataset", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest")
+    registry.publish(
+        "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest"
+    )
     revoked = registry.revoke("dataset", "v1", reason="policy change")
     assert revoked.status is PublicationStatus.REVOKED

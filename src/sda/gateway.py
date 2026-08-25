@@ -29,7 +29,9 @@ class GatewayBudget:
         self.requests = 0
         self.estimated_cost = 0.0
 
-    def authorize(self, *, model: str, tool: str | None = None, estimated_cost: float = 0.0) -> None:
+    def authorize(
+        self, *, model: str, tool: str | None = None, estimated_cost: float = 0.0
+    ) -> None:
         if model not in self.policy.allowed_models:
             raise GatewayDenied(f"model is not allowed: {model}")
         if tool is not None and tool not in self.policy.allowed_tools:

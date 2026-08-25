@@ -6,7 +6,9 @@ from sda.gateway import GatewayBudget, GatewayDenied, GatewayPolicy
 
 
 def test_gateway_allows_scoped_calls_until_budget() -> None:
-    budget = GatewayBudget(GatewayPolicy(("model-a",), ("metadata",), max_requests_per_run=1, max_estimated_cost=1.0))
+    budget = GatewayBudget(
+        GatewayPolicy(("model-a",), ("metadata",), max_requests_per_run=1, max_estimated_cost=1.0)
+    )
     budget.authorize(model="model-a", tool="metadata", estimated_cost=0.5)
     with pytest.raises(GatewayDenied, match="request budget"):
         budget.authorize(model="model-a", tool="metadata", estimated_cost=0.1)

@@ -238,9 +238,14 @@ class PatternDetector:
                 if metric.get("support_rows", 0) >= self.config.min_support_rows:
                     patterns += (
                         self._pattern(
-                            run_id, table, PatternFamily.CONDITIONAL_MISSINGNESS,
-                            (driver, outcome), {driver: rows[0].get(driver)},
-                            {"outcome": outcome}, int(metric["support_rows"]), metric,
+                            run_id,
+                            table,
+                            PatternFamily.CONDITIONAL_MISSINGNESS,
+                            (driver, outcome),
+                            {driver: rows[0].get(driver)},
+                            {"outcome": outcome},
+                            int(metric["support_rows"]),
+                            metric,
                         ),
                     )
         # State transitions are entity/lifecycle evidence, not hard business rules.
@@ -258,10 +263,14 @@ class PatternDetector:
                 if transition["transition_count"] >= self.config.min_support_rows:
                     patterns += (
                         self._pattern(
-                            run_id, table, PatternFamily.STATE_TRANSITION, (state,),
+                            run_id,
+                            table,
+                            PatternFamily.STATE_TRANSITION,
+                            (state,),
                             {"from_state": transition["from_state"]},
                             {"to_state": transition["to_state"]},
-                            transition["transition_count"], transition,
+                            transition["transition_count"],
+                            transition,
                         ),
                     )
         # Evaluate approved/user rules and preserve their review semantics.
@@ -270,10 +279,14 @@ class PatternDetector:
             if evaluation.population_rows >= self.config.min_support_rows:
                 patterns += (
                     self._pattern(
-                        run_id, table, PatternFamily.BUSINESS_RULE,
+                        run_id,
+                        table,
+                        PatternFamily.BUSINESS_RULE,
                         tuple(sorted({p["column"] for p in rule.predicates})),
-                        {"rule_id": rule.rule_id}, {"strength": rule.strength.name},
-                        evaluation.population_rows, {
+                        {"rule_id": rule.rule_id},
+                        {"strength": rule.strength.name},
+                        evaluation.population_rows,
+                        {
                             "population_rows": evaluation.population_rows,
                             "satisfying_rows": evaluation.satisfying_rows,
                             "violation_rows": evaluation.violation_rows,
@@ -310,7 +323,8 @@ class PatternDetector:
             patterns_accepted_for_planning=accepted,
             patterns_review_required=len(patterns) - accepted,
             rules_evaluated=sum(
-                1 for rule in rules
+                1
+                for rule in rules
                 if evaluate_rule(rows, rule).population_rows >= self.config.min_support_rows
             ),
             source_tables_scanned=len(selected_tables),
@@ -346,7 +360,8 @@ class PatternDetector:
             patterns=patterns,
             artifact_ref=artifact_ref,
             receipt=receipt,
-            warnings=tuple(sorted({w for p in patterns for w in p.warnings})) + tuple(
+            warnings=tuple(sorted({w for p in patterns for w in p.warnings}))
+            + tuple(
                 "rule_conflict_requires_review"
                 for conflict in rule_conflicts
                 if conflict.requires_review
@@ -357,7 +372,8 @@ class PatternDetector:
                     "reason_code": "observed_candidate_rule_requires_domain_approval",
                 }
                 for p in patterns
-            ) + tuple(
+            )
+            + tuple(
                 {
                     "rule_conflict": (conflict.left_rule_id, conflict.right_rule_id),
                     "reason_code": "rule_conflict_requires_review",

@@ -46,18 +46,27 @@ def main() -> None:
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise SystemExit("columns-json must be a JSON list of valid column specifications") from exc
     plan = GenerationPlan(
-        plan_id=args.plan_id, plan_version=1, request_id=args.request_id,
+        plan_id=args.plan_id,
+        plan_version=1,
+        request_id=args.request_id,
         source_snapshot_ids=tuple(filter(None, args.source_snapshot_ids.split(","))),
         input_artifact_ids=tuple(filter(None, args.input_artifact_ids.split(","))),
-        target_catalog=args.target_catalog, target_schema=args.target_schema,
-        tables=tuple(filter(None, args.tables.split(","))), columns=columns,
-        mode=GenerationMode.CLEAN, seed=args.seed, intended_use=args.intended_use,
+        target_catalog=args.target_catalog,
+        target_schema=args.target_schema,
+        tables=tuple(filter(None, args.tables.split(","))),
+        columns=columns,
+        mode=GenerationMode.CLEAN,
+        seed=args.seed,
+        intended_use=args.intended_use,
         privacy_policy_ref=args.privacy_policy_ref,
-        budgets={"max_rows": args.max_rows}, status=PlanStatus.APPROVED,
+        budgets={"max_rows": args.max_rows},
+        status=PlanStatus.APPROVED,
         plan_fingerprint=args.plan_fingerprint,
     )
     rows = generate_rows(plan, row_count=args.row_count)
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     output = QualifiedName.parse(args.output_table)
     frame = spark.createDataFrame([{"run_id": args.run_id, **row} for row in rows])
-    frame.write.mode("overwrite").option("userMetadata", f"sda-run-id={args.run_id};plan={plan.plan_fingerprint}").saveAsTable(output.quoted)
+    frame.write.mode("overwrite").option(
+        "userMetadata", f"sda-run-id={args.run_id};plan={plan.plan_fingerprint}"
+    ).saveAsTable(output.quoted)

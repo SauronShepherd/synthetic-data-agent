@@ -54,7 +54,9 @@ class StreamManifest:
     replay_fingerprint: str
 
 
-def generate_bounded_events(plan: StreamingPlan, *, start_offset: int = 0) -> tuple[dict[str, Any], ...]:
+def generate_bounded_events(
+    plan: StreamingPlan, *, start_offset: int = 0
+) -> tuple[dict[str, Any], ...]:
     """Generate a deterministic bounded event slice, suitable for replay tests."""
     if start_offset < 0 or start_offset > plan.event_count:
         raise StreamError("start_offset must be within the event range")
@@ -68,13 +70,20 @@ def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamM
     ids = [str(event["event_id"]) for event in events]
     replay = hashlib.sha256("|".join(ids).encode()).hexdigest()
     return StreamManifest(
-        plan.stream_id, plan.plan_fingerprint, len(events), ids[0] if ids else None,
-        ids[-1] if ids else None, plan.checkpoint_id or None, replay,
+        plan.stream_id,
+        plan.plan_fingerprint,
+        len(events),
+        ids[0] if ids else None,
+        ids[-1] if ids else None,
+        plan.checkpoint_id or None,
+        replay,
     )
 
 
 def _event(plan: StreamingPlan, offset: int) -> dict[str, Any]:
-    event_id = hashlib.sha256(f"{plan.plan_fingerprint}|{plan.stream_id}|{offset}".encode()).hexdigest()[:32]
+    event_id = hashlib.sha256(
+        f"{plan.plan_fingerprint}|{plan.stream_id}|{offset}".encode()
+    ).hexdigest()[:32]
     return {
         "event_id": event_id,
         "stream_id": plan.stream_id,

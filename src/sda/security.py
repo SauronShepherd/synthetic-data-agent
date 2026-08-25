@@ -13,14 +13,27 @@ class AuthorizationError(PermissionError):
 class SecurityPolicy:
     allowed_sources: tuple[str, ...]
     allowed_outputs: tuple[str, ...]
-    allowed_operations: tuple[str, ...] = ("read_metadata", "profile", "generate", "validate", "publish")
+    allowed_operations: tuple[str, ...] = (
+        "read_metadata",
+        "profile",
+        "generate",
+        "validate",
+        "publish",
+    )
     require_approval_for: tuple[str, ...] = ("generate", "publish")
 
     def __post_init__(self) -> None:
         if not self.allowed_sources or not self.allowed_outputs:
             raise ValueError("security policy requires source and output allowlists")
 
-    def authorize(self, *, operation: str, source: str | None = None, output: str | None = None, approved: bool = False) -> None:
+    def authorize(
+        self,
+        *,
+        operation: str,
+        source: str | None = None,
+        output: str | None = None,
+        approved: bool = False,
+    ) -> None:
         if operation not in self.allowed_operations:
             raise AuthorizationError(f"operation is not allowed: {operation}")
         if source is not None and not _allowed_name(source, self.allowed_sources):

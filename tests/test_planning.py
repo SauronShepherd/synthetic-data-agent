@@ -30,9 +30,15 @@ def test_plan_fingerprint_is_stable_and_serializable() -> None:
 def test_plan_requires_evidence() -> None:
     with pytest.raises(ValueError, match="source snapshots"):
         GenerationPlan(
-            plan_id="p", plan_version=1, request_id="r", source_snapshot_ids=(),
-            input_artifact_ids=("a",), target_catalog="c", target_schema="s",
-            tables=("t",), columns=(),
+            plan_id="p",
+            plan_version=1,
+            request_id="r",
+            source_snapshot_ids=(),
+            input_artifact_ids=("a",),
+            target_catalog="c",
+            target_schema="s",
+            tables=("t",),
+            columns=(),
         )
 
 

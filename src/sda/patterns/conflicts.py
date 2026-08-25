@@ -38,9 +38,7 @@ def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
     return tuple(result)
 
 
-def resolve_rule_conflicts(
-    rules: list[Any], policy: Any
-) -> tuple[RuleConflict, ...]:
+def resolve_rule_conflicts(rules: list[Any], policy: Any) -> tuple[RuleConflict, ...]:
     """Attach deterministic precedence decisions without discarding conflicts."""
     conflicts = detect_rule_conflicts(rules)
     by_id = {rule.rule_id: rule for rule in rules}

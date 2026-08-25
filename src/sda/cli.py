@@ -10,9 +10,9 @@ from typing import Any, NoReturn
 
 from sda.config import Settings
 from sda.demo import run_design_demo, run_metadata_demo
+from sda.logging import configure_logging
 from sda.pipeline import run_standalone
 from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus
-from sda.logging import configure_logging
 from sda.tools.uc_metadata_reader import (
     read_uc_metadata_with_databricks_sql,
     read_uc_metadata_with_spark,
@@ -115,15 +115,35 @@ def _read_metadata_auto(settings: Settings) -> Any:
 
 
 def _run_generation_demo() -> dict[str, object]:
-    plan = GenerationPlan(
-        plan_id="cli-demo-plan", plan_version=1, request_id="cli-demo", source_snapshot_ids=("demo-snapshot",),
-        input_artifact_ids=("demo-profile",), target_catalog="main", target_schema="synthetic_sales",
-        tables=("customers",), columns=(ColumnGenerationSpec("customers", "customer_id", "string", nullable=False, model="identifier"),),
-        intended_use="demo", budgets={"max_rows": 10},
-    ).transition(PlanStatus.AWAITING_APPROVAL).transition(PlanStatus.APPROVED)
+    plan = (
+        GenerationPlan(
+            plan_id="cli-demo-plan",
+            plan_version=1,
+            request_id="cli-demo",
+            source_snapshot_ids=("demo-snapshot",),
+            input_artifact_ids=("demo-profile",),
+            target_catalog="main",
+            target_schema="synthetic_sales",
+            tables=("customers",),
+            columns=(
+                ColumnGenerationSpec(
+                    "customers", "customer_id", "string", nullable=False, model="identifier"
+                ),
+            ),
+            intended_use="demo",
+            budgets={"max_rows": 10},
+        )
+        .transition(PlanStatus.AWAITING_APPROVAL)
+        .transition(PlanStatus.APPROVED)
+    )
     result = run_standalone(
-        plan, row_count=3, dataset_id="cli-demo", dataset_version="v1", location="main.synthetic_sales.customers",
-        actor="local-demo", unique_key="customer_id",
+        plan,
+        row_count=3,
+        dataset_id="cli-demo",
+        dataset_version="v1",
+        location="main.synthetic_sales.customers",
+        actor="local-demo",
+        unique_key="customer_id",
     )
     return {
         "rows": result.rows,

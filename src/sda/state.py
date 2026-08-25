@@ -46,7 +46,11 @@ class RunRecord:
     updated_at: str = ""
 
     def __post_init__(self) -> None:
-        if not self.run_id.strip() or not self.request_id.strip() or not self.idempotency_key.strip():
+        if (
+            not self.run_id.strip()
+            or not self.request_id.strip()
+            or not self.idempotency_key.strip()
+        ):
             raise ValueError("run_id, request_id, and idempotency_key must not be empty")
         if self.version < 0:
             raise ValueError("version must not be negative")
@@ -89,11 +93,19 @@ class Approval:
 
 _ALLOWED: dict[WorkflowStatus, frozenset[WorkflowStatus]] = {
     WorkflowStatus.REQUESTED: frozenset({WorkflowStatus.PLANNED, WorkflowStatus.CANCELLED}),
-    WorkflowStatus.PLANNED: frozenset({WorkflowStatus.AWAITING_APPROVAL, WorkflowStatus.APPROVED, WorkflowStatus.REJECTED}),
-    WorkflowStatus.AWAITING_APPROVAL: frozenset({WorkflowStatus.APPROVED, WorkflowStatus.REJECTED, WorkflowStatus.CANCELLED}),
+    WorkflowStatus.PLANNED: frozenset(
+        {WorkflowStatus.AWAITING_APPROVAL, WorkflowStatus.APPROVED, WorkflowStatus.REJECTED}
+    ),
+    WorkflowStatus.AWAITING_APPROVAL: frozenset(
+        {WorkflowStatus.APPROVED, WorkflowStatus.REJECTED, WorkflowStatus.CANCELLED}
+    ),
     WorkflowStatus.APPROVED: frozenset({WorkflowStatus.EXECUTING, WorkflowStatus.CANCELLED}),
-    WorkflowStatus.EXECUTING: frozenset({WorkflowStatus.GENERATED_AWAITING_VALIDATION, WorkflowStatus.FAILED}),
-    WorkflowStatus.GENERATED_AWAITING_VALIDATION: frozenset({WorkflowStatus.VALIDATED, WorkflowStatus.FAILED}),
+    WorkflowStatus.EXECUTING: frozenset(
+        {WorkflowStatus.GENERATED_AWAITING_VALIDATION, WorkflowStatus.FAILED}
+    ),
+    WorkflowStatus.GENERATED_AWAITING_VALIDATION: frozenset(
+        {WorkflowStatus.VALIDATED, WorkflowStatus.FAILED}
+    ),
     WorkflowStatus.VALIDATED: frozenset({WorkflowStatus.PRIVACY_APPROVED, WorkflowStatus.FAILED}),
     WorkflowStatus.PRIVACY_APPROVED: frozenset({WorkflowStatus.PUBLISHED, WorkflowStatus.FAILED}),
     WorkflowStatus.PUBLISHED: frozenset(),
@@ -134,26 +146,40 @@ class InMemoryStateRepository:
         except KeyError as exc:
             raise StateError(f"unknown run: {run_id}") from exc
 
-    def transition_run(self, run_id: str, status: WorkflowStatus, *, expected_version: int | None = None) -> RunRecord:
+    def transition_run(
+        self, run_id: str, status: WorkflowStatus, *, expected_version: int | None = None
+    ) -> RunRecord:
         with self._lock:
             current = self.get_run(run_id)
             if expected_version is not None and current.version != expected_version:
                 raise StateError("optimistic concurrency conflict")
             if status not in _ALLOWED[current.status]:
-                raise StateError(f"invalid run transition: {current.status.value} -> {status.value}")
-            updated = replace(current, status=status, version=current.version + 1, updated_at=datetime.now(UTC).isoformat())
+                raise StateError(
+                    f"invalid run transition: {current.status.value} -> {status.value}"
+                )
+            updated = replace(
+                current,
+                status=status,
+                version=current.version + 1,
+                updated_at=datetime.now(UTC).isoformat(),
+            )
             self._runs[run_id] = updated
             return updated
 
     def record_approval(self, approval: Approval) -> Approval:
         with self._lock:
-            if any(a.run_id == approval.run_id and a.approval_type == approval.approval_type for a in self._approvals):
+            if any(
+                a.run_id == approval.run_id and a.approval_type == approval.approval_type
+                for a in self._approvals
+            ):
                 raise StateError("approval already recorded")
             self.get_run(approval.run_id)
             self._approvals.append(approval)
             return approval
 
-    def acquire_attempt(self, attempt: ExecutionAttempt, *, lease_seconds: int = 300) -> ExecutionAttempt:
+    def acquire_attempt(
+        self, attempt: ExecutionAttempt, *, lease_seconds: int = 300
+    ) -> ExecutionAttempt:
         if lease_seconds < 1:
             raise ValueError("lease_seconds must be positive")
         with self._lock:
@@ -165,7 +191,9 @@ class InMemoryStateRepository:
             self._attempts[attempt.attempt_id] = claimed
             return claimed
 
-    def complete_attempt(self, attempt_id: str, *, success: bool, error_code: str | None = None) -> ExecutionAttempt:
+    def complete_attempt(
+        self, attempt_id: str, *, success: bool, error_code: str | None = None
+    ) -> ExecutionAttempt:
         with self._lock:
             try:
                 current = self._attempts[attempt_id]

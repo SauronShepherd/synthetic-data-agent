@@ -10,7 +10,12 @@ def policy() -> SecurityPolicy:
 
 
 def test_security_policy_allows_scoped_approved_operation() -> None:
-    policy().authorize(operation="generate", source="main.sales.orders", output="synthetic.qa.orders", approved=True)
+    policy().authorize(
+        operation="generate",
+        source="main.sales.orders",
+        output="synthetic.qa.orders",
+        approved=True,
+    )
 
 
 def test_security_policy_denies_scope_and_missing_approval() -> None:

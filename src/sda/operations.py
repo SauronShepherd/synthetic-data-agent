@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
 
 
 class BudgetExceeded(RuntimeError):
@@ -29,8 +28,22 @@ class ResourceBudget:
             raise ValueError("max_cost must not be negative")
 
 
-def enforce_budget(budget: ResourceBudget, *, rows: int = 0, events: int = 0, edges: int = 0, cost: float = 0.0, seconds: int = 0) -> None:
-    checks = (("rows", rows, budget.max_rows), ("events", events, budget.max_events), ("edges", edges, budget.max_edges), ("cost", cost, budget.max_cost), ("seconds", seconds, budget.max_seconds))
+def enforce_budget(
+    budget: ResourceBudget,
+    *,
+    rows: int = 0,
+    events: int = 0,
+    edges: int = 0,
+    cost: float = 0.0,
+    seconds: int = 0,
+) -> None:
+    checks = (
+        ("rows", rows, budget.max_rows),
+        ("events", events, budget.max_events),
+        ("edges", edges, budget.max_edges),
+        ("cost", cost, budget.max_cost),
+        ("seconds", seconds, budget.max_seconds),
+    )
     for name, actual, limit in checks:
         if limit is not None and actual > limit:
             raise BudgetExceeded(f"{name} budget exceeded: {actual} > {limit}")
@@ -57,7 +70,9 @@ class AuditEvent:
             raise ValueError("audit identity and message must not be empty")
         if not self.occurred_at:
             object.__setattr__(self, "occurred_at", datetime.now(UTC).isoformat())
-        if self.metadata and any("token" in key.lower() or "secret" in key.lower() for key in self.metadata):
+        if self.metadata and any(
+            "token" in key.lower() or "secret" in key.lower() for key in self.metadata
+        ):
             raise ValueError("audit metadata must not contain secret-like keys")
 
 

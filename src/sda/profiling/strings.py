@@ -44,13 +44,10 @@ def string_metrics(values: Iterable[Any], expected_patterns: Iterable[str] = ())
         },
         "null_count": sum(value is None for value in raw),
         "punctuation_only_count": sum(
-            bool(value)
-            and not any(char.isalnum() for char in value)
-            and not value.isspace()
+            bool(value) and not any(char.isalnum() for char in value) and not value.isspace()
             for value in strings
         ),
         "contains_punctuation_count": sum(
-            any(not char.isalnum() and not char.isspace() for char in value)
-            for value in strings
+            any(not char.isalnum() and not char.isspace() for char in value) for value in strings
         ),
     }

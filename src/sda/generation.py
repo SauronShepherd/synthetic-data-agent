@@ -7,8 +7,8 @@ import random
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from sda.planning import ColumnGenerationSpec, GenerationPlan
 from sda.operations import ResourceBudget, enforce_budget
+from sda.planning import ColumnGenerationSpec, GenerationPlan
 
 
 class GenerationError(ValueError):
@@ -57,7 +57,9 @@ def _unique_specs(specs: Sequence[ColumnGenerationSpec]) -> tuple[ColumnGenerati
     return tuple(unique)
 
 
-def _value(plan: GenerationPlan, spec: ColumnGenerationSpec, index: int, vocabulary: Sequence[str]) -> Any:
+def _value(
+    plan: GenerationPlan, spec: ColumnGenerationSpec, index: int, vocabulary: Sequence[str]
+) -> Any:
     model = spec.model.lower()
     rng = random.Random(_coordinate_seed(plan, spec, index))
     null_rate = float(spec.parameters.get("null_rate", 0.0))
@@ -75,7 +77,9 @@ def _value(plan: GenerationPlan, spec: ColumnGenerationSpec, index: int, vocabul
         if high < low:
             raise GenerationError(f"invalid numeric range for {spec.column}")
         value = low if low == high else rng.uniform(low, high)
-        return int(round(value)) if spec.data_type.lower() in {"int", "integer", "bigint"} else value
+        return (
+            int(round(value)) if spec.data_type.lower() in {"int", "integer", "bigint"} else value
+        )
     if model in {"boolean", "bool"}:
         return bool(index % 2)
     if model in {"date", "timestamp"}:

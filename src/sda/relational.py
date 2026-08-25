@@ -18,7 +18,15 @@ class ForeignKeySpec:
     nullable: bool = False
 
     def __post_init__(self) -> None:
-        if any(not value.strip() for value in (self.child_table, self.child_column, self.parent_table, self.parent_column)):
+        if any(
+            not value.strip()
+            for value in (
+                self.child_table,
+                self.child_column,
+                self.parent_table,
+                self.parent_column,
+            )
+        ):
             raise ValueError("foreign-key fields must not be empty")
 
 
@@ -32,8 +40,18 @@ class CompositeForeignKeySpec:
 
     def __post_init__(self) -> None:
         if not self.child_columns or len(self.child_columns) != len(self.parent_columns):
-            raise ValueError("composite foreign-key columns must be non-empty and have equal length")
-        if any(not value.strip() for value in (self.child_table, self.parent_table, *self.child_columns, *self.parent_columns)):
+            raise ValueError(
+                "composite foreign-key columns must be non-empty and have equal length"
+            )
+        if any(
+            not value.strip()
+            for value in (
+                self.child_table,
+                self.parent_table,
+                *self.child_columns,
+                *self.parent_columns,
+            )
+        ):
             raise ValueError("composite foreign-key fields must not be empty")
 
 
@@ -67,13 +85,24 @@ def generate_relational(
             parent_rows = by_table[simple_fk.parent_table]
             parent_keys = [row.get(simple_fk.parent_column) for row in parent_rows]
             if not parent_keys and table_rows and not simple_fk.nullable:
-                raise RelationalGenerationError(f"no parent keys available for {table}.{simple_fk.child_column}")
+                raise RelationalGenerationError(
+                    f"no parent keys available for {table}.{simple_fk.child_column}"
+                )
             for index, row in enumerate(table_rows):
-                row[simple_fk.child_column] = None if simple_fk.nullable and not parent_keys else parent_keys[index % len(parent_keys)]
+                row[simple_fk.child_column] = (
+                    None
+                    if simple_fk.nullable and not parent_keys
+                    else parent_keys[index % len(parent_keys)]
+                )
         for composite_fk in [item for item in composite_foreign_keys if item.child_table == table]:
-            parent_keys = [tuple(row.get(column) for column in composite_fk.parent_columns) for row in by_table[composite_fk.parent_table]]
+            parent_keys = [
+                tuple(row.get(column) for column in composite_fk.parent_columns)
+                for row in by_table[composite_fk.parent_table]
+            ]
             if not parent_keys and table_rows and not composite_fk.nullable:
-                raise RelationalGenerationError(f"no parent keys available for {table}.{composite_fk.child_columns}")
+                raise RelationalGenerationError(
+                    f"no parent keys available for {table}.{composite_fk.child_columns}"
+                )
             for index, row in enumerate(table_rows):
                 values: tuple[Any, ...] = (
                     (None,) * len(composite_fk.child_columns)
@@ -87,10 +116,16 @@ def generate_relational(
     return {table: tuple(rows) for table, rows in by_table.items()}
 
 
-def _validate_graph(tables: tuple[str, ...], foreign_keys: tuple[ForeignKeySpec, ...], composite: tuple[CompositeForeignKeySpec, ...] = ()) -> None:
+def _validate_graph(
+    tables: tuple[str, ...],
+    foreign_keys: tuple[ForeignKeySpec, ...],
+    composite: tuple[CompositeForeignKeySpec, ...] = (),
+) -> None:
     all_fks: tuple[Any, ...] = (*foreign_keys, *composite)
     if any(fk.child_table == fk.parent_table for fk in all_fks):
-        raise RelationalGenerationError("self-referential foreign keys require an explicit cycle strategy")
+        raise RelationalGenerationError(
+            "self-referential foreign keys require an explicit cycle strategy"
+        )
     for fk in all_fks:
         if fk.child_table not in tables or fk.parent_table not in tables:
             raise RelationalGenerationError("foreign key references a table outside the plan")
@@ -101,9 +136,13 @@ def _order_tables(tables: tuple[str, ...], foreign_keys: tuple[Any, ...]) -> tup
     remaining = set(tables)
     ordered: list[str] = []
     while remaining:
-        ready = sorted(table for table in remaining if all(
-            fk.parent_table not in remaining for fk in foreign_keys if fk.child_table == table
-        ))
+        ready = sorted(
+            table
+            for table in remaining
+            if all(
+                fk.parent_table not in remaining for fk in foreign_keys if fk.child_table == table
+            )
+        )
         if not ready:
             raise RelationalGenerationError("relationship graph contains an unresolved cycle")
         ordered.extend(ready)
@@ -111,7 +150,11 @@ def _order_tables(tables: tuple[str, ...], foreign_keys: tuple[Any, ...]) -> tup
     return tuple(ordered)
 
 
-def _assert_integrity(tables: dict[str, list[dict[str, Any]]], foreign_keys: tuple[ForeignKeySpec, ...], composite: tuple[CompositeForeignKeySpec, ...] = ()) -> None:
+def _assert_integrity(
+    tables: dict[str, list[dict[str, Any]]],
+    foreign_keys: tuple[ForeignKeySpec, ...],
+    composite: tuple[CompositeForeignKeySpec, ...] = (),
+) -> None:
     for simple_fk in foreign_keys:
         parent_keys = {row.get(simple_fk.parent_column) for row in tables[simple_fk.parent_table]}
         for row in tables[simple_fk.child_table]:
@@ -119,12 +162,19 @@ def _assert_integrity(tables: dict[str, list[dict[str, Any]]], foreign_keys: tup
             if value is None and simple_fk.nullable:
                 continue
             if value not in parent_keys:
-                raise RelationalGenerationError(f"orphan foreign key in {simple_fk.child_table}.{simple_fk.child_column}")
+                raise RelationalGenerationError(
+                    f"orphan foreign key in {simple_fk.child_table}.{simple_fk.child_column}"
+                )
     for composite_fk in composite:
-        parent_keys = {tuple(row.get(column) for column in composite_fk.parent_columns) for row in tables[composite_fk.parent_table]}
+        parent_keys = {
+            tuple(row.get(column) for column in composite_fk.parent_columns)
+            for row in tables[composite_fk.parent_table]
+        }
         for row in tables[composite_fk.child_table]:
             value = tuple(row.get(column) for column in composite_fk.child_columns)
             if composite_fk.nullable and all(item is None for item in value):
                 continue
             if value not in parent_keys:
-                raise RelationalGenerationError(f"orphan composite foreign key in {composite_fk.child_table}.{composite_fk.child_columns}")
+                raise RelationalGenerationError(
+                    f"orphan composite foreign key in {composite_fk.child_table}.{composite_fk.child_columns}"
+                )

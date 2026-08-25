@@ -101,7 +101,7 @@ def main() -> None:
             *(ArtifactType.TABLE_PROFILE for _ in profile_ids),
             ArtifactType.RELATIONSHIP_ANALYSIS,
             ArtifactType.DEPENDENCY_GRAPH,
-    )
+        )
     for artifact_id, expected_type in zip(input_ids, expected_types, strict=True):
         try:
             ref = registry.require_complete(artifact_id)
@@ -114,9 +114,9 @@ def main() -> None:
                 else ""
             )
             if legacy_table:
-                ref = SparkArtifactRegistry(
-                    spark, legacy_table
-                ).require_latest_complete(artifact_id)
+                ref = SparkArtifactRegistry(spark, legacy_table).require_latest_complete(
+                    artifact_id
+                )
             else:
                 raise SystemExit(
                     f"unable to resolve upstream artifact {artifact_id!r}: {exc}"
@@ -192,7 +192,8 @@ def main() -> None:
                 )
     # Execute the remaining table-local families on bounded aggregate results.
     categorical = [
-        name for name, dtype in columns.items()
+        name
+        for name, dtype in columns.items()
         if dtype in {"string", "boolean"} and name not in numeric
     ]
     for driver in categorical[:10]:
@@ -211,10 +212,14 @@ def main() -> None:
                 support = int(data.pop("support_rows"))
                 patterns.append(
                     detector._pattern(
-                        analysis_id or "pattern-run", source_table,
+                        analysis_id or "pattern-run",
+                        source_table,
                         PatternFamily.CONDITIONAL_DISTRIBUTION,
-                        (driver, outcome), {driver: data.pop(driver)}, {"outcome": outcome},
-                        support, data,
+                        (driver, outcome),
+                        {driver: data.pop(driver)},
+                        {"outcome": outcome},
+                        support,
+                        data,
                     )
                 )
     for outcome in columns:
@@ -233,13 +238,19 @@ def main() -> None:
                 condition = {driver: data.pop(driver)}
                 patterns.append(
                     detector._pattern(
-                        analysis_id or "pattern-run", source_table,
+                        analysis_id or "pattern-run",
+                        source_table,
                         PatternFamily.CONDITIONAL_MISSINGNESS,
-                        (driver, outcome), condition, {"outcome": outcome}, support, data,
+                        (driver, outcome),
+                        condition,
+                        {"outcome": outcome},
+                        support,
+                        data,
                     )
                 )
     temporal = [
-        name for name, dtype in columns.items()
+        name
+        for name, dtype in columns.items()
         if "timestamp" in dtype or dtype == "date" or name.endswith(("_at", "_date"))
     ]
     for earlier, later in zip(temporal, temporal[1:], strict=False):
@@ -252,34 +263,54 @@ def main() -> None:
         ):
             data = summary[0].asDict()
             support = int(data["eligible_rows"])
-            patterns.append(detector._pattern(
-                analysis_id or "pattern-run", source_table, PatternFamily.TEMPORAL_ORDER,
-                (earlier, later), {}, {"later": later}, support, data,
-            ))
+            patterns.append(
+                detector._pattern(
+                    analysis_id or "pattern-run",
+                    source_table,
+                    PatternFamily.TEMPORAL_ORDER,
+                    (earlier, later),
+                    {},
+                    {"later": later},
+                    support,
+                    data,
+                )
+            )
     state_candidates = [
-        name for name in categorical
+        name
+        for name in categorical
         if name.lower() in {"status", "state", "stage", "lifecycle_state"}
     ]
-    entity_candidates = [
-        name for name in columns if name.lower().endswith(("_id", "id"))
-    ]
+    entity_candidates = [name for name in columns if name.lower().endswith(("_id", "id"))]
     if state_candidates and entity_candidates and temporal:
         try:
-            transition_rows = spark_state_transitions(
-                source, entity_keys=(entity_candidates[0],),
-                state_column=state_candidates[0], event_time=temporal[0],
-            ).limit(detector.config.max_candidates).collect()
+            transition_rows = (
+                spark_state_transitions(
+                    source,
+                    entity_keys=(entity_candidates[0],),
+                    state_column=state_candidates[0],
+                    event_time=temporal[0],
+                )
+                .limit(detector.config.max_candidates)
+                .collect()
+            )
         except ValueError:
             transition_rows = []
         for row in transition_rows:
             data = row.asDict()
             support = int(data.get("count", 0))
             if support >= args.min_support_rows:
-                patterns.append(detector._pattern(
-                    analysis_id or "pattern-run", source_table, PatternFamily.STATE_TRANSITION,
-                    (state_candidates[0],), {"from_state": data.pop("from_state")},
-                    {"to_state": data.pop("to_state")}, support, data,
-                ))
+                patterns.append(
+                    detector._pattern(
+                        analysis_id or "pattern-run",
+                        source_table,
+                        PatternFamily.STATE_TRANSITION,
+                        (state_candidates[0],),
+                        {"from_state": data.pop("from_state")},
+                        {"to_state": data.pop("to_state")},
+                        support,
+                        data,
+                    )
+                )
     # Multiple families can describe the same finding; persist one content-id row.
     patterns = list({pattern.pattern_id: pattern for pattern in patterns}.values())
     if args.output_table:

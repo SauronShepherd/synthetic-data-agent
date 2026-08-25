@@ -31,7 +31,16 @@ class Publication:
     revocation_reason: str | None = None
 
     def __post_init__(self) -> None:
-        if any(not value.strip() for value in (self.dataset_id, self.dataset_version, self.location, self.validation_fingerprint, self.privacy_policy_ref)):
+        if any(
+            not value.strip()
+            for value in (
+                self.dataset_id,
+                self.dataset_version,
+                self.location,
+                self.validation_fingerprint,
+                self.privacy_policy_ref,
+            )
+        ):
             raise ValueError("publication identity and evidence fields must not be empty")
 
 

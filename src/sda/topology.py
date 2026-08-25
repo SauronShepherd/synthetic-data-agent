@@ -35,8 +35,14 @@ class TopologyPlan:
             raise ValueError("topology identity and plan fingerprint are required")
         if self.node_count < 0 or self.edge_count < 0:
             raise ValueError("node_count and edge_count must not be negative")
-        capacity = self.node_count * self.node_count if self.allow_self_loops else self.node_count * max(self.node_count - 1, 0)
-        if not self.allow_parallel_edges and self.edge_count > (capacity if self.kind is GraphKind.DIRECTED else capacity // 2):
+        capacity = (
+            self.node_count * self.node_count
+            if self.allow_self_loops
+            else self.node_count * max(self.node_count - 1, 0)
+        )
+        if not self.allow_parallel_edges and self.edge_count > (
+            capacity if self.kind is GraphKind.DIRECTED else capacity // 2
+        ):
             raise ValueError("edge_count exceeds simple graph capacity")
         if self.max_degree is not None and self.max_degree < 0:
             raise ValueError("max_degree must not be negative")
@@ -51,7 +57,9 @@ class TopologyResult:
 
 def generate_topology(plan: TopologyPlan) -> TopologyResult:
     enforce_budget(ResourceBudget(max_edges=plan.edge_count), edges=plan.edge_count)
-    nodes = tuple({"node_id": _node_id(plan, index), "node_index": index} for index in range(plan.node_count))
+    nodes = tuple(
+        {"node_id": _node_id(plan, index), "node_index": index} for index in range(plan.node_count)
+    )
     ids = [node["node_id"] for node in nodes]
     edges: list[dict[str, Any]] = []
     used: set[tuple[int, int]] = set()
@@ -67,20 +75,35 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
         if plan.node_count == 0 or (not plan.allow_self_loops and source == target):
             continue
         pair = (source, target)
-        canonical: tuple[int, int] = pair if plan.kind is GraphKind.DIRECTED else (min(pair), max(pair))
+        canonical: tuple[int, int] = (
+            pair if plan.kind is GraphKind.DIRECTED else (min(pair), max(pair))
+        )
         if not plan.allow_parallel_edges and canonical in used:
             continue
-        if plan.max_degree is not None and (degree[source] >= plan.max_degree or degree[target] >= plan.max_degree):
+        if plan.max_degree is not None and (
+            degree[source] >= plan.max_degree or degree[target] >= plan.max_degree
+        ):
             continue
         used.add(canonical)
         degree[source] += 1
         if plan.kind is GraphKind.UNDIRECTED:
             degree[target] += 1
-        edges.append({"edge_id": _edge_id(plan, len(edges)), "source": ids[source], "target": ids[target]})
+        edges.append(
+            {"edge_id": _edge_id(plan, len(edges)), "source": ids[source], "target": ids[target]}
+        )
     if len(edges) != plan.edge_count:
         raise TopologyError(f"could only realize {len(edges)} of {plan.edge_count} requested edges")
     components = _component_count(plan, edges)
-    return TopologyResult(nodes, tuple(edges), {"node_count": len(nodes), "edge_count": len(edges), "isolate_count": degree.count(0), "component_count": components})
+    return TopologyResult(
+        nodes,
+        tuple(edges),
+        {
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "isolate_count": degree.count(0),
+            "component_count": components,
+        },
+    )
 
 
 def _node_id(plan: TopologyPlan, index: int) -> str:
@@ -93,11 +116,13 @@ def _edge_id(plan: TopologyPlan, index: int) -> str:
 
 def _component_count(plan: TopologyPlan, edges: list[dict[str, Any]]) -> int:
     parent = list(range(plan.node_count))
+
     def find(value: int) -> int:
         while parent[value] != value:
             parent[value] = parent[parent[value]]
             value = parent[value]
         return value
+
     ids = [_node_id(plan, index) for index in range(plan.node_count)]
     lookup = {value: index for index, value in enumerate(ids)}
     for edge in edges:

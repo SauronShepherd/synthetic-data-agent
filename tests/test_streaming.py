@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sda.streaming import StreamError, StreamMode, StreamingPlan, generate_bounded_events, manifest
+from sda.streaming import StreamError, StreamingPlan, StreamMode, generate_bounded_events, manifest
 
 
 def plan(**kwargs: object) -> StreamingPlan:

@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from fnmatch import fnmatchcase
 from importlib import import_module
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from sda.artifacts.fingerprint import fingerprint
 from sda.artifacts.lineage import source_reference_from_table
@@ -253,7 +253,9 @@ class InformationSchemaMetadataAdapter:
         if visible_schemas and not selected_schemas:
             raw_tables = ()
         else:
-            scopes: tuple[tuple[str, str | None], ...] = selected_schemas or tuple(
+            scopes: tuple[tuple[str, str | None], ...] = cast(
+                tuple[tuple[str, str | None], ...], selected_schemas
+            ) or tuple(
                 (catalog, schema)
                 for catalog in config.catalog_allowlist
                 for schema in (config.schema_allowlist or (None,))

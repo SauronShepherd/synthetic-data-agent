@@ -21,8 +21,7 @@ def temporal_metrics(
     ]
     ordered = sorted(normalized)
     gaps = [
-        (right - left).total_seconds()
-        for left, right in zip(ordered, ordered[1:], strict=False)
+        (right - left).total_seconds() for left, right in zip(ordered, ordered[1:], strict=False)
     ]
     positive_gaps = [gap for gap in gaps if gap >= 0]
 
@@ -31,6 +30,7 @@ def temporal_metrics(
             return None
         index = min(len(positive_gaps) - 1, int((len(positive_gaps) - 1) * percent))
         return sorted(positive_gaps)[index]
+
     return {
         "available": True,
         "min": min(dates).isoformat(),
@@ -52,9 +52,12 @@ def temporal_metrics(
             for value in dates
         ),
         "gap_seconds": {
-            "count": len(gaps), "min": min(positive_gaps) if positive_gaps else None,
-            "p25": gap_percentile(0.25), "p50": gap_percentile(0.5),
-            "p75": gap_percentile(0.75), "p95": gap_percentile(0.95),
+            "count": len(gaps),
+            "min": min(positive_gaps) if positive_gaps else None,
+            "p25": gap_percentile(0.25),
+            "p50": gap_percentile(0.5),
+            "p75": gap_percentile(0.75),
+            "p95": gap_percentile(0.95),
             "max": max(positive_gaps) if positive_gaps else None,
         },
     }

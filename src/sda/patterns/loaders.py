@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from sda.artifacts.registry import ArtifactRegistryStore
 from sda.artifacts.models import ArtifactRef
+from sda.artifacts.registry import ArtifactRegistryStore
 from sda.patterns.inputs import require_pattern_inputs
 from sda.patterns.models import PatternInputRefs
 

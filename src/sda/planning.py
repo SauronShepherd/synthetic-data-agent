@@ -107,7 +107,11 @@ class GenerationPlan:
     def transition(self, status: PlanStatus) -> GenerationPlan:
         allowed = {
             PlanStatus.DRAFT: {PlanStatus.AWAITING_APPROVAL, PlanStatus.REJECTED},
-            PlanStatus.AWAITING_APPROVAL: {PlanStatus.APPROVED, PlanStatus.REJECTED, PlanStatus.EXPIRED},
+            PlanStatus.AWAITING_APPROVAL: {
+                PlanStatus.APPROVED,
+                PlanStatus.REJECTED,
+                PlanStatus.EXPIRED,
+            },
             PlanStatus.APPROVED: {PlanStatus.EXPIRED},
             PlanStatus.REJECTED: set(),
             PlanStatus.EXPIRED: set(),

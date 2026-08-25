@@ -23,4 +23,8 @@ def test_topology_rejects_impossible_simple_graph() -> None:
     with pytest.raises(ValueError, match="capacity"):
         TopologyPlan("g", "fp", node_count=2, edge_count=3, kind=GraphKind.UNDIRECTED)
     with pytest.raises(TopologyError, match="realize"):
-        generate_topology(TopologyPlan("g", "fp", node_count=3, edge_count=2, kind=GraphKind.UNDIRECTED, max_degree=1))
+        generate_topology(
+            TopologyPlan(
+                "g", "fp", node_count=3, edge_count=2, kind=GraphKind.UNDIRECTED, max_degree=1
+            )
+        )

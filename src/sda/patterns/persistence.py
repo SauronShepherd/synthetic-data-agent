@@ -76,9 +76,7 @@ def registry_rows(
             "association_value": p.metric.get("value"),
             "baseline_json": json.dumps(p.evidence_quality.get("baseline", {}), sort_keys=True),
             "validation_mode": p.evidence_quality.get("validation_mode", "unknown"),
-            "stability_json": json.dumps(
-                p.evidence_quality.get("stability", {}), sort_keys=True
-            ),
+            "stability_json": json.dumps(p.evidence_quality.get("stability", {}), sort_keys=True),
             "generation_action_json": json.dumps(p.generation_action, sort_keys=True),
             "validation_action_json": json.dumps(p.validation_action, sort_keys=True),
             "decision": p.decision,

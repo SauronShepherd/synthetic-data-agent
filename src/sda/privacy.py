@@ -46,11 +46,14 @@ def assess_privacy(
     approved = set(approved_columns)
     for table, column in sensitive_columns:
         if (table, column) not in approved:
-            findings.append(PrivacyFinding(
-                "sensitive_column_not_approved", "high",
-                f"{table}.{column} is sensitive and has no explicit approval",
-                {"table": table, "column": column},
-            ))
+            findings.append(
+                PrivacyFinding(
+                    "sensitive_column_not_approved",
+                    "high",
+                    f"{table}.{column} is sensitive and has no explicit approval",
+                    {"table": table, "column": column},
+                )
+            )
     for table, rows in tables.items():
         counts: dict[tuple[tuple[str, Any], ...], int] = {}
         for row in rows:
@@ -58,12 +61,17 @@ def assess_privacy(
             counts[key] = counts.get(key, 0) + 1
         duplicates = sum(count - 1 for count in counts.values() if count > 1)
         if duplicates > max_duplicate_rows:
-            findings.append(PrivacyFinding(
-                "duplicate_row_risk", "medium",
-                f"{table} contains {duplicates} duplicate rows beyond the approved budget",
-                {"table": table, "duplicates": duplicates, "budget": max_duplicate_rows},
-            ))
-    decision = PrivacyDecision.REJECTED if any(f.severity == "high" for f in findings) else (
-        PrivacyDecision.REVIEW_REQUIRED if findings else PrivacyDecision.APPROVED
+            findings.append(
+                PrivacyFinding(
+                    "duplicate_row_risk",
+                    "medium",
+                    f"{table} contains {duplicates} duplicate rows beyond the approved budget",
+                    {"table": table, "duplicates": duplicates, "budget": max_duplicate_rows},
+                )
+            )
+    decision = (
+        PrivacyDecision.REJECTED
+        if any(f.severity == "high" for f in findings)
+        else (PrivacyDecision.REVIEW_REQUIRED if findings else PrivacyDecision.APPROVED)
     )
     return PrivacyReport(decision, tuple(findings), policy_ref)

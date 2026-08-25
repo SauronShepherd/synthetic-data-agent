@@ -38,7 +38,9 @@ class DesignTool:
                 target_schema=state.request.target_schema,
                 tables=state.request.source.tables,
                 columns=tuple(
-                    ColumnGenerationSpec(table, "synthetic_id", "string", nullable=False, model="identifier")
+                    ColumnGenerationSpec(
+                        table, "synthetic_id", "string", nullable=False, model="identifier"
+                    )
                     for table in state.request.source.tables
                 ),
                 mode=GenerationMode.CLEAN,
@@ -48,7 +50,9 @@ class DesignTool:
                 validation_policy_ref=state.request.validation_policy_ref or "default",
                 status=PlanStatus.DRAFT,
             )
-            metadata.update({"plan_fingerprint": plan.plan_fingerprint, "plan_status": plan.status.value})
+            metadata.update(
+                {"plan_fingerprint": plan.plan_fingerprint, "plan_status": plan.status.value}
+            )
         artifact = ArtifactRef(
             artifact_id=f"{state.request.request_id}:{self.artifact_type}",
             artifact_type=self.artifact_type,

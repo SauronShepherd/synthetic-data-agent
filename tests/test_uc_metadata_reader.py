@@ -51,17 +51,32 @@ def test_constraint_rely_is_preserved_as_context_not_validation() -> None:
     from sda.tools.uc_metadata_reader import _build_constraints_by_table
 
     result = _build_constraints_by_table(
-        [{
-            "constraint_catalog": "main", "constraint_schema": "sales",
-            "constraint_name": "pk_orders", "catalog": "main", "schema": "sales",
-            "name": "orders", "constraint_type": "PRIMARY KEY", "enforced": "YES",
-            "rely": "YES",
-        }],
-        [{
-            "constraint_catalog": "main", "constraint_schema": "sales",
-            "constraint_name": "pk_orders", "column_name": "order_id",
-            "ordinal_position": 1,
-        }], [], [], [], [],
+        [
+            {
+                "constraint_catalog": "main",
+                "constraint_schema": "sales",
+                "constraint_name": "pk_orders",
+                "catalog": "main",
+                "schema": "sales",
+                "name": "orders",
+                "constraint_type": "PRIMARY KEY",
+                "enforced": "YES",
+                "rely": "YES",
+            }
+        ],
+        [
+            {
+                "constraint_catalog": "main",
+                "constraint_schema": "sales",
+                "constraint_name": "pk_orders",
+                "column_name": "order_id",
+                "ordinal_position": 1,
+            }
+        ],
+        [],
+        [],
+        [],
+        [],
     )
     constraint = result[("main", "sales", "orders")][0]
     assert constraint.rely is True

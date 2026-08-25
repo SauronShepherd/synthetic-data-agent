@@ -110,9 +110,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 primary_location=output_table,
                 related_locations={"registry": registry_table},
                 source_references=(
-                    SourceReference(
-                        "unity_catalog", "METADATA", "metadata_only", None, None, None
-                    ),
+                    SourceReference("unity_catalog", "METADATA", "metadata_only", None, None, None),
                 ),
                 checksum=fingerprint(payload),
                 summary="Normalized Unity Catalog metadata inventory",

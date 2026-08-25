@@ -148,7 +148,9 @@ class SparkArtifactRegistry:
 def _artifact_ref_from_row(row: Any) -> ArtifactRef:
     from sda.artifacts.loaders import _ref_from_mapping
 
-    mapping = cast(dict[str, Any], row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row))
+    mapping = cast(
+        dict[str, Any], row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row)
+    )
     # Registry v2 has no legacy checksum column; content checksum is the effective checksum.
     mapping.setdefault("checksum", mapping.get("content_checksum") or "unverified")
     return _ref_from_mapping(mapping)
@@ -156,7 +158,9 @@ def _artifact_ref_from_row(row: Any) -> ArtifactRef:
 
 def artifact_ref_from_registry_row(row: Any) -> ArtifactRef:
     """Public v2/legacy registry reader with an explicit compatibility warning."""
-    mapping = cast(dict[str, Any], row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row))
+    mapping = cast(
+        dict[str, Any], row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row)
+    )
     legacy = (
         not mapping.get("registry_schema_version")
         or str(mapping.get("registry_schema_version")) == "1"

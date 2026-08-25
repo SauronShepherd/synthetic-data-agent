@@ -17,4 +17,4 @@ def test_noise_is_deterministic_and_preserves_baseline() -> None:
 
 def test_noise_rejects_unknown_columns() -> None:
     with pytest.raises(NoiseError, match="not present"):
-        inject_nulls((( {"id": 1}, ),)[0], NoisePlan("n", "fp", budget=1), column="missing")
+        inject_nulls((({"id": 1},),)[0], NoisePlan("n", "fp", budget=1), column="missing")

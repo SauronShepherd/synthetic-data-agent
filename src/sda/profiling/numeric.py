@@ -63,7 +63,12 @@ def numeric_histogram(values: Iterable[Any], bins: int = 10) -> dict[str, Any]:
     counts = [0] * bins
     for value in nums:
         counts[min(bins - 1, int((value - lo) / width))] += 1
-    return {"available": True, "min": lo, "max": hi, "bins": [
-        {"lower": lo + i * width, "upper": lo + (i + 1) * width, "count": count}
-        for i, count in enumerate(counts)
-    ]}
+    return {
+        "available": True,
+        "min": lo,
+        "max": hi,
+        "bins": [
+            {"lower": lo + i * width, "upper": lo + (i + 1) * width, "count": count}
+            for i, count in enumerate(counts)
+        ],
+    }
