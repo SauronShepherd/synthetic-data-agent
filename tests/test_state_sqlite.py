@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 import pytest
 
 from sda.state import Approval, AttemptStatus, ExecutionAttempt, RunRecord, StateError, WorkflowStatus
@@ -40,4 +41,23 @@ def test_sqlite_state_persists_approvals_and_attempts() -> None:
     assert completed.status is AttemptStatus.SUCCEEDED
     with pytest.raises(StateError, match="already complete"):
         repo.complete_attempt("attempt-1", success=True)
+    repo.close()
+
+
+def test_sqlite_state_renews_and_recovers_stale_leases() -> None:
+    repo = SQLiteStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    attempt = repo.acquire_attempt(
+        ExecutionAttempt("run-1", "attempt-1", "generate", worker_id="worker-1"),
+        lease_seconds=30,
+    )
+    renewed = repo.renew_attempt_lease("attempt-1", worker_id="worker-1", lease_seconds=60)
+    assert renewed.lease_expires_at != attempt.lease_expires_at
+    with pytest.raises(StateError, match="owned"):
+        repo.renew_attempt_lease("attempt-1", worker_id="other")
+    stale_time = datetime.now(UTC) + timedelta(seconds=120)
+    recovered = repo.recover_stale_attempts(now=stale_time)
+    assert recovered[0].status is AttemptStatus.ABANDONED
+    with pytest.raises(StateError, match="owned"):
+        repo.renew_attempt_lease("attempt-1", worker_id="worker-1")
     repo.close()

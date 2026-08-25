@@ -160,6 +160,47 @@ class SQLiteStateRepository:
         self._connection.commit()
         return replace(current, status=status, error_code=error_code, lease_expires_at=None)
 
+    def renew_attempt_lease(
+        self, attempt_id: str, *, worker_id: str, lease_seconds: int = 300
+    ) -> ExecutionAttempt:
+        if not worker_id.strip() or lease_seconds < 1:
+            raise ValueError("worker_id must not be empty and lease_seconds must be positive")
+        row = self._connection.execute(
+            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code FROM attempts WHERE attempt_id = ?",
+            (attempt_id,),
+        ).fetchone()
+        if row is None:
+            raise StateError(f"unknown attempt: {attempt_id}")
+        current = self._attempt_from_row(row)
+        if current.status is not AttemptStatus.RUNNING or current.worker_id != worker_id:
+            raise StateError("attempt lease is not owned by worker")
+        if current.lease_expires_at is None or _parse_time(current.lease_expires_at) <= datetime.now(UTC):
+            raise StateError("attempt lease has expired")
+        lease = (datetime.now(UTC) + timedelta(seconds=lease_seconds)).isoformat()
+        self._connection.execute(
+            "UPDATE attempts SET lease_expires_at = ? WHERE attempt_id = ? AND status = ? AND worker_id = ?",
+            (lease, attempt_id, AttemptStatus.RUNNING.value, worker_id),
+        )
+        self._connection.commit()
+        return replace(current, lease_expires_at=lease)
+
+    def recover_stale_attempts(self, *, now: datetime | None = None) -> tuple[ExecutionAttempt, ...]:
+        current_time = now or datetime.now(UTC)
+        rows = self._connection.execute(
+            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code FROM attempts WHERE status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?",
+            (AttemptStatus.RUNNING.value, current_time.isoformat()),
+        ).fetchall()
+        recovered: list[ExecutionAttempt] = []
+        for row in rows:
+            attempt = self._attempt_from_row(row)
+            self._connection.execute(
+                "UPDATE attempts SET status = ?, error_code = ?, lease_expires_at = NULL WHERE attempt_id = ? AND status = ?",
+                (AttemptStatus.ABANDONED.value, "stale_lease", attempt.attempt_id, AttemptStatus.RUNNING.value),
+            )
+            recovered.append(replace(attempt, status=AttemptStatus.ABANDONED, error_code="stale_lease", lease_expires_at=None))
+        self._connection.commit()
+        return tuple(recovered)
+
     @staticmethod
     def _attempt_from_row(row: tuple[object, ...]) -> ExecutionAttempt:
         return ExecutionAttempt(
@@ -168,3 +209,7 @@ class SQLiteStateRepository:
             str(row[5]) if row[5] is not None else None, int(str(row[6])),
             str(row[7]) if row[7] is not None else None,
         )
+
+
+def _parse_time(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
