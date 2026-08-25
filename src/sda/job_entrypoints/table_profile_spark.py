@@ -235,8 +235,16 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "latest_data_change_operation": str(latest_data_change["operation"]),
             }
             snapshot_warning = ""
-    except Exception:
-        pass
+    except Exception as exc:
+        # Snapshot history is optional only for an explicitly authorized
+        # best-effort run. Preserve a safe diagnostic for the receipt; never
+        # silently convert an unavailable snapshot into a reusable profile.
+        snapshot_warning = "source_version_lookup_failed"
+        storage_freshness = {
+            "available": False,
+            "method": "metadata_derived",
+            "reason": type(exc).__name__,
+        }
     if source_version is None and not request.allow_best_effort_snapshot:
         raise RuntimeError(
             f"A reproducible source snapshot is unavailable for {args.source_table}; "
