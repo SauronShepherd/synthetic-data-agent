@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from sda.artifacts.compatibility import require_supported_schema
 from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType, SourceReference
@@ -46,14 +46,17 @@ def load_metadata_inventory(spark: Any, table: str, inventory_id: str) -> Mappin
     if len(complete) != 1:
         raise ArtifactCompatibilityError(
             "metadata inventory has no unique COMPLETE version",
-            details={"inventory_id": inventory_id, "versions": len(complete)},
+            details={"inventory_id": inventory_id, "versions": str(len(complete))},
         )
     row = complete[0]
     payload = row["payload"] if isinstance(row, Mapping) else row.payload
-    return json.loads(str(payload))
+    decoded = json.loads(str(payload))
+    if not isinstance(decoded, Mapping):
+        raise ArtifactCompatibilityError("metadata inventory payload must be an object")
+    return cast(Mapping[str, Any], decoded)
 
 
-def metadata_inventory_from_payload(payload: Mapping[str, Any]):
+def metadata_inventory_from_payload(payload: Mapping[str, Any]) -> Any:
     """Rehydrate the exact persisted inventory, without re-querying Unity Catalog."""
     tables = []
     for raw in payload.get("tables", []):
