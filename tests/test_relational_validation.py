@@ -101,3 +101,21 @@ def test_validator_reports_orphans_as_failure() -> None:
         foreign_keys=(("c", "p", "p", "id"),),
     )
     assert report.technical_disposition is CheckStatus.FAIL
+
+
+def test_nullable_optional_foreign_keys_are_deterministic_and_orphan_free() -> None:
+    fk = ForeignKeySpec("child", "parent_id", "parent", "id", nullable=True, optional_rate=0.5)
+    first = generate_relational(plan(), row_counts={"parent": 3, "child": 7}, foreign_keys=(fk,))
+    second = generate_relational(plan(), row_counts={"parent": 3, "child": 7}, foreign_keys=(fk,))
+    assert first == second
+    values = [row["parent_id"] for row in first["child"]]
+    assert any(value is None for value in values)
+    assert any(value is not None for value in values)
+    assert set(value for value in values if value is not None) <= {
+        row["id"] for row in first["parent"]
+    }
+
+
+def test_optional_rate_requires_nullable_foreign_key() -> None:
+    with pytest.raises(ValueError, match="nullable"):
+        ForeignKeySpec("child", "parent_id", "parent", "id", optional_rate=0.1)

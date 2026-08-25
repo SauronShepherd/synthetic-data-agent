@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -16,6 +17,7 @@ class ForeignKeySpec:
     parent_table: str
     parent_column: str
     nullable: bool = False
+    optional_rate: float = 0.0
 
     def __post_init__(self) -> None:
         if any(
@@ -28,6 +30,10 @@ class ForeignKeySpec:
             )
         ):
             raise ValueError("foreign-key fields must not be empty")
+        if not self.nullable and self.optional_rate:
+            raise ValueError("optional_rate requires a nullable foreign key")
+        if not 0 <= self.optional_rate <= 1:
+            raise ValueError("optional_rate must be between zero and one")
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +43,7 @@ class CompositeForeignKeySpec:
     parent_table: str
     parent_columns: tuple[str, ...]
     nullable: bool = False
+    optional_rate: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.child_columns or len(self.child_columns) != len(self.parent_columns):
@@ -53,6 +60,10 @@ class CompositeForeignKeySpec:
             )
         ):
             raise ValueError("composite foreign-key fields must not be empty")
+        if not self.nullable and self.optional_rate:
+            raise ValueError("optional_rate requires a nullable foreign key")
+        if not 0 <= self.optional_rate <= 1:
+            raise ValueError("optional_rate must be between zero and one")
 
 
 class RelationalGenerationError(GenerationError):
@@ -91,7 +102,8 @@ def generate_relational(
             for index, row in enumerate(table_rows):
                 row[simple_fk.child_column] = (
                     None
-                    if simple_fk.nullable and not parent_keys
+                    if simple_fk.nullable
+                    and (not parent_keys or _optional_slot(plan, simple_fk, index))
                     else parent_keys[index % len(parent_keys)]
                 )
         for composite_fk in [item for item in composite_foreign_keys if item.child_table == table]:
@@ -106,7 +118,8 @@ def generate_relational(
             for index, row in enumerate(table_rows):
                 values: tuple[Any, ...] = (
                     (None,) * len(composite_fk.child_columns)
-                    if composite_fk.nullable and not parent_keys
+                    if composite_fk.nullable
+                    and (not parent_keys or _optional_slot(plan, composite_fk, index))
                     else cast(tuple[Any, ...], parent_keys[index % len(parent_keys)])
                 )
                 for column, value in zip(composite_fk.child_columns, values, strict=True):
@@ -114,6 +127,17 @@ def generate_relational(
         by_table[table] = table_rows
     _assert_integrity(by_table, foreign_keys, composite_foreign_keys)
     return {table: tuple(rows) for table, rows in by_table.items()}
+
+
+def _optional_slot(plan: GenerationPlan, fk: Any, index: int) -> bool:
+    """Stable Bernoulli allocation independent of table iteration order."""
+    if fk.optional_rate <= 0:
+        return False
+    digest = hashlib.sha256(
+        f"{plan.plan_fingerprint}|{fk.child_table}|{fk.parent_table}|{index}".encode()
+    ).digest()
+    rate = float(fk.optional_rate)
+    return bool(int.from_bytes(digest[:8], "big") / 2**64 < rate)
 
 
 def _validate_graph(
