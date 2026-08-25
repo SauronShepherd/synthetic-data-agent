@@ -28,3 +28,19 @@ def test_topology_rejects_impossible_simple_graph() -> None:
                 "g", "fp", node_count=3, edge_count=2, kind=GraphKind.UNDIRECTED, max_degree=1
             )
         )
+
+
+def test_directed_degree_limits_and_dag_constraint_are_enforced() -> None:
+    dag = TopologyPlan("dag", "fp", node_count=5, edge_count=4, acyclic=True, max_in_degree=1)
+    result = generate_topology(dag)
+    incoming = {node["node_id"]: 0 for node in result.nodes}
+    for edge in result.edges:
+        incoming[edge["target"]] += 1
+    assert max(incoming.values()) <= 1
+    for edge in result.edges:
+        assert edge["source"] != edge["target"]
+
+
+def test_topology_rejects_acyclic_self_loops() -> None:
+    with pytest.raises(ValueError, match="self-loops"):
+        TopologyPlan("g", "fp", node_count=2, edge_count=1, acyclic=True, allow_self_loops=True)

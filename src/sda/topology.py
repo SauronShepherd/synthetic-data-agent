@@ -29,6 +29,9 @@ class TopologyPlan:
     allow_self_loops: bool = False
     allow_parallel_edges: bool = False
     max_degree: int | None = None
+    max_in_degree: int | None = None
+    max_out_degree: int | None = None
+    acyclic: bool = False
 
     def __post_init__(self) -> None:
         if not self.topology_id.strip() or not self.plan_fingerprint.strip():
@@ -46,6 +49,12 @@ class TopologyPlan:
             raise ValueError("edge_count exceeds simple graph capacity")
         if self.max_degree is not None and self.max_degree < 0:
             raise ValueError("max_degree must not be negative")
+        if self.max_in_degree is not None and self.max_in_degree < 0:
+            raise ValueError("max_in_degree must not be negative")
+        if self.max_out_degree is not None and self.max_out_degree < 0:
+            raise ValueError("max_out_degree must not be negative")
+        if self.acyclic and self.allow_self_loops:
+            raise ValueError("acyclic graphs cannot allow self-loops")
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +73,9 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
     edges: list[dict[str, Any]] = []
     used: set[tuple[int, int]] = set()
     degree = [0] * plan.node_count
+    in_degree = [0] * plan.node_count
+    out_degree = [0] * plan.node_count
+    adjacency: list[set[int]] = [set() for _ in range(plan.node_count)]
     cursor = 0
     attempts = 0
     max_attempts = max(plan.edge_count * max(plan.node_count, 1) * 2, 1)
@@ -84,10 +96,23 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
             degree[source] >= plan.max_degree or degree[target] >= plan.max_degree
         ):
             continue
+        if plan.kind is GraphKind.DIRECTED and (
+            (plan.max_out_degree is not None and out_degree[source] >= plan.max_out_degree)
+            or (plan.max_in_degree is not None and in_degree[target] >= plan.max_in_degree)
+        ):
+            continue
+        if plan.acyclic and _reaches(adjacency, target, source):
+            continue
         used.add(canonical)
         degree[source] += 1
         if plan.kind is GraphKind.UNDIRECTED:
             degree[target] += 1
+        else:
+            in_degree[target] += 1
+            out_degree[source] += 1
+        adjacency[source].add(target)
+        if plan.kind is GraphKind.UNDIRECTED:
+            adjacency[target].add(source)
         edges.append(
             {"edge_id": _edge_id(plan, len(edges)), "source": ids[source], "target": ids[target]}
         )
@@ -104,6 +129,20 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
             "component_count": components,
         },
     )
+
+
+def _reaches(adjacency: list[set[int]], start: int, target: int) -> bool:
+    pending = [start]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if current == target:
+            return True
+        if current in visited:
+            continue
+        visited.add(current)
+        pending.extend(adjacency[current] - visited)
+    return False
 
 
 def _node_id(plan: TopologyPlan, index: int) -> str:
