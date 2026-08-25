@@ -46,3 +46,21 @@ def test_generation_rejects_unapproved_and_over_budget_plans() -> None:
         generate_rows(replace(plan(), status=PlanStatus.DRAFT, plan_fingerprint=""), row_count=1)
     with pytest.raises(GenerationError, match="max_rows"):
         generate_rows(plan(), row_count=4)
+
+
+def test_empirical_models_are_replayable_and_type_checked() -> None:
+    empirical_plan = replace(
+        plan(),
+        columns=(
+            ColumnGenerationSpec("t", "amount", "double", model="empirical_numeric"),
+            ColumnGenerationSpec("t", "segment", "string", model="empirical_categorical"),
+        ),
+        plan_fingerprint="",
+    )
+    samples = {"amount": (10.0, 20.0), "segment": ("A", "B")}
+    first = generate_rows(empirical_plan, row_count=3, empirical_samples=samples)
+    assert first == generate_rows(empirical_plan, row_count=3, empirical_samples=samples)
+    assert {row["amount"] for row in first} <= {10.0, 20.0}
+    assert {row["segment"] for row in first} <= {"A", "B"}
+    with pytest.raises(GenerationError, match="requires empirical"):
+        generate_rows(empirical_plan, row_count=1)

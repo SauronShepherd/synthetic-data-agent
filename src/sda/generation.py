@@ -20,6 +20,7 @@ def generate_rows(
     *,
     row_count: int,
     vocabularies: Mapping[str, Sequence[str]] | None = None,
+    empirical_samples: Mapping[str, Sequence[Any]] | None = None,
 ) -> tuple[dict[str, Any], ...]:
     """Generate bounded rows from an approved plan without reading source data.
 
@@ -36,11 +37,18 @@ def generate_rows(
     enforce_budget(ResourceBudget(max_rows=max_rows), rows=row_count)
     specs = _unique_specs(plan.columns)
     vocabularies = vocabularies or {}
+    empirical_samples = empirical_samples or {}
     result: list[dict[str, Any]] = []
     for index in range(row_count):
         row: dict[str, Any] = {}
         for spec in specs:
-            row[spec.column] = _value(plan, spec, index, vocabularies.get(spec.column, ()))
+            row[spec.column] = _value(
+                plan,
+                spec,
+                index,
+                vocabularies.get(spec.column, ()),
+                empirical_samples.get(spec.column, ()),
+            )
         result.append(row)
     return tuple(result)
 
@@ -58,7 +66,11 @@ def _unique_specs(specs: Sequence[ColumnGenerationSpec]) -> tuple[ColumnGenerati
 
 
 def _value(
-    plan: GenerationPlan, spec: ColumnGenerationSpec, index: int, vocabulary: Sequence[str]
+    plan: GenerationPlan,
+    spec: ColumnGenerationSpec,
+    index: int,
+    vocabulary: Sequence[str],
+    empirical_sample: Sequence[Any],
 ) -> Any:
     model = spec.model.lower()
     rng = random.Random(_coordinate_seed(plan, spec, index))
@@ -71,6 +83,16 @@ def _value(
         if not vocabulary:
             raise GenerationError(f"model {model} requires vocabulary for {spec.column}")
         return vocabulary[index % len(vocabulary)]
+    if model in {"empirical", "empirical_numeric", "empirical_categorical"}:
+        if not empirical_sample:
+            raise GenerationError(f"model {model} requires empirical samples for {spec.column}")
+        position = rng.randrange(len(empirical_sample))
+        value = empirical_sample[position]
+        if model == "empirical_numeric" and not isinstance(value, (int, float)):
+            raise GenerationError(f"empirical sample for {spec.column} must be numeric")
+        if model == "empirical_categorical" and not isinstance(value, str):
+            raise GenerationError(f"empirical sample for {spec.column} must be strings")
+        return value
     if model in {"integer", "numeric", "uniform"}:
         low = float(spec.parameters.get("min", 0))
         high = float(spec.parameters.get("max", 1))
