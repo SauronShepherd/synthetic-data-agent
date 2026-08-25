@@ -31,6 +31,17 @@ class ValidationReport:
     technical_disposition: CheckStatus
 
 
+def not_applicable_check(check_id: str, reason: str) -> ValidationCheck:
+    """Represent an intentionally unsupported check without dropping evidence."""
+    return ValidationCheck(
+        check_id,
+        CheckStatus.NOT_APPLICABLE,
+        reason,
+        {"supported": False, "reason": reason},
+        method="unsupported",
+    )
+
+
 def validate_tables(
     tables: dict[str, tuple[dict[str, Any], ...]],
     *,
@@ -43,6 +54,18 @@ def validate_tables(
     expected_counts = expected_counts or {}
     unique_keys = unique_keys or {}
     for table, expected in expected_counts.items():
+        if table not in tables:
+            checks.append(
+                ValidationCheck(
+                    f"row_count:{table}",
+                    CheckStatus.FAIL,
+                    f"{table} is unavailable; cannot validate row count",
+                    {"supported": False, "reason": "table_missing"},
+                    expected,
+                    method="availability_check",
+                )
+            )
+            continue
         actual = len(tables.get(table, ()))
         checks.append(
             ValidationCheck(
@@ -54,6 +77,17 @@ def validate_tables(
             )
         )
     for table, column in unique_keys.items():
+        if table not in tables:
+            checks.append(
+                ValidationCheck(
+                    f"unique:{table}.{column}",
+                    CheckStatus.FAIL,
+                    f"{table} is unavailable; cannot validate uniqueness",
+                    {"supported": False, "reason": "table_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
         values = [row.get(column) for row in tables.get(table, ())]
         unique = len(values) == len(set(values)) and None not in values
         checks.append(
@@ -65,6 +99,18 @@ def validate_tables(
             )
         )
     for child, child_column, parent, parent_column in foreign_keys:
+        if child not in tables or parent not in tables:
+            missing = child if child not in tables else parent
+            checks.append(
+                ValidationCheck(
+                    f"foreign_key:{child}.{child_column}",
+                    CheckStatus.FAIL,
+                    f"{missing} is unavailable; cannot validate foreign key",
+                    {"supported": False, "reason": "table_missing", "missing_table": missing},
+                    method="availability_check",
+                )
+            )
+            continue
         parent_values = {row.get(parent_column) for row in tables.get(parent, ())}
         child_values = [row.get(child_column) for row in tables.get(child, ())]
         orphans = sum(value is not None and value not in parent_values for value in child_values)

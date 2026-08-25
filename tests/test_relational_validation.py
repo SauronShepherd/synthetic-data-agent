@@ -119,3 +119,14 @@ def test_nullable_optional_foreign_keys_are_deterministic_and_orphan_free() -> N
 def test_optional_rate_requires_nullable_foreign_key() -> None:
     with pytest.raises(ValueError, match="nullable"):
         ForeignKeySpec("child", "parent_id", "parent", "id", optional_rate=0.1)
+
+
+def test_validation_does_not_turn_missing_inputs_into_success() -> None:
+    report = validate_tables(
+        {},
+        expected_counts={"customers": 0},
+        unique_keys={"customers": "id"},
+        foreign_keys=(("orders", "customer_id", "customers", "id"),),
+    )
+    assert report.technical_disposition is CheckStatus.FAIL
+    assert all(check.status is CheckStatus.FAIL for check in report.checks)
