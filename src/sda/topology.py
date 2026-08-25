@@ -67,7 +67,7 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
         if plan.node_count == 0 or (not plan.allow_self_loops and source == target):
             continue
         pair = (source, target)
-        canonical = pair if plan.kind is GraphKind.DIRECTED else tuple(sorted(pair))
+        canonical: tuple[int, int] = pair if plan.kind is GraphKind.DIRECTED else (min(pair), max(pair))
         if not plan.allow_parallel_edges and canonical in used:
             continue
         if plan.max_degree is not None and (degree[source] >= plan.max_degree or degree[target] >= plan.max_degree):
