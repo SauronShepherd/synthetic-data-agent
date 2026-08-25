@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, is_dataclass
-from typing import Any
+from typing import Any, cast
 
 from sda.artifacts.delta import persist_artifact_lifecycle, persist_distributed_evidence
 from sda.patterns.models import Pattern
@@ -89,7 +89,7 @@ def registry_rows(
             "configuration_hash": configuration_hash,
             "source_references_json": json.dumps(
                 [
-                    asdict(source) if is_dataclass(source) else source
+                    asdict(source) if is_dataclass(source) else cast(Any, source)  # type: ignore[arg-type]
                     for source in source_references
                 ],
                 sort_keys=True,
