@@ -85,7 +85,7 @@ class PatternDetectionResult:
     artifact_ref: Any | None
     receipt: PatternExecutionReceipt
     warnings: tuple[str, ...] = ()
-    review_questions: tuple[dict[str, str], ...] = ()
+    review_questions: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

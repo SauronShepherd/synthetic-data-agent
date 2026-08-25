@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, overload
 
 from sda.artifacts.fingerprint import fingerprint
 from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType
@@ -39,6 +39,40 @@ class PatternDetector:
             "scoring_policy", PatternScoringPolicy(min_support_rows=self.config.min_support_rows)
         )
         self.rule_precedence_policy = kwargs.get("rule_precedence_policy", RulePrecedencePolicy())
+
+    @overload
+    def detect(
+        self,
+        rows: list[dict[str, Any]] | None = None,
+        *,
+        table: str | None = None,
+        columns: dict[str, str] | None = None,
+        analysis_id: str | None = None,
+        run_id: str | None = None,
+        environment: str | None = None,
+        input_refs: None = None,
+        selected_tables: tuple[str, ...] = (),
+        approved_columns: dict[str, tuple[str, ...]] | None = None,
+        role_overrides: tuple[ColumnRoleAssignment, ...] = (),
+        rules: tuple[Any, ...] = (),
+    ) -> tuple[Pattern, ...]: ...
+
+    @overload
+    def detect(
+        self,
+        rows: list[dict[str, Any]] | None = None,
+        *,
+        table: str | None = None,
+        columns: dict[str, str] | None = None,
+        analysis_id: str | None = None,
+        run_id: str | None = None,
+        environment: str | None = None,
+        input_refs: PatternInputRefs,
+        selected_tables: tuple[str, ...] = (),
+        approved_columns: dict[str, tuple[str, ...]] | None = None,
+        role_overrides: tuple[ColumnRoleAssignment, ...] = (),
+        rules: tuple[Any, ...] = (),
+    ) -> PatternDetectionResult: ...
 
     def detect(
         self,
