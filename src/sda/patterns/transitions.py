@@ -20,7 +20,7 @@ def state_transitions(
         grouped[row.get(entity_key)].append(row)
     counts: Counter[tuple[Any, Any]] = Counter()
     outgoing: Counter[Any] = Counter()
-    censored = Counter()
+    censored: Counter[Any] = Counter()
     for values in grouped.values():
         ordered = sorted(values, key=lambda r: (r.get(order_column) is None, r.get(order_column)))
         for current, nxt in zip(ordered, ordered[1:], strict=False):

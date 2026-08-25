@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -10,7 +11,7 @@ class GenerationAction:
     condition: tuple[str, ...] = ()
     fallback_levels: tuple[tuple[str, ...], ...] = ()
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -21,5 +22,5 @@ class ValidationAction:
     metric: str | None = None
     tolerance: float | None = None
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)

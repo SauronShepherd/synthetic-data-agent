@@ -17,7 +17,7 @@ class JoinMetrics:
     orphan_rate: float
     parent_reference_rate: float
     cardinality: str
-    children_per_parent: dict[str, float | int]
+    children_per_parent: dict[str, float | int | None]
     non_null_child_rows: int = 0
     matched_child_rows: int = 0
     orphan_child_rows: int = 0

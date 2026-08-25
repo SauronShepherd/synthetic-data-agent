@@ -32,7 +32,7 @@ def deterministic_fallback_plan(
 def conditional_counts(
     rows: list[dict[str, Any]], drivers: tuple[str, ...], outcome: str, *, max_cells: int = 1000
 ) -> list[dict[str, Any]]:
-    counts: Counter[tuple[tuple[str, Any], Any]] = Counter()
+    counts: Counter[tuple[tuple[tuple[str, Any], ...], Any]] = Counter()
     for row in rows:
         key = tuple((col, row.get(col)) for col in drivers)
         counts[(key, row.get(outcome))] += 1
