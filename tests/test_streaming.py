@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from sda.streaming import StreamError, StreamingPlan, StreamMode, generate_bounded_events, manifest
+from sda.streaming import (
+    StreamError,
+    StreamingPlan,
+    StreamMode,
+    checkpoint,
+    deduplicate_events,
+    generate_bounded_events,
+    manifest,
+    resume_from_checkpoint,
+)
 
 
 def plan(**kwargs: object) -> StreamingPlan:
@@ -32,3 +41,22 @@ def test_offsets_and_bounds_are_fail_closed() -> None:
         generate_bounded_events(plan(), start_offset=5)
     with pytest.raises(ValueError, match="max_events"):
         StreamingPlan("s", "f", event_count=2, max_events=1)
+
+
+def test_checkpoint_resume_is_plan_bound_and_duplicate_safe() -> None:
+    current = plan()
+    prefix = generate_bounded_events(current, start_offset=0)[:2]
+    saved = checkpoint(current, prefix)
+    assert resume_from_checkpoint(current, saved) == generate_bounded_events(current)[2:]
+    assert len(deduplicate_events(prefix + prefix)) == len(prefix)
+    with pytest.raises(StreamError, match="incompatible"):
+        resume_from_checkpoint(StreamingPlan("stream-1", "other", event_count=4), saved)
+
+
+def test_checkpoint_rejects_gaps_and_cross_stream_events() -> None:
+    current = plan()
+    events = generate_bounded_events(current)
+    with pytest.raises(StreamError, match="contiguous"):
+        checkpoint(current, (events[0], events[2]))
+    with pytest.raises(StreamError, match="different stream"):
+        checkpoint(current, ({**events[0], "stream_id": "other"},))

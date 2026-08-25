@@ -54,6 +54,63 @@ class StreamManifest:
     replay_fingerprint: str
 
 
+@dataclass(frozen=True, slots=True)
+class StreamCheckpoint:
+    """Portable checkpoint for deterministic bounded replay."""
+
+    stream_id: str
+    plan_fingerprint: str
+    schema_version: str
+    next_offset: int
+    replay_fingerprint: str
+
+
+def checkpoint(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamCheckpoint:
+    """Create a checkpoint that can only be resumed by the same stream plan."""
+    if any(event.get("stream_id") != plan.stream_id for event in events):
+        raise StreamError("checkpoint events belong to a different stream")
+    offsets = [int(event["offset"]) for event in events]
+    if offsets and offsets != list(range(offsets[0], offsets[-1] + 1)):
+        raise StreamError("checkpoint events must contain contiguous offsets")
+    next_offset = offsets[-1] + 1 if offsets else 0
+    return StreamCheckpoint(
+        plan.stream_id,
+        plan.plan_fingerprint,
+        plan.schema_version,
+        next_offset,
+        manifest(plan, events).replay_fingerprint,
+    )
+
+
+def resume_from_checkpoint(
+    plan: StreamingPlan, saved: StreamCheckpoint
+) -> tuple[dict[str, Any], ...]:
+    """Resume a bounded stream after validating checkpoint ownership."""
+    if (saved.stream_id, saved.plan_fingerprint, saved.schema_version) != (
+        plan.stream_id,
+        plan.plan_fingerprint,
+        plan.schema_version,
+    ):
+        raise StreamError("checkpoint is incompatible with the stream plan")
+    if saved.next_offset < 0 or saved.next_offset > plan.event_count:
+        raise StreamError("checkpoint offset is outside the stream range")
+    return generate_bounded_events(plan, start_offset=saved.next_offset)
+
+
+def deduplicate_events(events: tuple[dict[str, Any], ...]) -> tuple[dict[str, Any], ...]:
+    """Keep first-seen event IDs in stable order for retry-safe sinks."""
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for event in events:
+        event_id = str(event.get("event_id", ""))
+        if not event_id:
+            raise StreamError("events require a non-empty event_id")
+        if event_id not in seen:
+            seen.add(event_id)
+            result.append(event)
+    return tuple(result)
+
+
 def generate_bounded_events(
     plan: StreamingPlan, *, start_offset: int = 0
 ) -> tuple[dict[str, Any], ...]:
