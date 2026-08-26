@@ -95,6 +95,19 @@ def test_standalone_detection_emits_conditional_missingness_patterns() -> None:
     assert missing[0].metric["missing_rate"] == 1.0
 
 
+def test_standalone_detection_emits_state_transition_patterns() -> None:
+    patterns = PatternDetector(PatternConfig(min_support_rows=1)).detect(
+        [
+            {"id": "a", "status": "new", "event_at": 1},
+            {"id": "a", "status": "active", "event_at": 2},
+        ],
+        table="main.events",
+    )
+    transitions = [p for p in patterns if p.family is PatternFamily.STATE_TRANSITION]
+    assert len(transitions) == 1
+    assert transitions[0].metric["transitions"][0]["transition_count"] == 1
+
+
 def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> None:
     refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(

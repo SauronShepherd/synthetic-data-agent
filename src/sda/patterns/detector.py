@@ -231,7 +231,45 @@ class PatternDetector:
                     )
                     if len(result) >= self.config.max_candidates:
                         return tuple(result)
-        temporal_columns = tuple(name for name in names if name.endswith(("_at", "_date")))
+        entity_columns = tuple(
+            name for name in names if name.lower() == "id" or name.lower().endswith("_id")
+        )
+        state_columns = tuple(
+            name for name in names if name.lower() in {"state", "status", "stage"}
+        )
+        temporal_columns = tuple(
+            name for name in names if name.endswith(("_at", "_date", "_time", "_ts"))
+        )
+        if entity_columns and state_columns and temporal_columns:
+            for entity in entity_columns[:1]:
+                for state in state_columns[:1]:
+                    for order in temporal_columns[:1]:
+                        metric = state_transitions(
+                            rows,
+                            entity_key=entity,
+                            state_column=state,
+                            order_column=order,
+                            max_states=self.config.max_segment_cardinality,
+                        )
+                        support = sum(
+                            int(item["transition_count"]) for item in metric["transitions"]
+                        )
+                        if support >= self.config.min_support_rows:
+                            result.append(
+                                self._pattern(
+                                    analysis_id,
+                                    table,
+                                    PatternFamily.STATE_TRANSITION,
+                                    (entity, state, order),
+                                    {},
+                                    {"state_column": state},
+                                    support,
+                                    metric,
+                                    support_rate=support / len(rows) if rows else 0.0,
+                                )
+                            )
+                            if len(result) >= self.config.max_candidates:
+                                return tuple(result)
         if len(temporal_columns) >= 2:
             earlier, later = temporal_columns[:2]
             metric = lag_distribution(rows, earlier=earlier, later=later)
