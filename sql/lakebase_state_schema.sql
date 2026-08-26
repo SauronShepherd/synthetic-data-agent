@@ -46,6 +46,26 @@ CREATE TABLE IF NOT EXISTS sda_approvals (
     CONSTRAINT sda_approval_decision CHECK (decision IN ('approved', 'rejected'))
 );
 
+-- Immutable user corrections/review notes; historical evidence is never mutated.
+CREATE TABLE IF NOT EXISTS sda_feedback (
+    feedback_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES sda_runs(run_id),
+    actor TEXT NOT NULL,
+    category TEXT NOT NULL,
+    message TEXT NOT NULL,
+    evidence_ref TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT sda_feedback_identity_nonempty CHECK (
+        length(trim(feedback_id)) > 0
+        AND length(trim(actor)) > 0
+        AND length(trim(category)) > 0
+        AND length(trim(message)) > 0
+    )
+);
+
+CREATE INDEX IF NOT EXISTS sda_feedback_run_time
+    ON sda_feedback(run_id, created_at, feedback_id);
+
 CREATE TABLE IF NOT EXISTS sda_audit_events (
     event_id BIGSERIAL PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES sda_runs(run_id),
