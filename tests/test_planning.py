@@ -113,6 +113,13 @@ def test_nested_plan_mappings_are_immutable() -> None:
     assert plan.plan_fingerprint == plan.compute_fingerprint()
 
 
+def test_column_evidence_ids_are_frozen_when_constructed_from_a_list() -> None:
+    spec = ColumnGenerationSpec("t", "id", "string", source_evidence_ids=["e1", "e2"])
+    assert spec.source_evidence_ids == ("e1", "e2")
+    with pytest.raises(TypeError):
+        spec.source_evidence_ids.append("e3")  # type: ignore[attr-defined]
+
+
 def test_plan_rejects_ambiguous_or_undeclared_columns() -> None:
     base = dict(
         plan_id="p",

@@ -57,6 +57,7 @@ class ColumnGenerationSpec:
     source_evidence_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "source_evidence_ids", tuple(self.source_evidence_ids))
         for name in ("table", "column", "data_type", "model"):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must not be empty")
