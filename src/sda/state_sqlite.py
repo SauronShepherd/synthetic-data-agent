@@ -134,6 +134,15 @@ class SQLiteStateRepository(StateRepository):
 
     def record_approval(self, approval: Approval) -> Approval:
         self.get_run(approval.run_id)
+        existing = self._connection.execute(
+            "SELECT run_id, approval_type, decision, actor, reason, decided_at FROM approvals WHERE run_id = ? AND approval_type = ?",
+            (approval.run_id, approval.approval_type),
+        ).fetchone()
+        if existing is not None:
+            current = Approval(*existing)
+            if current == approval:
+                return current
+            raise StateError("approval already recorded with different content")
         try:
             self._connection.execute(
                 "INSERT INTO approvals (run_id, approval_type, decision, actor, reason, decided_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -149,7 +158,7 @@ class SQLiteStateRepository(StateRepository):
             self._connection.commit()
         except sqlite3.IntegrityError as exc:
             self._connection.rollback()
-            raise StateError("approval already recorded") from exc
+            raise StateError("approval already recorded with different content") from exc
         return approval
 
     def list_approvals(self, run_id: str) -> tuple[Approval, ...]:
