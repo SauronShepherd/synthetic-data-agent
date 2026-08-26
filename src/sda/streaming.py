@@ -77,7 +77,9 @@ def checkpoint(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> Strea
         raise StreamError("checkpoint events belong to a different stream")
     offsets = [int(event["offset"]) for event in events]
     if any(offset < 0 or offset >= plan.event_count for offset in offsets):
-        raise StreamError("manifest event offset is outside the stream range")
+        raise StreamError("checkpoint event offset is outside the stream range")
+    if offsets and offsets[0] != 0:
+        raise StreamError("checkpoint events must start at offset zero")
     if offsets and offsets != list(range(offsets[0], offsets[-1] + 1)):
         raise StreamError("checkpoint events must contain contiguous offsets")
     next_offset = offsets[-1] + 1 if offsets else 0

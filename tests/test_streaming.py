@@ -60,6 +60,8 @@ def test_checkpoint_rejects_gaps_and_cross_stream_events() -> None:
         checkpoint(current, (events[0], events[2]))
     with pytest.raises(StreamError, match="different stream"):
         checkpoint(current, ({**events[0], "stream_id": "other"},))
+    with pytest.raises(StreamError, match="offset zero"):
+        checkpoint(current, (events[1],))
 
 
 def test_manifest_rejects_schema_mismatch_and_offset_gaps() -> None:
