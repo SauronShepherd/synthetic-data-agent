@@ -133,6 +133,17 @@ def test_pattern_input_refs_reject_whitespace_artifact_ids() -> None:
         PatternInputRefs("metadata", ("profile", " "), "relationship", "graph")
 
 
+def test_pattern_input_and_output_sequences_are_frozen() -> None:
+    profiles = ["profile"]
+    refs = PatternInputRefs("metadata", profiles, "relationship", "graph")
+    profiles.append("changed")
+    assert refs.profile_artifact_ids == ("profile",)
+    pattern = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [{"x": 1, "y": 2}, {"x": 2, "y": 4}], table="main.s.t", columns={"x": "int", "y": "int"}
+    )[0]
+    assert isinstance(pattern.columns, tuple)
+
+
 def test_coordinator_emits_conditional_missingness_for_each_segment() -> None:
     refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(

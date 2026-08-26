@@ -80,6 +80,7 @@ class PatternInputRefs:
     dependency_graph_artifact_id: str
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "profile_artifact_ids", tuple(self.profile_artifact_ids))
         if (
             not self.metadata_artifact_id.strip()
             or not self.profile_artifact_ids
@@ -274,6 +275,8 @@ class Pattern:
     lifecycle: PatternLifecycle = PatternLifecycle.OBSERVED_PATTERN
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "columns", tuple(self.columns))
+        object.__setattr__(self, "warnings", tuple(self.warnings))
         if self.support_rows < 0:
             raise ValueError("support_rows must not be negative")
         if self.support_rate is not None and not 0 <= self.support_rate <= 1:
