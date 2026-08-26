@@ -279,7 +279,8 @@ def main(argv: Sequence[str] | None = None) -> None:
                 except Exception as exc:
                     message = str(exc).upper()
                     if not any(
-                        marker in message for marker in ("TABLE_OR_VIEW_NOT_FOUND", "TABLE_NOT_FOUND")
+                        marker in message
+                        for marker in ("TABLE_OR_VIEW_NOT_FOUND", "TABLE_NOT_FOUND")
                     ):
                         raise
             if registry_ready or not args.artifact_registry_table:

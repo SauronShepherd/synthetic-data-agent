@@ -35,7 +35,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     frame = spark.table(input_name.quoted).limit(args.max_rows)
     rows = tuple(row.asDict(recursive=True) for row in frame.collect())
     table_key = input_name.full_name
-    required = tuple(column.strip() for column in args.required_columns.split(",") if column.strip())
+    required = tuple(
+        column.strip() for column in args.required_columns.split(",") if column.strip()
+    )
     report = validate_tables(
         {table_key: rows},
         expected_counts={table_key: args.expected_count},
@@ -53,7 +55,9 @@ def main(argv: Sequence[str] | None = None) -> None:
         "report_fingerprint": report.fingerprint,
         "report_json": json.dumps(payload, sort_keys=True, default=str),
     }
-    spark.createDataFrame([row]).write.format("delta").mode("append").saveAsTable(report_name.quoted)
+    spark.createDataFrame([row]).write.format("delta").mode("append").saveAsTable(
+        report_name.quoted
+    )
     print(json.dumps(payload, sort_keys=True))
     if report.technical_disposition is not CheckStatus.PASS:
         raise SystemExit("generated output failed technical validation")
