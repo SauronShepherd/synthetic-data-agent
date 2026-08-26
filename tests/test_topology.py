@@ -70,7 +70,9 @@ def test_topology_validator_accepts_acyclic_undirected_tree() -> None:
     plan = TopologyPlan(
         "tree", "fp", node_count=3, edge_count=2, kind=GraphKind.UNDIRECTED, acyclic=True
     )
-    validate_topology(plan, generate_topology(plan))
+    result = generate_topology(plan)
+    validate_topology(plan, result)
+    assert result.to_dict()["output_fingerprint"] == result.output_fingerprint
 
 
 def test_topology_validator_checks_directed_in_and_out_degree_limits() -> None:

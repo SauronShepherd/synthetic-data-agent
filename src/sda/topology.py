@@ -81,6 +81,15 @@ class TopologyResult:
         """Stable identity for the generated structure, excluding mutable wrappers."""
         return fingerprint({"nodes": self.nodes, "edges": self.edges, "metrics": self.metrics})
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return a canonical persistence payload with its content fingerprint."""
+        return {
+            "nodes": tuple(dict(node) for node in self.nodes),
+            "edges": tuple(dict(edge) for edge in self.edges),
+            "metrics": dict(self.metrics),
+            "output_fingerprint": self.output_fingerprint,
+        }
+
 
 def generate_topology(plan: TopologyPlan) -> TopologyResult:
     enforce_budget(ResourceBudget(max_edges=plan.edge_count), edges=plan.edge_count)
