@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from sda.privacy import PrivacyDecision, assess_privacy
+from sda.privacy import PrivacyDecision, PrivacyFinding, PrivacyReport, assess_privacy
 
 
 def test_sensitive_output_requires_explicit_approval() -> None:
@@ -65,6 +65,15 @@ def test_privacy_report_serializes_decision_and_schema_version() -> None:
         "policy_ref": "strict-default",
         "schema_version": "privacy-report-v1",
     }
+
+
+def test_approved_privacy_report_cannot_contain_findings() -> None:
+    with pytest.raises(ValueError, match="approved privacy reports"):
+        PrivacyReport(
+            PrivacyDecision.APPROVED,
+            (PrivacyFinding("risk", "high", "risk found", {}),),
+            "strict",
+        )
 
 
 def test_privacy_finding_evidence_is_deeply_immutable() -> None:
