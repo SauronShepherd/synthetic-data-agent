@@ -214,7 +214,7 @@ def validate_tables(
                 {"orphans": orphans, "child_rows": len(child_values)},
             )
         )
-    for table, columns in expected_distributions.items():
+    for table, distribution_columns in expected_distributions.items():
         if table not in tables:
             checks.append(
                 ValidationCheck(
@@ -227,7 +227,7 @@ def validate_tables(
             )
             continue
         rows = tables[table]
-        for column, expected in columns.items():
+        for column, expected in distribution_columns.items():
             check_id = f"distribution:{table}.{column}"
             if not expected or any(probability < 0 for probability in expected.values()):
                 raise ValueError(
