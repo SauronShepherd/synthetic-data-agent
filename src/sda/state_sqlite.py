@@ -116,13 +116,14 @@ class SQLiteStateRepository:
         self.get_run(approval.run_id)
         try:
             self._connection.execute(
-                "INSERT INTO approvals VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO approvals (run_id, approval_type, decision, actor, reason, decided_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     approval.run_id,
                     approval.approval_type,
                     approval.decision,
                     approval.actor,
                     approval.reason,
+                    approval.decided_at,
                 ),
             )
             self._connection.commit()
