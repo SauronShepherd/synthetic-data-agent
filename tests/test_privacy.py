@@ -72,3 +72,14 @@ def test_privacy_finding_serialization_redacts_raw_evidence() -> None:
         direct_identifier_columns=(("users", "email"),),
     )
     assert "secret@example.test" not in str(report.findings[0].to_dict())
+
+
+def test_reference_matches_are_rejected_without_raw_values() -> None:
+    report = assess_privacy(
+        {"t": (({"id": 1}),)},
+        reference_tables={"t": (({"id": 1}),)},
+    )
+    assert report.decision is PrivacyDecision.REJECTED
+    finding = report.findings[0]
+    assert finding.code == "memorization_match_risk"
+    assert "1" in str(finding.to_dict())

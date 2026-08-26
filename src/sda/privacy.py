@@ -91,6 +91,8 @@ def assess_privacy(
     quasi_identifier_columns: tuple[tuple[str, str], ...] = (),
     approved_columns: tuple[tuple[str, str], ...] = (),
     max_duplicate_rows: int = 0,
+    reference_tables: dict[str, tuple[dict[str, Any], ...]] | None = None,
+    max_reference_matches: int = 0,
     min_quasi_group_size: int = 2,
     policy_ref: str = "strict-default",
 ) -> PrivacyReport:
@@ -103,6 +105,8 @@ def assess_privacy(
     findings: list[PrivacyFinding] = []
     if min_quasi_group_size < 1:
         raise ValueError("min_quasi_group_size must be positive")
+    if max_reference_matches < 0:
+        raise ValueError("max_reference_matches must not be negative")
     approved = set(approved_columns)
     for table, column in (*sensitive_columns, *direct_identifier_columns):
         if (table, column) not in approved:
@@ -164,6 +168,35 @@ def assess_privacy(
                     {"table": table, "duplicates": duplicates, "budget": max_duplicate_rows},
                 )
             )
+    if reference_tables is not None:
+        for table, rows in tables.items():
+            reference = reference_tables.get(table)
+            if reference is None:
+                findings.append(
+                    PrivacyFinding(
+                        "reference_table_missing",
+                        "high",
+                        f"{table} is unavailable for memorization review",
+                        {"table": table},
+                    )
+                )
+                continue
+            reference_fingerprints = {fingerprint(row) for row in reference}
+            matches = sum(fingerprint(row) in reference_fingerprints for row in rows)
+            if matches > max_reference_matches:
+                findings.append(
+                    PrivacyFinding(
+                        "memorization_match_risk",
+                        "high",
+                        f"{table} contains {matches} exact reference matches beyond the approved budget",
+                        {
+                            "table": table,
+                            "matches": matches,
+                            "budget": max_reference_matches,
+                            "reference_rows": len(reference),
+                        },
+                    )
+                )
     decision = (
         PrivacyDecision.REJECTED
         if any(f.severity == "high" for f in findings)
