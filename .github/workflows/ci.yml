@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: quality
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: databricks/setup-cli@main
       - name: Validate bundle syntax
         run: |
@@ -58,3 +58,34 @@ jobs:
       - name: Verify controlled-target preflight rejects missing identities
         run: |
           if python scripts/preflight_bundle.py --target staging; then exit 1; fi
+
+  postgres-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sda_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sda_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install project
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[postgres,dev]"
+      - name: Apply state schema
+        env:
+          SDA_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/sda_test
+        run: python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN"
+      - name: Run PostgreSQL integration tests
+        env:
+          SDA_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/sda_test
+        run: python -m pytest -q -m integration
