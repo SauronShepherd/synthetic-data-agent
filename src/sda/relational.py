@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from typing import Any, cast
 
+from sda.artifacts.fingerprint import fingerprint
 from sda.generation import GenerationError, generate_rows
 from sda.planning import GenerationPlan
 
@@ -68,6 +69,97 @@ class CompositeForeignKeySpec:
 
 class RelationalGenerationError(GenerationError):
     """Raised when relational constraints cannot be satisfied."""
+
+
+@dataclass(frozen=True, slots=True)
+class RelationalGenerationReceipt:
+    """Raw-value-free receipt for a deterministic relational output."""
+
+    plan_id: str
+    plan_fingerprint: str
+    table_counts: tuple[tuple[str, int], ...]
+    table_fingerprints: tuple[tuple[str, str], ...]
+    output_fingerprint: str
+    schema_version: str = "relational-generation-receipt-v1"
+
+    def __post_init__(self) -> None:
+        if not self.plan_id.strip() or not self.plan_fingerprint.strip():
+            raise ValueError("receipt plan identity must not be empty")
+        if any(count < 0 for _, count in self.table_counts):
+            raise ValueError("receipt table counts must not be negative")
+        if not self.output_fingerprint.strip() or not self.schema_version.strip():
+            raise ValueError("receipt fingerprints and schema version must not be empty")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class RelationalGenerationManifest:
+    """Lineage manifest binding a relational receipt to its approved plan."""
+
+    run_id: str
+    output_namespace: str
+    plan_id: str
+    plan_fingerprint: str
+    source_snapshot_ids: tuple[str, ...]
+    input_artifact_ids: tuple[str, ...]
+    receipt: RelationalGenerationReceipt
+    schema_version: str = "relational-generation-manifest-v1"
+
+    def __post_init__(self) -> None:
+        if not all(
+            value.strip()
+            for value in (self.run_id, self.output_namespace, self.plan_id, self.plan_fingerprint)
+        ):
+            raise ValueError("manifest identity fields must not be empty")
+        if not self.source_snapshot_ids:
+            raise ValueError("source_snapshot_ids must not be empty")
+        if (
+            self.receipt.plan_id != self.plan_id
+            or self.receipt.plan_fingerprint != self.plan_fingerprint
+        ):
+            raise ValueError("receipt does not belong to manifest plan")
+
+    def to_dict(self) -> dict[str, Any]:
+        value = asdict(self)
+        value["receipt"] = self.receipt.to_dict()
+        return value
+
+
+def receipt_for_relational(
+    plan: GenerationPlan, tables: dict[str, tuple[dict[str, Any], ...]]
+) -> RelationalGenerationReceipt:
+    """Create a deterministic receipt without serializing generated values."""
+    if plan.status.value != "approved":
+        raise RelationalGenerationError("only approved plans may be receipted")
+    if set(tables) != set(plan.tables):
+        raise RelationalGenerationError("receipt tables must match the approved plan")
+    counts = tuple((table, len(tables[table])) for table in sorted(tables))
+    fingerprints = tuple((table, fingerprint(tables[table])) for table in sorted(tables))
+    return RelationalGenerationReceipt(
+        plan.plan_id, plan.plan_fingerprint, counts, fingerprints, fingerprint(fingerprints)
+    )
+
+
+def manifest_for_relational(
+    plan: GenerationPlan,
+    receipt: RelationalGenerationReceipt,
+    *,
+    run_id: str,
+    output_namespace: str,
+) -> RelationalGenerationManifest:
+    if receipt.plan_id != plan.plan_id or receipt.plan_fingerprint != plan.plan_fingerprint:
+        raise RelationalGenerationError("generation receipt does not belong to the plan")
+    return RelationalGenerationManifest(
+        run_id,
+        output_namespace,
+        plan.plan_id,
+        plan.plan_fingerprint,
+        plan.source_snapshot_ids,
+        plan.input_artifact_ids,
+        receipt,
+    )
 
 
 def generate_relational(

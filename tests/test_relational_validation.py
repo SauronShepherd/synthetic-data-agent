@@ -8,6 +8,8 @@ from sda.relational import (
     ForeignKeySpec,
     RelationalGenerationError,
     generate_relational,
+    manifest_for_relational,
+    receipt_for_relational,
 )
 from sda.validation import CheckStatus, ValidationCheck, ValidationReport, validate_tables
 
@@ -70,6 +72,18 @@ def test_relational_generation_is_orphan_free() -> None:
     )
     assert report.technical_disposition is CheckStatus.PASS
     assert len(report.checks) == 4
+
+
+def test_relational_receipt_and_manifest_bind_plan_without_raw_values() -> None:
+    fk = ForeignKeySpec("child", "parent_id", "parent", "id")
+    tables = generate_relational(plan(), row_counts={"parent": 2, "child": 3}, foreign_keys=(fk,))
+    receipt = receipt_for_relational(plan(), tables)
+    manifest = manifest_for_relational(
+        plan(), receipt, run_id="run-1", output_namespace="catalog.schema"
+    )
+    assert receipt.table_counts == (("child", 3), ("parent", 2))
+    assert "parent_id" not in receipt.to_dict()
+    assert manifest.to_dict()["receipt"] == receipt.to_dict()
 
 
 def test_relational_generation_reproduces_exact_fanout_distribution() -> None:
