@@ -78,6 +78,8 @@ def spark_fanout_by_segment(
     F = _functions()
     if len(parent_keys) != len(child_keys) or not parent_keys:
         raise ValueError("parent and child key widths must match")
+    if not segments:
+        raise ValueError("fan-out metrics require at least one segment column")
     counts = child.groupBy(*child_keys).agg(F.count(F.lit(1)).alias("child_count"))
     condition = [
         F.col(f"parent.{left}") == F.col(f"counts.{right}")

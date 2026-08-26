@@ -82,3 +82,10 @@ def test_spark_fanout_includes_zero_child_parents(spark) -> None:
         segments=("segment",),
     ).collect()
     assert {row["zero_child_count"] for row in rows} == {0, 1}
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_spark_fanout_requires_segment_columns(spark) -> None:
+    frame = spark.createDataFrame([("p1",)], "id string")
+    with pytest.raises(ValueError, match="segment column"):
+        spark_fanout_by_segment(frame, frame, parent_keys=("id",), child_keys=("id",), segments=())
