@@ -1,6 +1,6 @@
 import pytest
 
-from sda.patterns import PatternConfig, PatternDetector, PatternInputRefs
+from sda.patterns import PatternConfig, PatternDetector, PatternInputRefs, PatternLifecycle
 from sda.patterns.candidates import generate_candidates
 from sda.patterns.conflicts import detect_rule_conflicts, resolve_rule_conflicts
 from sda.patterns.fanout import fanout_by_segment

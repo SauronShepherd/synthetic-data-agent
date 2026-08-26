@@ -9,6 +9,7 @@ from sda.patterns.models import (
     PatternFamily,
     PatternInputRefs,
     PatternOrigin,
+    PatternLifecycle,
 )
 from sda.patterns.precedence import RulePrecedencePolicy
 from sda.patterns.scoring import EvidenceQuality, PatternScoringPolicy
@@ -19,6 +20,7 @@ __all__ = [
     "PatternDetector",
     "PatternFamily",
     "PatternOrigin",
+    "PatternLifecycle",
     "PatternInputRefs",
     "PatternDetectionResult",
     "PatternDecision",
