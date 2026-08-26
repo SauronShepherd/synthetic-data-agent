@@ -330,6 +330,7 @@ class PatternDetector:
                             "violation_rate": evaluation.violation_rate,
                             "method": evaluation.validation_mode,
                         },
+                        origin=rule.origin,
                     ),
                 )
         for earlier, later in zip(
@@ -442,6 +443,7 @@ class PatternDetector:
         support: int,
         metric: dict[str, Any],
         support_rate: float | None = None,
+        origin: PatternOrigin = PatternOrigin.OBSERVED,
     ) -> Pattern:
         pid = "pat_" + fingerprint(
             {
@@ -460,7 +462,7 @@ class PatternDetector:
                 stability_quality="unknown",
                 source_quality="compatible",
             ),
-            origin=PatternOrigin.OBSERVED,
+            origin=origin,
         ).value
         population_rows = int(metric.get("population_rows", support))
         violation_rows = int(metric.get("violation_rows", 0))
@@ -485,7 +487,7 @@ class PatternDetector:
             pid,
             analysis_id,
             family,
-            PatternOrigin.OBSERVED,
+            origin,
             table,
             columns,
             condition,

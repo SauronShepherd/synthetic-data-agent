@@ -400,6 +400,28 @@ def test_rule_evaluator_separates_condition_support_from_violations() -> None:
     assert result.violation_rate == 0.5
 
 
+def test_coordinator_preserves_declared_rule_origin() -> None:
+    rule = BusinessRule(
+        "declared-rule",
+        "main.s.t",
+        ({"column": "status", "operator": "eq", "value": "OPEN"},),
+        origin=PatternOrigin.DECLARED,
+    )
+    refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [{"status": "OPEN"}, {"status": "OPEN"}],
+        input_refs=refs,
+        run_id="run-declared",
+        environment="dev",
+        selected_tables=("main.s.t",),
+        rules=(rule,),
+    )
+    business_rules = [
+        pattern for pattern in result.patterns if pattern.family is PatternFamily.BUSINESS_RULE
+    ]
+    assert business_rules[0].origin is PatternOrigin.DECLARED
+
+
 def test_observed_hard_rule_is_rejected() -> None:
     try:
         BusinessRule(
