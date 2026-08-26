@@ -66,7 +66,7 @@ design evidence; the repository is the source of truth for what is currently pre
 
 ### 2.2 Finish the SDA 07 detector contract
 
-- [ ] Define canonical input adapters for metadata, profile, relationship, and graph
+- [x] Define canonical input adapters for metadata, profile, relationship, and graph
   artifacts; test missing, stale, duplicate, and mismatched upstream references.
 - [ ] Complete the pattern taxonomy: numeric association, conditional categorical,
   segment behavior, conditional null, lifecycle/state transition, event ordering,
