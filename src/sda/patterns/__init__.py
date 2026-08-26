@@ -1,6 +1,7 @@
 """Deterministic, evidence-preserving SDA 07 pattern detection."""
 
 from sda.patterns.detector import PatternDetector
+from sda.patterns.candidates import PatternCandidate, generate_candidates
 from sda.patterns.models import (
     Pattern,
     PatternConfig,
@@ -18,6 +19,8 @@ __all__ = [
     "Pattern",
     "PatternConfig",
     "PatternDetector",
+    "PatternCandidate",
+    "generate_candidates",
     "PatternFamily",
     "PatternOrigin",
     "PatternLifecycle",
