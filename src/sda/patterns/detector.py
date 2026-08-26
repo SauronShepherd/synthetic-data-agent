@@ -10,6 +10,7 @@ from sda.patterns.candidates import generate_candidates
 from sda.patterns.conditionals import conditional_counts
 from sda.patterns.conflicts import resolve_rule_conflicts
 from sda.patterns.correlations import pearson
+from sda.patterns.fanout import fanout_by_segment
 from sda.patterns.missingness import conditional_missingness
 from sda.patterns.models import (
     ColumnRoleAssignment,
@@ -57,6 +58,7 @@ class PatternDetector:
         approved_columns: dict[str, tuple[str, ...]] | None = None,
         role_overrides: tuple[ColumnRoleAssignment, ...] = (),
         rules: tuple[Any, ...] = (),
+        fanout_inputs: tuple[dict[str, Any], ...] = (),
     ) -> tuple[Pattern, ...]: ...
 
     @overload
@@ -74,6 +76,7 @@ class PatternDetector:
         approved_columns: dict[str, tuple[str, ...]] | None = None,
         role_overrides: tuple[ColumnRoleAssignment, ...] = (),
         rules: tuple[Any, ...] = (),
+        fanout_inputs: tuple[dict[str, Any], ...] = (),
     ) -> PatternDetectionResult: ...
 
     def detect(
@@ -90,6 +93,7 @@ class PatternDetector:
         approved_columns: dict[str, tuple[str, ...]] | None = None,
         role_overrides: tuple[ColumnRoleAssignment, ...] = (),
         rules: tuple[Any, ...] = (),
+        fanout_inputs: tuple[dict[str, Any], ...] = (),
     ) -> tuple[Pattern, ...] | PatternDetectionResult:
         if input_refs is not None:
             return self.detect_coordinated(
@@ -101,6 +105,7 @@ class PatternDetector:
                 approved_columns=approved_columns,
                 role_overrides=role_overrides,
                 rules=rules,
+                fanout_inputs=fanout_inputs,
             )
         if table is None:
             raise ValueError("table is required")
@@ -223,6 +228,7 @@ class PatternDetector:
         approved_columns: dict[str, tuple[str, ...]] | None = None,
         role_overrides: tuple[ColumnRoleAssignment, ...] = (),
         rules: tuple[Any, ...] = (),
+        fanout_inputs: tuple[dict[str, Any], ...] = (),
     ) -> PatternDetectionResult:
         """Execute a bounded local coordinator; Spark callers provide pre-aggregated rows."""
         if not rows:
@@ -373,6 +379,36 @@ class PatternDetector:
                             "method": evaluation.validation_mode,
                         },
                         origin=rule.origin,
+                    ),
+                )
+        # Relationship evidence is supplied as already-authorized bounded rows;
+        # this stage never reads raw child rows implicitly.
+        for relation in fanout_inputs:
+            required = {"parents", "children", "parent_key", "segment", "child_key"}
+            if set(relation) != required:
+                raise ValueError(
+                    "fanout input must contain exactly the required relationship fields"
+                )
+            metrics = fanout_by_segment(
+                relation["parents"],
+                relation["children"],
+                parent_key=relation["parent_key"],
+                segment=relation["segment"],
+                child_key=relation["child_key"],
+            )
+            for metric in metrics:
+                if metric["parent_count"] < self.config.min_support_rows:
+                    continue
+                patterns += (
+                    self._pattern(
+                        run_id,
+                        table,
+                        PatternFamily.FANOUT_BY_SEGMENT,
+                        (relation["segment"],),
+                        {"segment": metric["segment"]},
+                        {"child_count": relation["child_key"]},
+                        metric["parent_count"],
+                        {**metric, "method": "exact"},
                     ),
                 )
         for earlier, later in zip(

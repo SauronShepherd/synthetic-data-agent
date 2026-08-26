@@ -183,6 +183,30 @@ def test_coordinator_emits_conditional_distributions_for_each_pair() -> None:
     }
 
 
+def test_coordinator_emits_segment_fanout_from_authorized_relationship_rows() -> None:
+    refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [{"id": 1, "segment": "A"}, {"id": 2, "segment": "A"}],
+        table="main.parents",
+        input_refs=refs,
+        run_id="run-fanout",
+        environment="dev",
+        selected_tables=("main.parents",),
+        fanout_inputs=(
+            {
+                "parents": [{"id": 1, "segment": "A"}, {"id": 2, "segment": "A"}],
+                "children": [{"parent_id": 1}],
+                "parent_key": "id",
+                "segment": "segment",
+                "child_key": "parent_id",
+            },
+        ),
+    )
+    fanout = [p for p in result.patterns if p.family is PatternFamily.FANOUT_BY_SEGMENT]
+    assert len(fanout) == 1
+    assert fanout[0].metric["zero_child_count"] == 1
+
+
 def test_candidates_are_bounded_and_deterministic() -> None:
     columns = {f"c{i}": "double" for i in range(20)}
     config = PatternConfig(max_candidates=7)
