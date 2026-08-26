@@ -189,6 +189,11 @@ def test_column_role_assignment_validates_identity_and_confidence() -> None:
         ColumnRoleAssignment("main.t", "amount", "outcome", 1.1)
 
 
+def test_pattern_config_rejects_negative_sampling_seeds() -> None:
+    with pytest.raises(ValueError, match="invalid pattern configuration"):
+        PatternConfig(sample_seed=-1)
+
+
 def test_pattern_input_and_output_sequences_are_frozen() -> None:
     profiles = ["profile"]
     refs = PatternInputRefs("metadata", profiles, "relationship", "graph")
