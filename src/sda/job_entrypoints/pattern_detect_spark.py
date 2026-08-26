@@ -89,8 +89,14 @@ def main() -> None:
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     profile_ids = _profile_ids(args.profile_artifact_ids_json)
     input_ids = tuple(
-        [args.metadata_artifact_id, *profile_ids]
-        + [args.relationship_artifact_id, args.dependency_graph_artifact_id]
+        value
+        for value in (
+            args.metadata_artifact_id,
+            *profile_ids,
+            args.relationship_artifact_id,
+            args.dependency_graph_artifact_id,
+        )
+        if value
     )
     from sda.artifacts.models import ArtifactType
     from sda.artifacts.registry import SparkArtifactRegistry
@@ -105,30 +111,30 @@ def main() -> None:
             ArtifactType.RELATIONSHIP_ANALYSIS,
             ArtifactType.DEPENDENCY_GRAPH,
         )
-    for artifact_id, expected_type in zip(input_ids, expected_types, strict=True):
-        try:
-            ref = registry.require_complete(artifact_id)
-        except Exception as exc:
-            legacy_table = (
-                args.relationship_registry_table
-                if expected_type is ArtifactType.RELATIONSHIP_ANALYSIS
-                else args.dependency_graph_registry_table
-                if expected_type is ArtifactType.DEPENDENCY_GRAPH
-                else ""
-            )
-            if legacy_table:
-                ref = SparkArtifactRegistry(spark, legacy_table).require_latest_complete(
-                    artifact_id
+        for artifact_id, expected_type in zip(input_ids, expected_types, strict=True):
+            try:
+                ref = registry.require_complete(artifact_id)
+            except Exception as exc:
+                legacy_table = (
+                    args.relationship_registry_table
+                    if expected_type is ArtifactType.RELATIONSHIP_ANALYSIS
+                    else args.dependency_graph_registry_table
+                    if expected_type is ArtifactType.DEPENDENCY_GRAPH
+                    else ""
                 )
-            else:
+                if legacy_table:
+                    ref = SparkArtifactRegistry(spark, legacy_table).require_latest_complete(
+                        artifact_id
+                    )
+                else:
+                    raise SystemExit(
+                        f"unable to resolve upstream artifact {artifact_id!r}: {exc}"
+                    ) from exc
+            if ref.artifact_type is not expected_type:
                 raise SystemExit(
-                    f"unable to resolve upstream artifact {artifact_id!r}: {exc}"
-                ) from exc
-        if ref.artifact_type is not expected_type:
-            raise SystemExit(
-                f"upstream artifact {artifact_id} has type {ref.artifact_type}, "
-                f"expected {expected_type}"
-            )
+                    f"upstream artifact {artifact_id} has type {ref.artifact_type}, "
+                    f"expected {expected_type}"
+                )
     from pyspark.sql import functions as F
 
     source = spark.table(source_name.quoted)
