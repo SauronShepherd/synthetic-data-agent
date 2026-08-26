@@ -77,6 +77,7 @@ class StreamManifest:
     seed: int
     query_id: str | None
     watermark_delay_seconds: float
+    mode: StreamMode = StreamMode.BOUNDED
     manifest_schema_version: str = "stream-manifest-v1"
 
     def __post_init__(self) -> None:
@@ -111,6 +112,7 @@ class StreamManifest:
             "seed": self.seed,
             "query_id": self.query_id,
             "watermark_delay_seconds": self.watermark_delay_seconds,
+            "mode": self.mode.value,
             "manifest_schema_version": self.manifest_schema_version,
         }
 
@@ -257,6 +259,7 @@ def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamM
         plan.seed,
         plan.query_id or None,
         plan.watermark_delay_seconds,
+        plan.mode,
     )
 
 

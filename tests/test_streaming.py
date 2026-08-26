@@ -132,8 +132,17 @@ def test_manifest_records_the_declared_event_rate_contract() -> None:
     assert result.seed == 42
     assert result.query_id == "query-1"
     assert result.watermark_delay_seconds == 0.0
+    assert result.mode is StreamMode.BOUNDED
     assert result.to_dict()["seed"] == 42
     assert result.to_dict()["manifest_schema_version"] == "stream-manifest-v1"
+
+
+def test_accelerated_mode_is_explicit_in_manifest_without_changing_logical_replay() -> None:
+    current = plan(mode=StreamMode.ACCELERATED)
+    events = generate_bounded_events(current)
+    result = manifest(current, events)
+    assert result.mode is StreamMode.ACCELERATED
+    assert result.to_dict()["mode"] == "accelerated"
 
 
 def test_stream_seed_is_part_of_deterministic_event_identity() -> None:
