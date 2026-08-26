@@ -133,6 +133,11 @@ def test_pattern_input_refs_reject_whitespace_artifact_ids() -> None:
         PatternInputRefs("metadata", ("profile", " "), "relationship", "graph")
 
 
+def test_pattern_input_refs_reject_duplicate_profile_artifacts() -> None:
+    with pytest.raises(ValueError, match="upstream pattern artifacts"):
+        PatternInputRefs("metadata", ("profile", "profile"), "relationship", "graph")
+
+
 def test_pattern_input_and_output_sequences_are_frozen() -> None:
     profiles = ["profile"]
     refs = PatternInputRefs("metadata", profiles, "relationship", "graph")

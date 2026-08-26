@@ -85,6 +85,7 @@ class PatternInputRefs:
             not self.metadata_artifact_id.strip()
             or not self.profile_artifact_ids
             or any(not artifact_id.strip() for artifact_id in self.profile_artifact_ids)
+            or len(set(self.profile_artifact_ids)) != len(self.profile_artifact_ids)
             or not self.relationship_artifact_id.strip()
             or not self.dependency_graph_artifact_id.strip()
         ):
