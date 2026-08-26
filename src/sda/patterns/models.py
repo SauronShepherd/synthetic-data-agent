@@ -103,6 +103,7 @@ class PatternConfig:
     max_segment_cardinality: int = 50
     sample_fraction: float = 1.0
     sample_seed: int = 1729
+    max_rows_scanned: int = 100_000
 
     def __post_init__(self) -> None:
         if (
@@ -114,6 +115,7 @@ class PatternConfig:
             or self.max_condition_depth < 0
             or self.max_segment_cardinality < 1
             or not 0 < self.sample_fraction <= 1
+            or self.max_rows_scanned < 1
         ):
             raise ValueError("invalid pattern configuration")
 

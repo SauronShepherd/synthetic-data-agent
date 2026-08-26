@@ -1,3 +1,5 @@
+import pytest
+
 from sda.patterns import PatternConfig, PatternDetector, PatternInputRefs
 from sda.patterns.candidates import generate_candidates
 from sda.patterns.conflicts import detect_rule_conflicts
@@ -52,6 +54,12 @@ def test_candidates_are_bounded_and_deterministic() -> None:
     right = generate_candidates("main.s.t", dict(reversed(list(columns.items()))), config=config)
     assert len(left) == 7
     assert left == right
+
+
+def test_pattern_detector_rejects_inputs_over_scan_budget() -> None:
+    detector = PatternDetector(PatternConfig(min_support_rows=1, max_rows_scanned=1))
+    with pytest.raises(ValueError, match="max_rows_scanned"):
+        detector.detect([{"x": 1}, {"x": 2}], table="main.s.t", columns={"x": "int"})
 
 
 def test_fanout_includes_zero_child_parents() -> None:

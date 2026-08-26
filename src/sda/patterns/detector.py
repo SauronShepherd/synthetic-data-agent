@@ -103,6 +103,10 @@ class PatternDetector:
         if table is None:
             raise ValueError("table is required")
         rows = rows or []
+        if len(rows) > self.config.max_rows_scanned:
+            raise ValueError(
+                f"input rows exceed max_rows_scanned budget ({self.config.max_rows_scanned})"
+            )
         analysis_id = analysis_id or fingerprint(
             {"table": table, "config": self.config.configuration_hash}
         )
