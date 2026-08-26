@@ -548,6 +548,7 @@ def validate_tables(
                     method="availability_check",
                 )
             )
+            continue
         rows = tables[table]
         for column, pattern in format_columns.items():
             check_id = f"format:{table}.{column}"

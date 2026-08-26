@@ -297,6 +297,13 @@ def test_validation_checks_string_formats_fail_closed() -> None:
         validate_tables(tables, format_patterns={"users": {"email": "["}})
 
 
+def test_missing_format_table_returns_structured_failure() -> None:
+    report = validate_tables({}, format_patterns={"users": {"email": r"^[^@]+@[^@]+$"}})
+    assert report.technical_disposition is CheckStatus.FAIL
+    assert report.checks[0].status is CheckStatus.FAIL
+    assert "unavailable" in report.checks[0].message
+
+
 def test_validation_checks_parent_fanout_including_zero_child_parents() -> None:
     tables = {
         "parents": (({"id": 1}), ({"id": 2})),
