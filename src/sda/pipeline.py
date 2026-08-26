@@ -33,6 +33,9 @@ def run_standalone(
     actor: str | None = None,
     unique_key: str | None = None,
     sensitive_columns: tuple[tuple[str, str], ...] = (),
+    direct_identifier_columns: tuple[tuple[str, str], ...] = (),
+    quasi_identifier_columns: tuple[tuple[str, str], ...] = (),
+    min_quasi_group_size: int = 2,
     audit_log: AuditLog | None = None,
 ) -> PipelineResult:
     """Execute generation, validation, privacy assessment, and optional publication."""
@@ -60,7 +63,12 @@ def run_standalone(
         intended_use=plan.intended_use,
     )
     privacy = assess_privacy(
-        {table_name: rows}, sensitive_columns=sensitive_columns, policy_ref=plan.privacy_policy_ref
+        {table_name: rows},
+        sensitive_columns=sensitive_columns,
+        direct_identifier_columns=direct_identifier_columns,
+        quasi_identifier_columns=quasi_identifier_columns,
+        min_quasi_group_size=min_quasi_group_size,
+        policy_ref=plan.privacy_policy_ref,
     )
     publication = None
     if actor is not None:

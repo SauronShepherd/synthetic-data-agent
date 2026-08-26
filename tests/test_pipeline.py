@@ -45,3 +45,17 @@ def test_pipeline_runs_all_gates_and_publishes() -> None:
     assert result.manifest.input_artifact_ids == ("a",)
     assert result.manifest.locations == {"output": "uc.t"}
     assert result.publication.validation_fingerprint != approved_plan().plan_fingerprint
+
+
+def test_pipeline_blocks_publication_for_unapproved_direct_identifier() -> None:
+    result = run_standalone(
+        approved_plan(),
+        row_count=2,
+        dataset_id="dataset",
+        dataset_version="v1",
+        location="catalog.schema.table",
+        actor=None,
+        direct_identifier_columns=(("t", "id"),),
+    )
+    assert result.privacy.decision.value == "rejected"
+    assert result.privacy.findings[0].code == "direct_identifier_not_approved"
