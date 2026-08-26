@@ -9,6 +9,13 @@ from typing import Any
 from sda.artifacts.fingerprint import fingerprint
 
 
+class _FrozenDict(dict[str, str]):
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("artifact mappings are immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
 class ArtifactType(StrEnum):
     METADATA_INVENTORY = "metadata_inventory"
     TABLE_PROFILE = "table_profile"
@@ -144,3 +151,4 @@ class ArtifactRef:
                     }
                 ),
             )
+        object.__setattr__(self, "related_locations", _FrozenDict(self.related_locations))
