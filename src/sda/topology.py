@@ -169,9 +169,11 @@ def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
             raise TopologyError("topology result contains an unknown endpoint")
         if not plan.allow_self_loops and source == target:
             raise TopologyError("topology result contains a forbidden self-loop")
-        pair = (
-            (source, target) if plan.kind is GraphKind.DIRECTED else tuple(sorted((source, target)))
-        )
+        if plan.kind is GraphKind.DIRECTED:
+            pair = (source, target)
+        else:
+            first, second = sorted((source, target))
+            pair = (first, second)
         if not plan.allow_parallel_edges and pair in pairs:
             raise TopologyError("topology result contains a duplicate edge")
         pairs.add(pair)
@@ -182,8 +184,22 @@ def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
             adjacency[target].add(source)
     if plan.max_degree is not None and any(value > plan.max_degree for value in degree.values()):
         raise TopologyError("topology result exceeds max_degree")
-    if plan.acyclic and any(_reaches(adjacency, target, source) for source, target in pairs):
+    if plan.acyclic and any(_reaches_named(adjacency, target, source) for source, target in pairs):
         raise TopologyError("topology result contains a cycle")
+
+
+def _reaches_named(adjacency: dict[str, set[str]], start: str, target: str) -> bool:
+    pending = [start]
+    visited: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current == target:
+            return True
+        if current in visited:
+            continue
+        visited.add(current)
+        pending.extend(adjacency[current] - visited)
+    return False
 
 
 def _reaches(adjacency: list[set[int]], start: int, target: int) -> bool:
