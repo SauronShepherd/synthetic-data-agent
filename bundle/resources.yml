@@ -516,3 +516,52 @@ resources:
             environment_version: "2"
             dependencies:
               - ../dist/*.whl
+
+    validate_generated:
+      name: "[${bundle.target}] SDA Validate Generated Data"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      tags:
+        workload: sda
+        stage: validation
+      parameters:
+        - name: input_table
+          default: ${var.output_schema_name}.generated_data
+        - name: report_table
+          default: ${var.catalog_name}.profiles.validation_reports
+        - name: run_id
+          default: ""
+        - name: expected_count
+          default: "0"
+        - name: required_columns
+          default: ""
+        - name: intended_use
+          default: qa
+        - name: max_rows
+          default: "100000"
+      tasks:
+        - task_key: validate_generated
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/validate_generated_spark.py
+            parameters:
+              - --input-table
+              - "{{job.parameters.input_table}}"
+              - --report-table
+              - "{{job.parameters.report_table}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --expected-count
+              - "{{job.parameters.expected_count}}"
+              - --required-columns
+              - "{{job.parameters.required_columns}}"
+              - --intended-use
+              - "{{job.parameters.intended_use}}"
+              - --max-rows
+              - "{{job.parameters.max_rows}}"
+          environment_key: validate_generated_environment
+      environments:
+        - environment_key: validate_generated_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
