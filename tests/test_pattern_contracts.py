@@ -21,6 +21,7 @@ from sda.patterns.persistence import (
 from sda.patterns.precedence import RulePrecedencePolicy
 from sda.patterns.rules import BusinessRule, RuleStrength, evaluate_rule
 from sda.patterns.safety import SafeValueKind, safe_pattern_value
+from sda.patterns.scoring import PatternScoringPolicy
 from sda.patterns.stability import stability
 from sda.patterns.temporal import ordered_events, temporal_order
 from sda.patterns.transitions import state_transitions
