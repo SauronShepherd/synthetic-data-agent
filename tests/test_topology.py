@@ -52,6 +52,4 @@ def test_topology_rejects_acyclic_self_loops() -> None:
 
 def test_directed_max_degree_counts_both_endpoints() -> None:
     with pytest.raises(TopologyError, match="realize"):
-        generate_topology(
-            TopologyPlan("g", "fp", node_count=3, edge_count=2, max_degree=1)
-        )
+        generate_topology(TopologyPlan("g", "fp", node_count=3, edge_count=2, max_degree=1))
