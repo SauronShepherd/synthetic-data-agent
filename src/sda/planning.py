@@ -99,6 +99,11 @@ class GenerationPlan:
             raise ValueError("plans require source snapshots and input artifacts")
         if not self.tables or len(set(self.tables)) != len(self.tables):
             raise ValueError("plans require unique target tables")
+        column_keys = [(column.table, column.column) for column in self.columns]
+        if len(column_keys) != len(set(column_keys)):
+            raise ValueError("plans require unique table columns")
+        if any(column.table not in self.tables for column in self.columns):
+            raise ValueError("plan columns must belong to declared target tables")
         if self.scale_factor <= 0:
             raise ValueError("scale_factor must be greater than zero")
         if self.seed < 0:

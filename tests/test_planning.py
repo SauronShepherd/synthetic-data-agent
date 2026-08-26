@@ -67,3 +67,20 @@ def test_nested_plan_mappings_are_immutable() -> None:
     with pytest.raises(TypeError, match="immutable"):
         plan.columns[0].parameters["prefix"] = "y"  # type: ignore[index]
     assert plan.plan_fingerprint == plan.compute_fingerprint()
+
+
+def test_plan_rejects_ambiguous_or_undeclared_columns() -> None:
+    base = dict(
+        plan_id="p",
+        plan_version=1,
+        request_id="r",
+        source_snapshot_ids=("s",),
+        input_artifact_ids=("a",),
+        target_catalog="c",
+        target_schema="s",
+        tables=("t",),
+    )
+    with pytest.raises(ValueError, match="unique table columns"):
+        GenerationPlan(**base, columns=(ColumnGenerationSpec("t", "id", "string"),) * 2)
+    with pytest.raises(ValueError, match="declared target"):
+        GenerationPlan(**base, columns=(ColumnGenerationSpec("other", "id", "string"),))
