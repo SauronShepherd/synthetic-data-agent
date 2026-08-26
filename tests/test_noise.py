@@ -99,3 +99,13 @@ def test_near_duplicate_noise_is_bounded_and_type_checked() -> None:
             NoisePlan("n", fingerprint(numeric), defect_type="near_duplicate", budget=1),
             column="value",
         )
+
+
+def test_near_duplicate_noise_rejects_empty_strings() -> None:
+    baseline = (({"value": ""}),)
+    with pytest.raises(NoiseError, match="non-empty"):
+        apply_noise(
+            baseline,
+            NoisePlan("n", fingerprint(baseline), defect_type="near_duplicate", budget=1),
+            column="value",
+        )

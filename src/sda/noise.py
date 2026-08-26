@@ -146,6 +146,8 @@ def apply_noise(
         elif plan.defect_type == "near_duplicate":
             if not isinstance(before, str):
                 raise NoiseError("near_duplicate defects require a string column")
+            if not before:
+                raise NoiseError("near_duplicate defects require non-empty strings")
             after = before[:-1] + ("_" if before[-1:] != "_" else "-")
         else:
             if not isinstance(before, int | float) or isinstance(before, bool):
