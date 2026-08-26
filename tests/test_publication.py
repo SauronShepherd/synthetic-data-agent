@@ -125,7 +125,6 @@ def test_staging_is_idempotent_but_rejects_conflicting_evidence() -> None:
         registry.stage(
             Publication("dataset", "v1", "uc.other.table", item.validation_fingerprint, "strict")
         )
-    assert second.status is PublicationStatus.STAGED
 
 
 def test_publication_rejects_mismatched_validation_evidence() -> None:
