@@ -137,6 +137,10 @@ class ArtifactRef:
                     object.__setattr__(self, field_name, enum_type(value))
                 except ValueError as exc:
                     raise ValueError(f"unsupported {field_name}: {value!r}") from exc
+        if any(not artifact_id.strip() for artifact_id in self.input_artifact_ids):
+            raise ValueError("input_artifact_ids must not contain empty values")
+        if len(set(self.input_artifact_ids)) != len(self.input_artifact_ids):
+            raise ValueError("input_artifact_ids must be unique")
         for name in (
             "artifact_id",
             "artifact_schema_version",

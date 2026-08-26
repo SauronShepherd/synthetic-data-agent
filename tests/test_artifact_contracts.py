@@ -134,3 +134,44 @@ def test_artifact_reference_normalizes_enum_strings() -> None:
     )
     assert ref.artifact_type is ArtifactType.TABLE_PROFILE
     assert ref.status is ArtifactStatus.COMPLETE
+
+
+def test_artifact_reference_rejects_ambiguous_input_artifacts() -> None:
+    with pytest.raises(ValueError, match="empty values"):
+        ArtifactRef(
+            "id",
+            ArtifactType.TABLE_PROFILE,
+            "1.0",
+            ArtifactStatus.COMPLETE,
+            "tool",
+            "0.6.0",
+            "run",
+            "dev",
+            "now",
+            "hash",
+            "db.t",
+            {},
+            (),
+            "checksum",
+            "summary",
+            input_artifact_ids=[""],
+        )
+    with pytest.raises(ValueError, match="unique"):
+        ArtifactRef(
+            "id",
+            ArtifactType.TABLE_PROFILE,
+            "1.0",
+            ArtifactStatus.COMPLETE,
+            "tool",
+            "0.6.0",
+            "run",
+            "dev",
+            "now",
+            "hash",
+            "db.t",
+            {},
+            (),
+            "checksum",
+            "summary",
+            input_artifact_ids=["a", "a"],
+        )
