@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import random
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from sda.artifacts.fingerprint import fingerprint
@@ -43,6 +43,56 @@ class GenerationReceipt:
             "output_fingerprint": self.output_fingerprint,
             "generator_version": self.generator_version,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationManifest:
+    """Immutable lineage manifest for one generated output batch."""
+
+    run_id: str
+    output_table: str
+    plan_id: str
+    plan_fingerprint: str
+    source_snapshot_ids: tuple[str, ...]
+    input_artifact_ids: tuple[str, ...]
+    receipt: GenerationReceipt
+
+    def __post_init__(self) -> None:
+        for name in ("run_id", "output_table", "plan_id", "plan_fingerprint"):
+            if not getattr(self, name).strip():
+                raise ValueError(f"{name} must not be empty")
+        if self.receipt.plan_id != self.plan_id:
+            raise ValueError("receipt plan_id does not match manifest plan_id")
+        if self.receipt.plan_fingerprint != self.plan_fingerprint:
+            raise ValueError("receipt plan_fingerprint does not match manifest plan_fingerprint")
+        if not self.source_snapshot_ids:
+            raise ValueError("source_snapshot_ids must not be empty")
+
+    def to_dict(self) -> dict[str, Any]:
+        value = asdict(self)
+        value["receipt"] = self.receipt.to_dict()
+        return value
+
+
+def manifest_for(
+    plan: GenerationPlan,
+    receipt: GenerationReceipt,
+    *,
+    run_id: str,
+    output_table: str,
+) -> GenerationManifest:
+    """Build a lineage manifest only when the receipt belongs to ``plan``."""
+    if receipt.plan_id != plan.plan_id or receipt.plan_fingerprint != plan.plan_fingerprint:
+        raise GenerationError("generation receipt does not belong to the plan")
+    return GenerationManifest(
+        run_id=run_id,
+        output_table=output_table,
+        plan_id=plan.plan_id,
+        plan_fingerprint=plan.plan_fingerprint,
+        source_snapshot_ids=plan.source_snapshot_ids,
+        input_artifact_ids=plan.input_artifact_ids,
+        receipt=receipt,
+    )
 
 
 def generate_rows(

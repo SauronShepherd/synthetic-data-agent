@@ -5,7 +5,13 @@ from dataclasses import replace
 
 import pytest
 
-from sda.generation import GenerationError, generate_rows, receipt_for, resolve_row_count
+from sda.generation import (
+    GenerationError,
+    generate_rows,
+    manifest_for,
+    receipt_for,
+    resolve_row_count,
+)
 from sda.planning import (
     ColumnGenerationSpec,
     CrossColumnRule,
@@ -161,6 +167,26 @@ def test_standalone_generation_rejects_multi_table_plans() -> None:
     multi_table = replace(plan(), tables=("t", "u"), plan_fingerprint="")
     with pytest.raises(GenerationError, match="relational generator"):
         generate_rows(multi_table, row_count=1, vocabularies={"segment": ("a",)})
+
+
+def test_generation_manifest_binds_receipt_and_plan_lineage() -> None:
+    current_plan = plan()
+    receipt = receipt_for(
+        current_plan,
+        generate_rows(current_plan, row_count=3, vocabularies={"segment": ("a", "b")}),
+    )
+    manifest = manifest_for(
+        current_plan, receipt, run_id="run-1", output_table="catalog.schema.synthetic"
+    )
+    assert manifest.to_dict()["receipt"] == receipt.to_dict()
+    assert manifest.source_snapshot_ids == current_plan.source_snapshot_ids
+    with pytest.raises(GenerationError, match="does not belong"):
+        manifest_for(
+            replace(current_plan, plan_id="other", plan_fingerprint=""),
+            receipt,
+            run_id="r",
+            output_table="t",
+        )
 
 
 def test_approved_cross_column_rules_are_deterministic_and_plan_bound() -> None:
