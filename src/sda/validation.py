@@ -509,8 +509,8 @@ def validate_tables(
             )
             continue
         rows = tables[table]
-        for column, bounds in numeric_columns.items():
-            numeric_minimum, numeric_maximum = bounds
+        for column, numeric_bounds_value in numeric_columns.items():
+            numeric_minimum, numeric_maximum = numeric_bounds_value
             check_id = f"numeric_bounds:{table}.{column}"
             if numeric_maximum < numeric_minimum:
                 raise ValueError(f"numeric bounds must be ordered for {check_id}")
