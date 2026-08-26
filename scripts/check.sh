@@ -3,7 +3,7 @@ set -euo pipefail
 
 export PYTHONPATH="$(pwd)/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-ruff check .
-mypy src
-pytest
+python -m ruff check .
+python -m mypy src
+python -m pytest
 python scripts/smoke_local.py
