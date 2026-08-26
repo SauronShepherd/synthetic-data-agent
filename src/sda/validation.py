@@ -476,6 +476,20 @@ def validate_tables(
                     )
                 )
                 continue
+            if not rows:
+                checks.append(
+                    ValidationCheck(
+                        check_id,
+                        CheckStatus.NOT_APPLICABLE,
+                        f"{table}.{column} has no rows; cannot validate distribution",
+                        {"supported": False, "reason": "no_population", "rows": 0},
+                        method="categorical_distribution",
+                        population="empty_table",
+                        severity="warning",
+                        unsupported_reason="no_population",
+                    )
+                )
+                continue
             counts: dict[Any, int] = {}
             for row in rows:
                 value = row[column]
@@ -544,11 +558,27 @@ def validate_tables(
             observed: dict[Any, float] = {}
             for value in expected_rates:
                 subset = [row for row in rows if row[driver] == value]
+                if not subset:
+                    continue
                 observed[value] = (
                     sum(row[target] is None for row in subset) / len(subset) if subset else 0.0
                 )
+            if not observed:
+                checks.append(
+                    ValidationCheck(
+                        check_id,
+                        CheckStatus.NOT_APPLICABLE,
+                        f"{check_id} has no driver population",
+                        {"supported": False, "reason": "no_population"},
+                        method="conditional_null_rate",
+                        population="empty_driver_segment",
+                        severity="warning",
+                        unsupported_reason="no_population",
+                    )
+                )
+                continue
             errors = {
-                str(value): abs(observed[value] - rate) for value, rate in expected_rates.items()
+                str(value): abs(observed[value] - expected_rates[value]) for value in observed
             }
             maximum_error = max(errors.values(), default=0.0)
             checks.append(

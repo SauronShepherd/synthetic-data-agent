@@ -45,6 +45,16 @@ def test_fanout_validation_handles_nested_identifier_values() -> None:
     assert report.technical_disposition is CheckStatus.PASS
 
 
+def test_empty_populations_do_not_pass_distribution_checks() -> None:
+    report = validate_tables(
+        {"events": ()},
+        expected_distributions={"events": {"kind": {"a": 1.0}}},
+        conditional_null_rates={"events": {("segment", "value"): {"a": 0.0}}},
+    )
+    assert report.technical_disposition is CheckStatus.PASS
+    assert {check.status for check in report.checks} == {CheckStatus.NOT_APPLICABLE}
+
+
 def test_validation_evidence_is_immutable_and_check_ids_are_unique() -> None:
     check = ValidationCheck("schema", CheckStatus.PASS, "ok", {"actual": 1, "details": [{"x": 2}]})
     with pytest.raises(TypeError, match="immutable"):
