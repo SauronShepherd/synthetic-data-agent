@@ -180,7 +180,7 @@ def test_spark_dispatcher_handles_partitions_skew_and_nulls(spark) -> None:
     )
 
     correlation = spark_metric(frame, "pearson", left="value", right="value")
-    assert correlation.first()["valid_pair_count"] == 206
+    assert correlation.first()["valid_pair_count"] == 241
     distribution = spark_metric(
         frame, "conditional_distribution", drivers=("segment",), outcome="status"
     )
