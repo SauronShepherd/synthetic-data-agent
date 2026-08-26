@@ -44,9 +44,7 @@ def test_staged_publication_requires_explicit_human_approval() -> None:
     registry, _ = staged()
     validation, privacy = reports()
     with pytest.raises(PublicationError, match="human approval"):
-        registry.publish(
-            "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer"
-        )
+        registry.publish("dataset", "v1", validation=validation, privacy=privacy, actor="reviewer")
 
 
 def test_publication_rejects_failed_validation_or_privacy() -> None:
