@@ -145,6 +145,10 @@ class GenerationPlan:
             raise ValueError("plans require unique table columns")
         if any(column.table not in self.tables for column in self.columns):
             raise ValueError("plan columns must belong to declared target tables")
+        declared_columns = {column.column for column in self.columns}
+        for rule in self.cross_column_rules:
+            if rule.if_column not in declared_columns or rule.then_column not in declared_columns:
+                raise ValueError("cross-column rules must reference declared plan columns")
         for table in self.tables:
             try:
                 quote_identifier(table)

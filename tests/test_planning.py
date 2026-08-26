@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sda.planning import ColumnGenerationSpec, GenerationMode, GenerationPlan, PlanStatus
+from sda.planning import (
+    ColumnGenerationSpec,
+    CrossColumnRule,
+    GenerationMode,
+    GenerationPlan,
+    PlanStatus,
+)
 
 
 def make_plan() -> GenerationPlan:
@@ -135,6 +141,13 @@ def test_plan_rejects_ambiguous_or_undeclared_columns() -> None:
         GenerationPlan(**base, columns=(ColumnGenerationSpec("t", "id", "string"),) * 2)
     with pytest.raises(ValueError, match="declared target"):
         GenerationPlan(**base, columns=(ColumnGenerationSpec("other", "id", "string"),))
+
+    with pytest.raises(ValueError, match="cross-column rules"):
+        GenerationPlan(
+            **base,
+            columns=(ColumnGenerationSpec("t", "id", "string"),),
+            cross_column_rules=(CrossColumnRule("missing", "x", "id", "y"),),
+        )
 
 
 @pytest.mark.parametrize("field", ["target_catalog", "target_schema"])
