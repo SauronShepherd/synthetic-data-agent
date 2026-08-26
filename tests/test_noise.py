@@ -187,6 +187,24 @@ def test_noise_result_rejects_out_of_range_mutations() -> None:
         )
 
 
+def test_noise_result_rejects_forged_mutation_contract_fields() -> None:
+    rows = ({"value": "clean"},)
+    with pytest.raises(ValueError, match="unsupported"):
+        NoiseResult(
+            rows,
+            (Mutation("n", 0, "value", "forged", "clean", "dirty"),),
+            "baseline",
+            fingerprint(rows),
+        )
+    with pytest.raises(ValueError, match="column"):
+        NoiseResult(
+            rows,
+            (Mutation("n", 0, "", "casing", "clean", "CLEAN"),),
+            "baseline",
+            fingerprint(rows),
+        )
+
+
 def test_historical_noise_profile_is_a_supported_plan_contract() -> None:
     plan = NoisePlan("n", "baseline", profile=NoiseProfile.HISTORICAL)
     assert plan.profile.value == "historical"

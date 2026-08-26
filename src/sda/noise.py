@@ -149,6 +149,10 @@ class NoiseResult:
             raise ValueError("noise mutation row_index is outside result rows")
         if any(not mutation.noise_id.strip() for mutation in self.mutations):
             raise ValueError("noise mutation noise_id is required")
+        if any(mutation.defect_type not in SUPPORTED_DEFECTS for mutation in self.mutations):
+            raise ValueError("noise mutation defect_type is unsupported")
+        if any(not mutation.column.strip() for mutation in self.mutations):
+            raise ValueError("noise mutation column is required")
         if fingerprint(self.rows) != self.output_fingerprint:
             raise ValueError("noise output_fingerprint does not match rows")
 
