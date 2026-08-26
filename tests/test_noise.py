@@ -14,6 +14,8 @@ def test_noise_is_deterministic_and_preserves_baseline() -> None:
     assert first == second
     assert all(row["value"] is not None for row in baseline)
     assert len(first.mutations) == 2
+    assert first.output_fingerprint == fingerprint(first.rows)
+    assert first.output_fingerprint == second.output_fingerprint
 
 
 def test_noise_rejects_unknown_columns() -> None:

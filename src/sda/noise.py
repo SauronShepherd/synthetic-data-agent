@@ -65,6 +65,7 @@ class NoiseResult:
     rows: tuple[dict[str, Any], ...]
     mutations: tuple[Mutation, ...]
     baseline_fingerprint: str
+    output_fingerprint: str
 
 
 def inject_nulls(
@@ -77,7 +78,8 @@ def inject_nulls(
     if fingerprint(baseline) != plan.baseline_fingerprint:
         raise NoiseError("baseline fingerprint does not match the noise plan")
     if not baseline or plan.budget == 0:
-        return NoiseResult(tuple(dict(row) for row in baseline), (), plan.baseline_fingerprint)
+        copied = tuple(dict(row) for row in baseline)
+        return NoiseResult(copied, (), plan.baseline_fingerprint, fingerprint(copied))
     if any(column not in row for row in baseline):
         raise NoiseError(f"column not present in baseline: {column}")
     candidates = sorted(
@@ -91,7 +93,8 @@ def inject_nulls(
         before = rows[index][column]
         rows[index][column] = None
         mutations.append(Mutation(plan.noise_id, index, column, plan.defect_type, before, None))
-    return NoiseResult(tuple(rows), tuple(mutations), plan.baseline_fingerprint)
+    output = tuple(rows)
+    return NoiseResult(output, tuple(mutations), plan.baseline_fingerprint, fingerprint(output))
 
 
 def apply_noise(
@@ -125,4 +128,5 @@ def apply_noise(
             after = before * 10 + 1
         rows[index][column] = after
         mutations.append(Mutation(plan.noise_id, index, column, plan.defect_type, before, after))
-    return NoiseResult(tuple(rows), tuple(mutations), plan.baseline_fingerprint)
+    output = tuple(rows)
+    return NoiseResult(output, tuple(mutations), plan.baseline_fingerprint, fingerprint(output))
