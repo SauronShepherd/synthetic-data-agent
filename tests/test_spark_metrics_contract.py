@@ -41,6 +41,7 @@ def test_spark_metrics_does_not_collect_key_domains() -> None:
     )
 
 
+@pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
     frame = spark.createDataFrame(
         [
@@ -67,6 +68,7 @@ def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
     assert transitions.count() == 1
 
 
+@pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_spark_fanout_includes_zero_child_parents(spark) -> None:
     parents = spark.createDataFrame(
         [("p1", "premium"), ("p2", "standard")], "id string, segment string"
