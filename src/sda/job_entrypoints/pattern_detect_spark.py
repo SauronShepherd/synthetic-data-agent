@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import UTC, datetime
+from dataclasses import replace
 
 from sda.patterns.detector import PatternDetector
 from sda.patterns.models import PatternConfig
@@ -317,7 +318,12 @@ def main() -> None:
                     )
                 )
     # Multiple families can describe the same finding; persist one content-id row.
-    patterns = list({pattern.pattern_id: pattern for pattern in patterns}.values())
+    patterns = [
+        replace(pattern, support_rate=pattern.support_rows / source_count)
+        if pattern.support_rate is None and source_count
+        else pattern
+        for pattern in {pattern.pattern_id: pattern for pattern in patterns}.values()
+    ]
     if args.output_table:
         from sda.artifacts.delta import persist_artifact_lifecycle, persist_distributed_evidence
         from sda.artifacts.fingerprint import fingerprint
