@@ -510,9 +510,9 @@ def validate_tables(
             continue
         rows = tables[table]
         for column, bounds in numeric_columns.items():
-            minimum, maximum = bounds
+            numeric_minimum, numeric_maximum = bounds
             check_id = f"numeric_bounds:{table}.{column}"
-            if maximum < minimum:
+            if numeric_maximum < numeric_minimum:
                 raise ValueError(f"numeric bounds must be ordered for {check_id}")
             if any(column not in row for row in rows):
                 checks.append(
@@ -530,7 +530,7 @@ def validate_tables(
                 and (
                     isinstance(value, bool)
                     or not isinstance(value, int | float)
-                    or not minimum <= value <= maximum
+                    or not numeric_minimum <= value <= numeric_maximum
                 )
                 for value in (row[column] for row in rows)
             )
@@ -538,8 +538,13 @@ def validate_tables(
                 ValidationCheck(
                     check_id,
                     CheckStatus.PASS if invalid == 0 else CheckStatus.FAIL,
-                    f"{invalid} values violate numeric bounds [{minimum}, {maximum}]",
-                    {"rows": len(rows), "invalid": invalid, "minimum": minimum, "maximum": maximum},
+                    f"{invalid} values violate numeric bounds [{numeric_minimum}, {numeric_maximum}]",
+                    {
+                        "rows": len(rows),
+                        "invalid": invalid,
+                        "minimum": numeric_minimum,
+                        "maximum": numeric_maximum,
+                    },
                     method="numeric_bounds",
                     population="non_null_values",
                 )
