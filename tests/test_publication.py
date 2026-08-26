@@ -31,6 +31,8 @@ def staged() -> tuple[PublicationRegistry, Publication]:
 def test_publication_requires_both_gates_and_supports_alias() -> None:
     registry, _ = staged()
     validation, privacy = reports()
+    registry.validate("dataset", "v1", validation=validation)
+    registry.approve("dataset", "v1", privacy=privacy, actor="reviewer")
     result = registry.publish(
         "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest"
     )
@@ -53,6 +55,8 @@ def test_publication_rejects_failed_validation_or_privacy() -> None:
 def test_revoke_removes_alias() -> None:
     registry, _ = staged()
     validation, privacy = reports()
+    registry.validate("dataset", "v1", validation=validation)
+    registry.approve("dataset", "v1", privacy=privacy, actor="reviewer")
     registry.publish(
         "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest"
     )
@@ -90,12 +94,16 @@ def test_publication_exposes_validated_and_approved_lifecycle_states() -> None:
 def test_alias_conflict_does_not_partially_publish() -> None:
     first_registry, _ = staged()
     validation, privacy = reports()
+    first_registry.validate("dataset", "v1", validation=validation)
+    first_registry.approve("dataset", "v1", privacy=privacy, actor="reviewer")
     first_registry.publish(
         "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest"
     )
     second = first_registry.stage(
         Publication("other", "v1", "uc.other", validation.fingerprint, "strict")
     )
+    first_registry.validate("other", "v1", validation=validation)
+    first_registry.approve("other", "v1", privacy=privacy, actor="reviewer")
     assert second.status is PublicationStatus.STAGED
     with pytest.raises(PublicationError, match="alias already"):
         first_registry.publish(
@@ -111,7 +119,9 @@ def test_publication_rejects_mismatched_validation_evidence() -> None:
     with pytest.raises(PublicationError, match="fingerprint"):
         registry.publish("dataset", "v1", validation=changed, privacy=privacy, actor="reviewer")
     assert (
-        registry.publish(
+        registry.validate("dataset", "v1", validation=validation)
+        and registry.approve("dataset", "v1", privacy=privacy, actor="reviewer")
+        and registry.publish(
             "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer"
         ).status
         is PublicationStatus.PUBLISHED

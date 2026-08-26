@@ -110,12 +110,7 @@ class PublicationRegistry:
             raise PublicationError("privacy approval is required")
         if current.privacy_fingerprint and current.privacy_fingerprint != privacy.fingerprint:
             raise PublicationError("privacy evidence fingerprint does not match approved artifact")
-        self._check_alias_available(alias, key)
-        published = replace(current, status=PublicationStatus.PUBLISHED, published_by=actor)
-        self._items[key] = published
-        if alias:
-            self._aliases[alias] = key
-        return published
+        raise PublicationError("human approval is required")
 
     def _check_alias_available(self, alias: str | None, key: tuple[str, str]) -> None:
         if alias and (previous := self._aliases.get(alias)) is not None and previous != key:
