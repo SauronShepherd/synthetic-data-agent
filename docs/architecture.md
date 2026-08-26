@@ -125,4 +125,6 @@ single/composite candidates, cycle-aware graph summaries, and durable developmen
 artifacts. It now provides bounded deterministic generation, validation/privacy/publication
 contracts, and local durable-state references. Production-scale generation, external human
 review, managed Lakebase integration, and governed Unity Catalog integration-test proof are
-still outstanding.
+still outstanding. Local privacy checks cover direct identifiers, quasi-identifier
+rarity, duplicate-row risk, and raw-value-free report serialization; they do not
+replace governed external privacy approval.

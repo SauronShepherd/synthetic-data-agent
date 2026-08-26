@@ -22,6 +22,10 @@ This branch now supports three execution modes:
 - **Databricks Bundle serverless mode** for Databricks Free/serverless workspaces.
 - **SDA 07 pattern evidence workflow** through the Databricks bundle, including
   persisted pattern registry/evidence artifacts and its SDA 04–06 upstream inputs.
+- Bounded privacy review for sensitive/direct identifiers, rare quasi-identifiers, and
+  duplicate-row risk, with schema-versioned, raw-value-free findings.
+- Standalone Spark generation manifests containing the approved seed, output schema,
+  fingerprints, receipt, and lineage; `--manifest-path` writes them atomically.
 
 Bundle validation and deployment are environment-dependent; local checks cover compilation and deterministic reader contracts. A successful run may still return an empty inventory when the configured catalog/schema scope does not contain visible matching tables.
 
@@ -48,7 +52,7 @@ Bundle validation and deployment are environment-dependent; local checks cover c
 ## Current limitations
 
 - Source table value reads.
-- Privacy approval execution.
+- Governed external privacy approval execution.
 - Production-scale synthetic row generation and publishing.
 - A complete external human-review workflow; local approval and publication contracts exist,
   but reviewer identity and decisions are not yet integrated with a governed external system.
