@@ -4,3 +4,4 @@ set -euo pipefail
 ruff check .
 mypy src
 pytest
+python scripts/smoke_local.py
