@@ -74,6 +74,8 @@ def checkpoint(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> Strea
     if any(event.get("stream_id") != plan.stream_id for event in events):
         raise StreamError("checkpoint events belong to a different stream")
     offsets = [int(event["offset"]) for event in events]
+    if any(offset < 0 or offset >= plan.event_count for offset in offsets):
+        raise StreamError("manifest event offset is outside the stream range")
     if offsets and offsets != list(range(offsets[0], offsets[-1] + 1)):
         raise StreamError("checkpoint events must contain contiguous offsets")
     next_offset = offsets[-1] + 1 if offsets else 0
@@ -135,6 +137,8 @@ def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamM
     ):
         raise StreamError("manifest events do not belong to the stream plan")
     offsets = [int(event["offset"]) for event in events]
+    if any(offset < 0 or offset >= plan.event_count for offset in offsets):
+        raise StreamError("manifest event offset is outside the stream range")
     if offsets and offsets != list(range(offsets[0], offsets[-1] + 1)):
         raise StreamError("manifest events must contain contiguous offsets")
     ids = [str(event["event_id"]) for event in events]

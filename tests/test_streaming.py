@@ -69,6 +69,8 @@ def test_manifest_rejects_schema_mismatch_and_offset_gaps() -> None:
         manifest(current, ({**events[0], "schema_version": "2"},))
     with pytest.raises(StreamError, match="contiguous"):
         manifest(current, (events[0], events[2]))
+    with pytest.raises(StreamError, match="outside"):
+        manifest(current, ({**events[0], "offset": current.event_count},))
 
 
 def test_bounded_events_have_deterministic_inter_arrival_times() -> None:
