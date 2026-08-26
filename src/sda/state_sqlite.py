@@ -18,11 +18,12 @@ from sda.state import (
     Feedback,
     RunRecord,
     StateError,
+    StateRepository,
     WorkflowStatus,
 )
 
 
-class SQLiteStateRepository:
+class SQLiteStateRepository(StateRepository):
     def __init__(self, path: str = ":memory:") -> None:
         self._connection = sqlite3.connect(path)
         self._connection.execute("PRAGMA foreign_keys = ON")

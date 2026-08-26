@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from threading import RLock
+from typing import Protocol
 
 
 class WorkflowStatus(StrEnum):
@@ -147,6 +148,33 @@ _ALLOWED: dict[WorkflowStatus, frozenset[WorkflowStatus]] = {
 
 class StateError(RuntimeError):
     """Raised for illegal or conflicting state operations."""
+
+
+class StateRepository(Protocol):
+    """Storage-neutral contract implemented by local and durable adapters."""
+
+    def create_run(self, run: RunRecord) -> RunRecord: ...
+    def get_run(self, run_id: str) -> RunRecord: ...
+    def transition_run(
+        self, run_id: str, status: WorkflowStatus, *, expected_version: int | None = None
+    ) -> RunRecord: ...
+    def record_approval(self, approval: Approval) -> Approval: ...
+    def list_approvals(self, run_id: str) -> tuple[Approval, ...]: ...
+    def record_feedback(self, feedback: Feedback) -> Feedback: ...
+    def list_feedback(self, run_id: str) -> tuple[Feedback, ...]: ...
+    def acquire_attempt(
+        self, attempt: ExecutionAttempt, *, lease_seconds: int = 300
+    ) -> ExecutionAttempt: ...
+    def list_attempts(self, run_id: str) -> tuple[ExecutionAttempt, ...]: ...
+    def complete_attempt(
+        self, attempt_id: str, *, success: bool, error_code: str | None = None
+    ) -> ExecutionAttempt: ...
+    def renew_attempt_lease(
+        self, attempt_id: str, *, worker_id: str, lease_seconds: int = 300
+    ) -> ExecutionAttempt: ...
+    def recover_stale_attempts(
+        self, *, now: datetime | None = None
+    ) -> tuple[ExecutionAttempt, ...]: ...
 
 
 class InMemoryStateRepository:
