@@ -253,6 +253,7 @@ def test_pattern_detection_review_questions_are_immutable_and_serializable() -> 
     with pytest.raises(TypeError, match="immutable"):
         result.review_questions[0]["reason"]["code"] = "changed"  # type: ignore[index]
     assert result.to_dict()["review_questions"] == result.review_questions
+    assert result.to_dict()["schema_version"] == "pattern-detection-result-v1"
 
 
 def test_pattern_detection_serialization_redacts_raw_pattern_values() -> None:

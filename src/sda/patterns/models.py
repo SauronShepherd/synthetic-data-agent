@@ -141,10 +141,13 @@ class PatternDetectionResult:
     receipt: PatternExecutionReceipt
     warnings: tuple[str, ...] = ()
     review_questions: tuple[dict[str, Any], ...] = ()
+    schema_version: str = "pattern-detection-result-v1"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "patterns", tuple(self.patterns))
         object.__setattr__(self, "warnings", tuple(self.warnings))
+        if not self.schema_version.strip():
+            raise ValueError("pattern result schema_version must not be empty")
         object.__setattr__(
             self,
             "review_questions",
@@ -169,6 +172,7 @@ class PatternDetectionResult:
             "receipt": self.receipt.to_dict(),
             "warnings": self.warnings,
             "review_questions": self.review_questions,
+            "schema_version": self.schema_version,
         }
 
 
