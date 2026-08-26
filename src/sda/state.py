@@ -204,6 +204,11 @@ class InMemoryStateRepository:
             self._approvals.append(approval)
             return approval
 
+    def list_approvals(self, run_id: str) -> tuple[Approval, ...]:
+        with self._lock:
+            self.get_run(run_id)
+            return tuple(approval for approval in self._approvals if approval.run_id == run_id)
+
     def record_feedback(self, feedback: Feedback) -> Feedback:
         with self._lock:
             self.get_run(feedback.run_id)

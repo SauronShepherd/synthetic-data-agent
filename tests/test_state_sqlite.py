@@ -48,6 +48,7 @@ def test_sqlite_state_persists_approvals_and_attempts() -> None:
         ("run-1", "human"),
     ).fetchone()
     assert stored == (approval.decided_at,)
+    assert repo.list_approvals("run-1") == (approval,)
     with pytest.raises(StateError, match="approval"):
         repo.record_approval(approval)
     attempt = repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "generate"))

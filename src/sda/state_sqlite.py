@@ -139,6 +139,14 @@ class SQLiteStateRepository:
             raise StateError("approval already recorded") from exc
         return approval
 
+    def list_approvals(self, run_id: str) -> tuple[Approval, ...]:
+        self.get_run(run_id)
+        rows = self._connection.execute(
+            "SELECT run_id, approval_type, decision, actor, reason, decided_at FROM approvals WHERE run_id = ? ORDER BY decided_at, approval_type",
+            (run_id,),
+        ).fetchall()
+        return tuple(Approval(*row) for row in rows)
+
     def record_feedback(self, feedback: Feedback) -> Feedback:
         self.get_run(feedback.run_id)
         existing = self._connection.execute(
