@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from sda.control_center import build_snapshot
 from sda.operations import AuditEvent, AuditLevel, AuditLog
 from sda.state import Approval, ExecutionAttempt, Feedback, RunRecord
@@ -27,3 +29,11 @@ def test_control_center_includes_safe_workflow_history_counts() -> None:
     assert safe["approval_count"] == 1
     assert safe["attempt_count"] == 1
     assert safe["feedback_count"] == 1
+
+
+def test_control_center_rejects_cross_run_history() -> None:
+    with pytest.raises(ValueError, match="another run"):
+        build_snapshot(
+            RunRecord("run-1", "req-1", "idem-1"),
+            approvals=(Approval("run-2", "human", "approved", "reviewer"),),
+        )

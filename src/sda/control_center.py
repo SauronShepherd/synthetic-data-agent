@@ -57,6 +57,9 @@ def build_snapshot(
     attempts: tuple[ExecutionAttempt, ...] = (),
     feedback: tuple[Feedback, ...] = (),
 ) -> ControlCenterSnapshot:
+    histories = (*approvals, *attempts, *feedback)
+    if any(item.run_id != run.run_id for item in histories):
+        raise ValueError("control-center history contains a record from another run")
     return ControlCenterSnapshot(
         run,
         validation,
