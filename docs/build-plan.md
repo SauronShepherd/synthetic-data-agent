@@ -217,7 +217,7 @@ design evidence; the repository is the source of truth for what is currently pre
 
 ## 8. Controlled noise (SDA 14)
 
-- [ ] Implement immutable clean-baseline references plus `NoisePlan`, profile, budget,
+- [x] Implement immutable clean-baseline references plus `NoisePlan`, profile, budget,
   seed, mutation ordering, protected invariants, expected detector, and truth-ledger
   contracts.
 - [ ] Support historical, mild, QA, stress, and scenario-specific profiles; exact and
