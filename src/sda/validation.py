@@ -326,7 +326,7 @@ def validate_tables(
                 )
             )
             continue
-        keys = [tuple(row[column] for column in columns) for row in rows]
+        keys: list[Any] = [tuple(row[column] for column in columns) for row in rows]
         key_fingerprints = [fingerprint(key) for key in keys]
         unique = None not in keys and len(keys) == len(set(key_fingerprints))
         checks.append(
