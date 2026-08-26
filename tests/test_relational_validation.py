@@ -224,3 +224,15 @@ def test_validation_checks_string_formats_fail_closed() -> None:
     assert report.checks[-1].evidence["invalid"] == 1
     with pytest.raises(ValueError, match="invalid format pattern"):
         validate_tables(tables, format_patterns={"users": {"email": "["}})
+
+
+def test_validation_checks_parent_fanout_including_zero_child_parents() -> None:
+    tables = {
+        "parents": (({"id": 1}), ({"id": 2})),
+        "children": (({"parent_id": 1}),),
+    }
+    report = validate_tables(
+        tables, fanout_bounds={("children", "parent_id", "parents", "id"): (0, 1)}
+    )
+    assert report.technical_disposition is CheckStatus.PASS
+    assert report.checks[-1].evidence["zero_child_parents"] == 1

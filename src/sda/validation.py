@@ -110,6 +110,7 @@ def validate_tables(
     required_columns: dict[str, tuple[str, ...]] | None = None,
     unique_keys: dict[str, str] | None = None,
     foreign_keys: tuple[tuple[str, str, str, str], ...] = (),
+    fanout_bounds: dict[tuple[str, str, str, str], tuple[int, int]] | None = None,
     expected_distributions: dict[str, dict[str, dict[Any, float]]] | None = None,
     distribution_tolerance: float = 0.0,
     conditional_null_rates: dict[str, dict[tuple[str, str], dict[Any, float]]] | None = None,
@@ -122,6 +123,7 @@ def validate_tables(
     unique_keys = unique_keys or {}
     expected_distributions = expected_distributions or {}
     conditional_null_rates = conditional_null_rates or {}
+    fanout_bounds = fanout_bounds or {}
     format_patterns = format_patterns or {}
     if distribution_tolerance < 0:
         raise ValueError("distribution_tolerance must not be negative")
@@ -217,6 +219,57 @@ def validate_tables(
                 CheckStatus.PASS if orphans == 0 else CheckStatus.FAIL,
                 f"{orphans} orphan references detected",
                 {"orphans": orphans, "child_rows": len(child_values)},
+            )
+        )
+    for (child, child_column, parent, parent_column), bounds in fanout_bounds.items():
+        minimum, maximum = bounds
+        if minimum < 0 or maximum < minimum:
+            raise ValueError("fanout bounds must be non-negative and ordered")
+        check_id = f"fanout:{parent}.{parent_column}->{child}.{child_column}"
+        if child not in tables or parent not in tables:
+            missing = child if child not in tables else parent
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.FAIL,
+                    f"{missing} is unavailable; cannot validate fan-out",
+                    {"supported": False, "reason": "table_missing", "missing_table": missing},
+                    method="availability_check",
+                )
+            )
+            continue
+        if any(parent_column not in row for row in tables[parent]) or any(
+            child_column not in row for row in tables[child]
+        ):
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.FAIL,
+                    f"fan-out columns are unavailable for {check_id}",
+                    {"supported": False, "reason": "column_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
+        fanout_counts = {row[parent_column]: 0 for row in tables[parent]}
+        for row in tables[child]:
+            if row[child_column] in fanout_counts:
+                fanout_counts[row[child_column]] += 1
+        violations = sum(not minimum <= count <= maximum for count in fanout_counts.values())
+        checks.append(
+            ValidationCheck(
+                check_id,
+                CheckStatus.PASS if violations == 0 else CheckStatus.FAIL,
+                f"{violations} parent fan-out counts outside [{minimum}, {maximum}]",
+                {
+                    "parents": len(fanout_counts),
+                    "violations": violations,
+                    "minimum": minimum,
+                    "maximum": maximum,
+                    "zero_child_parents": sum(count == 0 for count in fanout_counts.values()),
+                },
+                method="parent_fanout_bounds",
+                population="all_parent_rows",
             )
         )
     for table, distribution_columns in expected_distributions.items():
