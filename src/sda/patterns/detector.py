@@ -601,7 +601,11 @@ class PatternDetector:
             },
             review_status="required" if family is PatternFamily.BUSINESS_RULE else "not_required",
             lifecycle=(
-                PatternLifecycle.DECLARED_RULE
+                PatternLifecycle.REJECTED
+                if decision == "rejected"
+                else PatternLifecycle.REVIEW_REQUIRED
+                if decision == "review_required"
+                else PatternLifecycle.DECLARED_RULE
                 if origin in {PatternOrigin.DECLARED, PatternOrigin.USER_PROVIDED}
                 else PatternLifecycle.APPROVED_RULE
                 if origin in {PatternOrigin.DOMAIN_APPROVED, PatternOrigin.DESTINATION_CONSTRAINT}

@@ -388,6 +388,15 @@ def test_pattern_lifecycle_is_explicit_and_origin_compatible() -> None:
         [{"x": 1, "y": 2}, {"x": 2, "y": 4}], table="main.s.t", columns={"x": "int", "y": "int"}
     )[0]
     assert pattern.lifecycle is PatternLifecycle.OBSERVED_PATTERN
+    rejected = PatternDetector(
+        PatternConfig(min_support_rows=2),
+        scoring_policy=PatternScoringPolicy(min_support_rows=2, min_correlation_abs=2.0),
+    ).detect(
+        [{"x": 1, "y": 1}, {"x": 2, "y": 2}],
+        table="main.s.t",
+        columns={"x": "int", "y": "int"},
+    )
+    assert rejected[0].lifecycle is PatternLifecycle.REJECTED
     with pytest.raises(ValueError, match="declared_rule lifecycle"):
         Pattern(
             "p",
