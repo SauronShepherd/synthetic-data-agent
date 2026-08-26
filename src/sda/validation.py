@@ -326,15 +326,15 @@ def validate_tables(
                 )
             )
             continue
-        keys: list[Any] = [tuple(row[column] for column in columns) for row in rows]
-        key_fingerprints = [fingerprint(key) for key in keys]
-        unique = None not in keys and len(keys) == len(set(key_fingerprints))
+        composite_keys: list[Any] = [tuple(row[column] for column in columns) for row in rows]
+        key_fingerprints = [fingerprint(key) for key in composite_keys]
+        unique = None not in composite_keys and len(composite_keys) == len(set(key_fingerprints))
         checks.append(
             ValidationCheck(
                 check_id,
                 CheckStatus.PASS if unique else CheckStatus.FAIL,
                 f"{check_id} is {'unique and non-null' if unique else 'not unique or contains nulls'}",
-                {"rows": len(keys), "distinct": len(set(key_fingerprints))},
+                {"rows": len(composite_keys), "distinct": len(set(key_fingerprints))},
                 method="composite_key_uniqueness",
             )
         )
