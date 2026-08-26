@@ -152,6 +152,23 @@ class PatternDetector:
                 )
                 if len(result) >= self.config.max_candidates:
                     return tuple(result)
+        temporal_columns = tuple(name for name in names if name.endswith(("_at", "_date")))
+        if len(temporal_columns) >= 2:
+            earlier, later = temporal_columns[:2]
+            metric = lag_distribution(rows, earlier=earlier, later=later)
+            if metric.get("count", 0) >= self.config.min_support_rows:
+                result.append(
+                    self._pattern(
+                        analysis_id,
+                        table,
+                        PatternFamily.TEMPORAL_ORDER,
+                        (earlier, later),
+                        {},
+                        {"later": later},
+                        int(metric["count"]),
+                        metric,
+                    )
+                )
         return tuple(result)
 
     def detect_coordinated(
