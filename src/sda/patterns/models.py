@@ -81,11 +81,17 @@ class PatternInputRefs:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "profile_artifact_ids", tuple(self.profile_artifact_ids))
+        artifact_ids = (
+            self.metadata_artifact_id,
+            *self.profile_artifact_ids,
+            self.relationship_artifact_id,
+            self.dependency_graph_artifact_id,
+        )
         if (
             not self.metadata_artifact_id.strip()
             or not self.profile_artifact_ids
             or any(not artifact_id.strip() for artifact_id in self.profile_artifact_ids)
-            or len(set(self.profile_artifact_ids)) != len(self.profile_artifact_ids)
+            or len(set(artifact_ids)) != len(artifact_ids)
             or not self.relationship_artifact_id.strip()
             or not self.dependency_graph_artifact_id.strip()
         ):
