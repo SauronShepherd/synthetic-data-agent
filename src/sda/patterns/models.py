@@ -247,6 +247,11 @@ class Pattern:
             or not self.primary_table.strip()
         ):
             raise ValueError("pattern identity fields must not be empty")
+        allowed_decisions = {decision.value for decision in PatternDecision} | {"review_required"}
+        if self.decision not in allowed_decisions:
+            raise ValueError(f"unsupported pattern decision: {self.decision}")
+        if self.origin is PatternOrigin.OBSERVED and self.rule_strength == "hard_constraint":
+            raise ValueError("observed patterns must not become hard constraints")
         for name in (
             "condition",
             "outcome",

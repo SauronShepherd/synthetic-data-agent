@@ -288,6 +288,25 @@ def test_pattern_detection_serialization_redacts_raw_pattern_values() -> None:
     assert "secret-metric" not in str(payload)
 
 
+def test_observed_patterns_cannot_be_promoted_to_hard_constraints() -> None:
+    with pytest.raises(ValueError, match="hard constraints"):
+        Pattern(
+            "p",
+            "a",
+            PatternFamily.CORRELATION,
+            PatternOrigin.OBSERVED,
+            "t",
+            ("x", "y"),
+            {},
+            {},
+            2,
+            1.0,
+            {},
+            {},
+            rule_strength="hard_constraint",
+        )
+
+
 def test_pattern_detection_serializes_artifact_references() -> None:
     class Reference:
         def to_dict(self) -> dict[str, str]:
