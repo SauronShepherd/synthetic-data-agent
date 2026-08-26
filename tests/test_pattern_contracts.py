@@ -239,6 +239,8 @@ def test_pattern_receipt_counts_are_immutable() -> None:
         PatternExecutionReceipt(sample_fraction=0)
     with pytest.raises(ValueError, match="family counts"):
         PatternExecutionReceipt(candidate_count_total=2, candidate_count_by_family={"numeric": 1})
+    with pytest.raises(ValueError, match="invalid accounting"):
+        PatternExecutionReceipt(candidate_skipped_by_reason={"unsupported": -1})
 
 
 def test_pattern_receipt_serializes_all_execution_accounting() -> None:

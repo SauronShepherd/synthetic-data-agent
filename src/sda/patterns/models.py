@@ -132,6 +132,12 @@ class PatternExecutionReceipt:
             and sum(self.candidate_count_by_family.values()) != self.candidate_count_total
         ):
             raise ValueError("pattern receipt family counts must sum to candidate_count_total")
+        for name, counts in (
+            ("candidate_count_by_family", self.candidate_count_by_family),
+            ("candidate_skipped_by_reason", self.candidate_skipped_by_reason),
+        ):
+            if any(not str(key).strip() or value < 0 for key, value in counts.items()):
+                raise ValueError(f"pattern receipt {name} contains invalid accounting")
         if self.sample_fraction is not None and not 0 < self.sample_fraction <= 1:
             raise ValueError("pattern receipt sample_fraction must be between 0 and 1")
         if self.sample_seed is not None and self.sample_seed < 0:
