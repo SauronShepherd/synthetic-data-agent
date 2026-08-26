@@ -190,3 +190,26 @@ def test_rate_based_noise_budget_is_deterministic_and_bounded() -> None:
     assert len(result.mutations) == 2
     with pytest.raises(ValueError, match="mutually exclusive"):
         NoisePlan("n", "fp", budget=1, budget_rate=0.5)
+
+
+def test_noise_plan_serialization_is_complete_and_raw_value_free() -> None:
+    plan = NoisePlan(
+        "noise-1",
+        "baseline-fingerprint",
+        profile=NoiseProfile.STRESS,
+        defect_type="malformed_value",
+        budget_rate=0.25,
+        seed=7,
+        scenario="incident",
+    )
+    assert plan.to_dict() == {
+        "noise_id": "noise-1",
+        "baseline_fingerprint": "baseline-fingerprint",
+        "profile": "stress",
+        "defect_type": "malformed_value",
+        "budget": 0,
+        "budget_rate": 0.25,
+        "seed": 7,
+        "scenario": "incident",
+    }
+    assert "secret" not in str(plan.to_dict())

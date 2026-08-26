@@ -64,6 +64,19 @@ class NoisePlan:
     scenario: str = ""
     budget_rate: float | None = None
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the immutable mutation plan for lineage and replay."""
+        return {
+            "noise_id": self.noise_id,
+            "baseline_fingerprint": self.baseline_fingerprint,
+            "profile": self.profile.value,
+            "defect_type": self.defect_type,
+            "budget": self.budget,
+            "budget_rate": self.budget_rate,
+            "seed": self.seed,
+            "scenario": self.scenario,
+        }
+
     def __post_init__(self) -> None:
         if not self.noise_id.strip() or not self.baseline_fingerprint.strip():
             raise ValueError("noise identity and baseline fingerprint are required")
