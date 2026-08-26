@@ -101,8 +101,11 @@ class Approval:
     decided_at: str = ""
 
     def __post_init__(self) -> None:
-        if any(not value.strip() for value in (self.run_id, self.approval_type, self.actor)):
-            raise ValueError("approval identity fields must not be empty")
+        if any(
+            not value.strip()
+            for value in (self.run_id, self.approval_type, self.actor, self.reason)
+        ):
+            raise ValueError("approval identity and reason fields must not be empty")
         if self.decision not in {"approved", "rejected"}:
             raise ValueError("decision must be approved or rejected")
         if not self.decided_at:

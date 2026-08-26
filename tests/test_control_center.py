@@ -22,7 +22,7 @@ def test_control_center_includes_safe_workflow_history_counts() -> None:
     run = RunRecord("run-1", "req-1", "idem-1")
     safe = build_snapshot(
         run,
-        approvals=(Approval("run-1", "human", "approved", "reviewer"),),
+        approvals=(Approval("run-1", "human", "approved", "reviewer", "approved for test"),),
         attempts=(ExecutionAttempt("run-1", "attempt-1", "generate"),),
         feedback=(Feedback("feedback-1", "run-1", "reviewer", "note", "review"),),
     ).to_safe_dict()
@@ -35,5 +35,5 @@ def test_control_center_rejects_cross_run_history() -> None:
     with pytest.raises(ValueError, match="another run"):
         build_snapshot(
             RunRecord("run-1", "req-1", "idem-1"),
-            approvals=(Approval("run-2", "human", "approved", "reviewer"),),
+            approvals=(Approval("run-2", "human", "approved", "reviewer", "approved for test"),),
         )

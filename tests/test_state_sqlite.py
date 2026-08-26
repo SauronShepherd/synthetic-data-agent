@@ -61,7 +61,9 @@ def test_sqlite_state_persists_approvals_and_attempts() -> None:
     assert repo.list_approvals("run-1") == (approval,)
     assert repo.record_approval(approval) == approval
     with pytest.raises(StateError, match="different content"):
-        repo.record_approval(Approval("run-1", "human", "rejected", "reviewer"))
+        repo.record_approval(
+            Approval("run-1", "human", "rejected", "reviewer", "rejected for test")
+        )
     attempt = repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "generate"))
     assert attempt.status is AttemptStatus.RUNNING
     assert repo.list_attempts("run-1") == (attempt,)
@@ -120,7 +122,7 @@ def test_sqlite_migrates_legacy_approvals_table(tmp_path: object) -> None:
     connection.close()
     repo = SQLiteStateRepository(path)
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
-    approval = Approval("run-1", "human", "approved", "reviewer")
+    approval = Approval("run-1", "human", "approved", "reviewer", "approved for test")
     repo.record_approval(approval)
     assert (
         repo._connection.execute("PRAGMA table_info(approvals)").fetchall()[-1][1] == "decided_at"
