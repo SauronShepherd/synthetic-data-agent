@@ -7,6 +7,7 @@ from sda.topology import (
     TopologyError,
     TopologyPlan,
     generate_topology,
+    manifest_for_topology,
     validate_topology,
 )
 
@@ -27,6 +28,14 @@ def test_topology_is_reproducible() -> None:
     with pytest.raises(TypeError, match="immutable"):
         result.nodes[0]["node_id"] = "changed"  # type: ignore[index]
     assert result.output_fingerprint == generate_topology(plan).output_fingerprint
+
+
+def test_topology_manifest_binds_plan_and_result() -> None:
+    plan = TopologyPlan("g", "fp", node_count=3, edge_count=2)
+    result = generate_topology(plan)
+    manifest = manifest_for_topology(plan, result)
+    assert manifest.output_fingerprint == result.output_fingerprint
+    assert manifest.to_dict()["schema_version"] == "topology-manifest-v1"
 
 
 def test_topology_rejects_impossible_simple_graph() -> None:

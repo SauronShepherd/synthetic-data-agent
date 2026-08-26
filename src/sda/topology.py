@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import Any
 
@@ -93,6 +93,41 @@ class TopologyResult:
             "metrics": dict(self.metrics),
             "output_fingerprint": self.output_fingerprint,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class TopologyManifest:
+    """Immutable lineage record for a generated topology artifact."""
+
+    topology_id: str
+    plan_fingerprint: str
+    node_count: int
+    edge_count: int
+    output_fingerprint: str
+    schema_version: str = "topology-manifest-v1"
+
+    def __post_init__(self) -> None:
+        if not self.topology_id.strip() or not self.plan_fingerprint.strip():
+            raise ValueError("topology manifest identity is required")
+        if self.node_count < 0 or self.edge_count < 0:
+            raise ValueError("topology manifest counts must not be negative")
+        if not self.output_fingerprint.strip() or not self.schema_version.strip():
+            raise ValueError("topology manifest fingerprint and schema version are required")
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def manifest_for_topology(plan: TopologyPlan, result: TopologyResult) -> TopologyManifest:
+    """Bind a structural result to the exact topology plan that produced it."""
+    validate_topology(plan, result)
+    return TopologyManifest(
+        plan.topology_id,
+        plan.plan_fingerprint,
+        len(result.nodes),
+        len(result.edges),
+        result.output_fingerprint,
+    )
 
 
 def generate_topology(plan: TopologyPlan) -> TopologyResult:
