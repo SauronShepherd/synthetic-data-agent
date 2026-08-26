@@ -264,18 +264,37 @@ def main(argv: Sequence[str] | None = None) -> None:
             metadata_inventory_id=args.metadata_inventory_id or None,
         )
         if reusable is not None:
-            print(
-                json.dumps(
-                    {
-                        "status": "REUSED",
-                        "profile_id": reusable.get("profile_id"),
-                        "source_table": source_name.full_name,
-                        "source_version": source_version,
-                    },
-                    sort_keys=True,
+            profile_id = str(reusable.get("profile_id") or "")
+            registry_ready = False
+            if args.artifact_registry_table and profile_id and hasattr(spark, "table"):
+                try:
+                    registry_ready = (
+                        spark.table(args.artifact_registry_table)
+                        .where(f"artifact_id = '{profile_id.replace(chr(39), chr(39) * 2)}'")
+                        .where("status = 'complete'")
+                        .limit(1)
+                        .count()
+                        > 0
+                    )
+                except Exception as exc:
+                    message = str(exc).upper()
+                    if not any(
+                        marker in message for marker in ("TABLE_OR_VIEW_NOT_FOUND", "TABLE_NOT_FOUND")
+                    ):
+                        raise
+            if registry_ready or not args.artifact_registry_table:
+                print(
+                    json.dumps(
+                        {
+                            "status": "REUSED",
+                            "profile_id": profile_id,
+                            "source_table": source_name.full_name,
+                            "source_version": source_version,
+                        },
+                        sort_keys=True,
+                    )
                 )
-            )
-            return
+                return
     dataframe = spark.table(source_name.quoted)
     if source_version is not None:
         dataframe = spark.sql(
