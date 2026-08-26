@@ -110,6 +110,19 @@ def assess_privacy(
         raise ValueError("max_reference_matches must not be negative")
     approved = set(approved_columns)
     for table, column in (*sensitive_columns, *direct_identifier_columns):
+        rows = tables.get(table)
+        if rows is None or any(column not in row for row in rows):
+            findings.append(
+                PrivacyFinding(
+                    "approved_sensitive_column_missing"
+                    if (table, column) in approved
+                    else "sensitive_column_missing",
+                    "high",
+                    f"{table}.{column} is unavailable for privacy review",
+                    {"table": table, "column": column},
+                )
+            )
+            continue
         if (table, column) not in approved:
             findings.append(
                 PrivacyFinding(

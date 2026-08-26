@@ -27,6 +27,16 @@ def test_clean_approved_output_passes() -> None:
     assert report.decision is PrivacyDecision.APPROVED
 
 
+def test_approved_sensitive_column_missing_fails_closed() -> None:
+    report = assess_privacy(
+        {"users": (({"id": 1}),)},
+        sensitive_columns=(("users", "email"),),
+        approved_columns=(("users", "email"),),
+    )
+    assert report.decision is PrivacyDecision.REJECTED
+    assert report.findings[0].code == "approved_sensitive_column_missing"
+
+
 def test_duplicate_detection_handles_nested_values_without_raw_material() -> None:
     report = assess_privacy({"t": (({"tags": ["a", "b"]}), ({"tags": ["a", "b"]}))})
     assert report.decision is PrivacyDecision.REVIEW_REQUIRED
