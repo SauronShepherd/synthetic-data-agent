@@ -12,7 +12,7 @@ from sda.state_sqlite import SQLiteStateRepository
 
 
 def _normalise(value: Any) -> Any:
-    if isinstance(value, (datetime, date)):
+    if isinstance(value, datetime | date):
         return value.isoformat()
     return value
 
@@ -23,7 +23,15 @@ class _PostgresCursor:
 
     @property
     def rowcount(self) -> int:
-        return self._cursor.rowcount
+        return int(self._cursor.rowcount)
+
+    @property
+    def statement(self) -> str:
+        return str(self._cursor.statement)
+
+    @property
+    def parameters(self) -> tuple[Any, ...]:
+        return tuple(self._cursor.parameters)
 
     def execute(self, statement: str, parameters: tuple[Any, ...]) -> None:
         self._cursor.execute(statement, parameters)
