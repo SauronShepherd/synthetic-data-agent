@@ -215,3 +215,12 @@ def test_validation_checks_conditional_null_rates() -> None:
     )
     assert report.technical_disposition is CheckStatus.PASS
     assert report.checks[-1].population == "full_table_by_driver"
+
+
+def test_validation_checks_string_formats_fail_closed() -> None:
+    tables = {"users": (({"email": "a@example.com"}), ({"email": "invalid"}))}
+    report = validate_tables(tables, format_patterns={"users": {"email": r"^[^@]+@[^@]+\\.[^@]+$"}})
+    assert report.technical_disposition is CheckStatus.FAIL
+    assert report.checks[-1].evidence["invalid"] == 1
+    with pytest.raises(ValueError, match="invalid format pattern"):
+        validate_tables(tables, format_patterns={"users": {"email": "["}})
