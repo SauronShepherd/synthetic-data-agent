@@ -68,3 +68,15 @@ def test_omission_removes_only_deterministically_selected_columns() -> None:
     assert len(result.mutations) == 1
     assert sum("value" not in row for row in result.rows) == 1
     assert all("value" in row for row in baseline)
+
+
+def test_duplicate_noise_copies_a_stable_neighbor_value() -> None:
+    baseline = (({"id": 1, "value": "a"}), ({"id": 2, "value": "b"}))
+    result = apply_noise(
+        baseline,
+        NoisePlan("n", fingerprint(baseline), defect_type="duplicate", budget=1),
+        column="value",
+    )
+    mutation = result.mutations[0]
+    assert mutation.after == result.rows[(mutation.row_index - 1) % len(result.rows)]["value"]
+    assert baseline == (({"id": 1, "value": "a"}), ({"id": 2, "value": "b"}))

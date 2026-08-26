@@ -23,6 +23,7 @@ SUPPORTED_DEFECTS = frozenset(
         "malformed_value",
         "out_of_range",
         "omission",
+        "duplicate",
     }
 )
 
@@ -139,6 +140,8 @@ def apply_noise(
         elif plan.defect_type == "omission":
             after = None
             del rows[index][column]
+        elif plan.defect_type == "duplicate":
+            after = rows[(index - 1) % len(rows)][column]
         else:
             if not isinstance(before, int | float) or isinstance(before, bool):
                 raise NoiseError("out_of_range defects require a numeric column")
