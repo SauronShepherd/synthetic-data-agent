@@ -13,6 +13,7 @@ REQUIRED_VARIABLES = {
     "sda_pattern_min_support_rate",
     "sda_pattern_sample_fraction",
     "sda_pattern_sample_seed",
+    "sda_pattern_max_rows_scanned",
 }
 REQUIRED_PARAMETERS = {
     "metadata_artifact_id",

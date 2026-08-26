@@ -126,3 +126,6 @@ variables:
   sda_pattern_sample_seed:
     description: Deterministic quick-mode sample seed.
     default: "1729"
+  sda_pattern_max_rows_scanned:
+    description: Maximum source rows scanned by SDA 07.
+    default: "100000"

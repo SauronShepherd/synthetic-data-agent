@@ -364,6 +364,8 @@ resources:
           default: ${var.sda_pattern_sample_fraction}
         - name: sample_seed
           default: ${var.sda_pattern_sample_seed}
+        - name: max_rows_scanned
+          default: ${var.sda_pattern_max_rows_scanned}
       tasks:
         - task_key: detect_patterns
           spark_python_task:
@@ -405,6 +407,8 @@ resources:
               - "{{job.parameters.sample_fraction}}"
               - --sample-seed
               - "{{job.parameters.sample_seed}}"
+              - --max-rows-scanned
+              - "{{job.parameters.max_rows_scanned}}"
           environment_key: pattern_detector_environment
       environments:
         - environment_key: pattern_detector_environment

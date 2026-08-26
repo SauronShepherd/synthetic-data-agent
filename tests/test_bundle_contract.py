@@ -45,5 +45,5 @@ def test_bundle_contract_rejects_target_missing_pattern_variable(tmp_path: Path)
         ),
         encoding="utf-8",
     )
-    with pytest.raises(SystemExit, match="missing pattern variables"):
+    with pytest.raises(SystemExit, match="pattern variables"):
         main(tmp_path)

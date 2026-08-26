@@ -48,6 +48,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--min-support-rate", type=float, default=0.001)
     p.add_argument("--sample-fraction", type=float, default=0.1)
     p.add_argument("--sample-seed", type=int, default=1729)
+    p.add_argument("--max-rows-scanned", type=int, default=100_000)
     return p.parse_args()
 
 
@@ -59,6 +60,7 @@ def main() -> None:
         not 0 < args.sample_fraction <= 1
         or not 0 <= args.min_support_rate <= 1
         or args.min_support_rows < 1
+        or args.max_rows_scanned < 1
     ):
         raise SystemExit("invalid pattern resource bounds")
     if args.environment in {"staging", "prod"} and not args.metadata_artifact_id:
@@ -136,6 +138,8 @@ def main() -> None:
             seed=args.sample_seed,
         )
     source_count = source.count()
+    if source_count > args.max_rows_scanned:
+        raise SystemExit(f"source rows exceed max_rows_scanned budget ({args.max_rows_scanned})")
     columns = {field.name: field.dataType.simpleString() for field in source.schema.fields}
     numeric = [
         name
@@ -149,6 +153,7 @@ def main() -> None:
             min_support_rate=args.min_support_rate,
             sample_fraction=args.sample_fraction,
             sample_seed=args.sample_seed,
+            max_rows_scanned=args.max_rows_scanned,
         )
     )
     from sda.patterns.models import PatternFamily

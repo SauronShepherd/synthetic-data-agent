@@ -25,6 +25,7 @@ targets:
       sda_pattern_min_support_rate: "0.001"
       sda_pattern_sample_fraction: "0.1"
       sda_pattern_sample_seed: "1729"
+      sda_pattern_max_rows_scanned: "100000"
       sda_scope_catalog: sda_staging
       sda_scope_schema: sample_source
       sda_relationship_parent_table: __REQUIRED_CONTROLLED_PARENT_TABLE__

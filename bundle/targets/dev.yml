@@ -29,3 +29,4 @@ targets:
       sda_pattern_min_support_rate: "0.001"
       sda_pattern_sample_fraction: "0.1"
       sda_pattern_sample_seed: "1729"
+      sda_pattern_max_rows_scanned: "100000"
