@@ -122,6 +122,9 @@ def test_noise_truth_ledger_is_raw_value_free() -> None:
     assert ledger[0]["before_fingerprint"] == fingerprint("secret")
     assert ledger[0]["after_fingerprint"] == fingerprint("SECRET")
     assert "secret" not in str(ledger)
+    serialized = result.to_dict()
+    assert "secret" not in str(serialized)
+    assert serialized["mutation_count"] == 1
 
 
 def test_historical_noise_profile_is_a_supported_plan_contract() -> None:

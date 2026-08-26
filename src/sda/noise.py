@@ -100,6 +100,15 @@ class NoiseResult:
         """Return deterministic, raw-value-free mutation evidence."""
         return tuple(mutation.to_dict() for mutation in self.mutations)
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize audit metadata without including output rows or raw mutations."""
+        return {
+            "baseline_fingerprint": self.baseline_fingerprint,
+            "output_fingerprint": self.output_fingerprint,
+            "mutation_count": len(self.mutations),
+            "truth_ledger": self.truth_ledger(),
+        }
+
 
 def _selection_key(plan: NoisePlan, index: int) -> bytes:
     return hashlib.sha256(f"{plan.noise_id}|{plan.seed}|{plan.scenario}|{index}".encode()).digest()
