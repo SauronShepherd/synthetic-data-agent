@@ -234,6 +234,7 @@ def test_pattern_receipt_serializes_all_execution_accounting() -> None:
         candidate_count_total=4,
         patterns_emitted=2,
         patterns_accepted_for_planning=1,
+        patterns_review_required=1,
         sample_fraction=0.5,
         sample_seed=9,
     )
@@ -243,7 +244,7 @@ def test_pattern_receipt_serializes_all_execution_accounting() -> None:
         "candidate_skipped_by_reason": {},
         "patterns_emitted": 2,
         "patterns_accepted_for_planning": 1,
-        "patterns_review_required": 0,
+        "patterns_review_required": 1,
         "patterns_rejected": 0,
         "patterns_insufficient": 0,
         "rules_evaluated": 0,

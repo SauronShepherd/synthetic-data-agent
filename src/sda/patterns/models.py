@@ -119,6 +119,14 @@ class PatternExecutionReceipt:
         )
         if any(getattr(self, name) < 0 for name in count_fields):
             raise ValueError("pattern receipt counts must not be negative")
+        decision_total = (
+            self.patterns_accepted_for_planning
+            + self.patterns_review_required
+            + self.patterns_rejected
+            + self.patterns_insufficient
+        )
+        if decision_total != self.patterns_emitted:
+            raise ValueError("pattern receipt decision buckets must sum to patterns_emitted")
         if self.sample_fraction is not None and not 0 < self.sample_fraction <= 1:
             raise ValueError("pattern receipt sample_fraction must be between 0 and 1")
         if self.sample_seed is not None and self.sample_seed < 0:
