@@ -58,6 +58,8 @@ class StreamingPlan:
             raise ValueError("events_per_second must be positive")
         if self.inter_arrival_seconds <= 0:
             raise ValueError("inter_arrival_seconds must be positive")
+        if abs(self.events_per_second * self.inter_arrival_seconds - 1.0) > 1e-9:
+            raise ValueError("events_per_second and inter_arrival_seconds must be reciprocal")
         if self.seed < 0:
             raise ValueError("seed must not be negative")
         if self.query_id and not self.query_id.strip():
@@ -103,6 +105,8 @@ class StreamManifest:
             raise ValueError("stream manifest replay_fingerprint must not be empty")
         if self.events_per_second <= 0 or self.inter_arrival_seconds <= 0:
             raise ValueError("stream manifest rate and inter-arrival must be positive")
+        if abs(self.events_per_second * self.inter_arrival_seconds - 1.0) > 1e-9:
+            raise ValueError("stream manifest rate and inter-arrival must be reciprocal")
         if self.seed < 0:
             raise ValueError("stream manifest seed must not be negative")
         if (self.event_count == 0) != (self.first_event_id is None and self.last_event_id is None):

@@ -60,6 +60,11 @@ def test_offsets_and_bounds_are_fail_closed() -> None:
         StreamingPlan("s", "f", event_count=2, max_events=1)
 
 
+def test_stream_rate_and_inter_arrival_must_agree() -> None:
+    with pytest.raises(ValueError, match="reciprocal"):
+        plan(events_per_second=2.0, inter_arrival_seconds=1.0)
+
+
 def test_checkpoint_resume_is_plan_bound_and_duplicate_safe() -> None:
     current = plan()
     prefix = generate_bounded_events(current, start_offset=0)[:2]
