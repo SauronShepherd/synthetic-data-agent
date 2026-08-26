@@ -218,7 +218,9 @@ def test_pattern_receipt_counts_are_immutable() -> None:
     assert result
     from sda.patterns.models import PatternExecutionReceipt
 
-    receipt = PatternExecutionReceipt(candidate_count_by_family={"correlation": 1})
+    receipt = PatternExecutionReceipt(
+        candidate_count_total=1, candidate_count_by_family={"correlation": 1}
+    )
     with pytest.raises(TypeError, match="immutable"):
         receipt.candidate_count_by_family["correlation"] = 2
     from sda.patterns.models import PatternExecutionReceipt
@@ -227,6 +229,8 @@ def test_pattern_receipt_counts_are_immutable() -> None:
         PatternExecutionReceipt(patterns_emitted=-1)
     with pytest.raises(ValueError, match="sample_fraction"):
         PatternExecutionReceipt(sample_fraction=0)
+    with pytest.raises(ValueError, match="family counts"):
+        PatternExecutionReceipt(candidate_count_total=2, candidate_count_by_family={"numeric": 1})
 
 
 def test_pattern_receipt_serializes_all_execution_accounting() -> None:

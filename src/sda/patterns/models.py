@@ -127,6 +127,11 @@ class PatternExecutionReceipt:
         )
         if decision_total != self.patterns_emitted:
             raise ValueError("pattern receipt decision buckets must sum to patterns_emitted")
+        if (
+            self.candidate_count_by_family
+            and sum(self.candidate_count_by_family.values()) != self.candidate_count_total
+        ):
+            raise ValueError("pattern receipt family counts must sum to candidate_count_total")
         if self.sample_fraction is not None and not 0 < self.sample_fraction <= 1:
             raise ValueError("pattern receipt sample_fraction must be between 0 and 1")
         if self.sample_seed is not None and self.sample_seed < 0:
