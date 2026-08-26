@@ -40,6 +40,14 @@ def test_topology_rejects_impossible_simple_graph() -> None:
         )
 
 
+def test_empty_topology_is_valid() -> None:
+    plan = TopologyPlan("empty", "fp", node_count=0, edge_count=0)
+    result = generate_topology(plan)
+    assert result.nodes == ()
+    assert result.edges == ()
+    validate_topology(plan, result)
+
+
 def test_directed_degree_limits_and_dag_constraint_are_enforced() -> None:
     dag = TopologyPlan("dag", "fp", node_count=5, edge_count=4, acyclic=True, max_in_degree=1)
     result = generate_topology(dag)

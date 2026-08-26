@@ -172,7 +172,7 @@ def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
         raise TopologyError("topology result metrics do not match the payload")
     node_ids = [str(node.get("node_id", "")) for node in result.nodes]
     if (
-        not node_ids
+        (plan.node_count > 0 and not node_ids)
         or any(not node_id for node_id in node_ids)
         or len(node_ids) != len(set(node_ids))
     ):
