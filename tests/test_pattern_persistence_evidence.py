@@ -55,4 +55,6 @@ def test_pattern_registry_rows_preserve_complete_evidence_contract():
     assert row["violation_count"] == 2
     assert row["violation_rate"] == 0.2
     assert json.loads(row["sampling_json"]) == {"fraction": 0.5, "seed": 7}
-    assert json.loads(row["limitations_json"]) == ["bounded"]
+    limitations = json.loads(row["limitations_json"])
+    assert len(limitations) == 1
+    assert set(limitations[0]) == {"fingerprint"}
