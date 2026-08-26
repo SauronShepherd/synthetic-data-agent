@@ -184,8 +184,23 @@ def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
             adjacency[target].add(source)
     if plan.max_degree is not None and any(value > plan.max_degree for value in degree.values()):
         raise TopologyError("topology result exceeds max_degree")
-    if plan.acyclic and any(_reaches_named(adjacency, target, source) for source, target in pairs):
-        raise TopologyError("topology result contains a cycle")
+    if plan.acyclic:
+        if plan.kind is GraphKind.DIRECTED:
+            if any(_reaches_named(adjacency, target, source) for source, target in pairs):
+                raise TopologyError("topology result contains a cycle")
+        else:
+            parent = {node_id: node_id for node_id in node_ids}
+            for source, target in pairs:
+                left, right = source, target
+                while parent[left] != left:
+                    parent[left] = parent[parent[left]]
+                    left = parent[left]
+                while parent[right] != right:
+                    parent[right] = parent[parent[right]]
+                    right = parent[right]
+                if left == right:
+                    raise TopologyError("topology result contains a cycle")
+                parent[left] = right
 
 
 def _reaches_named(adjacency: dict[str, set[str]], start: str, target: str) -> bool:

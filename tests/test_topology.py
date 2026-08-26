@@ -66,6 +66,13 @@ def test_topology_result_validator_rejects_unknown_endpoints() -> None:
         validate_topology(plan, corrupted)
 
 
+def test_topology_validator_accepts_acyclic_undirected_tree() -> None:
+    plan = TopologyPlan(
+        "tree", "fp", node_count=3, edge_count=2, kind=GraphKind.UNDIRECTED, acyclic=True
+    )
+    validate_topology(plan, generate_topology(plan))
+
+
 def test_directed_max_degree_counts_both_endpoints() -> None:
     with pytest.raises(TopologyError, match="realize"):
         generate_topology(TopologyPlan("g", "fp", node_count=3, edge_count=2, max_degree=1))
