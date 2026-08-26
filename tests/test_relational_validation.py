@@ -266,3 +266,18 @@ def test_validation_checks_numeric_bounds_and_allows_nulls() -> None:
     )
     assert report.technical_disposition is CheckStatus.FAIL
     assert report.checks[-1].evidence["invalid"] == 1
+
+
+def test_validation_checks_composite_key_uniqueness() -> None:
+    report = validate_tables(
+        {
+            "events": (
+                {"tenant": "a", "event": 1},
+                {"tenant": "a", "event": 2},
+                {"tenant": "b", "event": 1},
+            )
+        },
+        unique_key_sets={"events": ("tenant", "event")},
+    )
+    assert report.technical_disposition is CheckStatus.PASS
+    assert report.checks[-1].evidence["distinct"] == 3

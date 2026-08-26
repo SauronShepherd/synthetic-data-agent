@@ -110,6 +110,7 @@ def validate_tables(
     expected_counts: dict[str, int] | None = None,
     required_columns: dict[str, tuple[str, ...]] | None = None,
     unique_keys: dict[str, str] | None = None,
+    unique_key_sets: dict[str, tuple[str, ...]] | None = None,
     foreign_keys: tuple[tuple[str, str, str, str], ...] = (),
     fanout_bounds: dict[tuple[str, str, str, str], tuple[int, int]] | None = None,
     expected_distributions: dict[str, dict[str, dict[Any, float]]] | None = None,
@@ -125,6 +126,7 @@ def validate_tables(
     expected_counts = expected_counts or {}
     required_columns = required_columns or {}
     unique_keys = unique_keys or {}
+    unique_key_sets = unique_key_sets or {}
     expected_distributions = expected_distributions or {}
     conditional_null_rates = conditional_null_rates or {}
     fanout_bounds = fanout_bounds or {}
@@ -201,6 +203,44 @@ def validate_tables(
                 CheckStatus.PASS if unique else CheckStatus.FAIL,
                 f"{table}.{column} is {'unique and non-null' if unique else 'not unique or contains nulls'}",
                 {"rows": len(values), "distinct": len(set(values))},
+            )
+        )
+    for table, columns in unique_key_sets.items():
+        check_id = f"unique:{table}.({','.join(columns)})"
+        if not columns:
+            raise ValueError(f"composite uniqueness requires at least one column: {check_id}")
+        if table not in tables:
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.FAIL,
+                    f"{table} is unavailable; cannot validate uniqueness",
+                    {"supported": False, "reason": "table_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
+        rows = tables[table]
+        if any(column not in row for row in rows for column in columns):
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.FAIL,
+                    f"composite key columns are unavailable for {check_id}",
+                    {"supported": False, "reason": "column_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
+        keys = [tuple(row[column] for column in columns) for row in rows]
+        unique = None not in keys and len(keys) == len(set(keys))
+        checks.append(
+            ValidationCheck(
+                check_id,
+                CheckStatus.PASS if unique else CheckStatus.FAIL,
+                f"{check_id} is {'unique and non-null' if unique else 'not unique or contains nulls'}",
+                {"rows": len(keys), "distinct": len(set(keys))},
+                method="composite_key_uniqueness",
             )
         )
     for child, child_column, parent, parent_column in foreign_keys:
