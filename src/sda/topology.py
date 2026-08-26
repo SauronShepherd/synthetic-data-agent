@@ -145,7 +145,7 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
     if len(edges) != plan.edge_count:
         raise TopologyError(f"could only realize {len(edges)} of {plan.edge_count} requested edges")
     components = _component_count(plan, edges)
-    return TopologyResult(
+    result = TopologyResult(
         nodes,
         tuple(edges),
         {
@@ -155,6 +155,8 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
             "component_count": components,
         },
     )
+    validate_topology(plan, result)
+    return result
 
 
 def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
