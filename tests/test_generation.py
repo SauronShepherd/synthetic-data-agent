@@ -141,3 +141,11 @@ def test_generation_receipt_is_deterministic_and_contains_no_rows() -> None:
     assert "id" not in receipt.to_dict()
     assert "segment" not in receipt.to_dict()
     assert receipt.output_fingerprint
+
+
+def test_generation_receipt_rejects_unapproved_or_schema_mismatched_rows() -> None:
+    rows = generate_rows(plan(), row_count=1, vocabularies={"segment": ("a",)})
+    with pytest.raises(GenerationError, match="approved"):
+        receipt_for(replace(plan(), status=PlanStatus.DRAFT, plan_fingerprint=""), rows)
+    with pytest.raises(GenerationError, match="columns"):
+        receipt_for(plan(), ({"id": rows[0]["id"]},))

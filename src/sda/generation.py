@@ -91,6 +91,16 @@ def generate_rows(
 def receipt_for(plan: GenerationPlan, rows: Sequence[Mapping[str, Any]]) -> GenerationReceipt:
     """Create a deterministic receipt without including generated values."""
     normalized = tuple(dict(row) for row in rows)
+    if plan.status.value != "approved":
+        raise GenerationError("only approved plans may receive a generation receipt")
+    expected_columns = {spec.column for spec in _unique_specs(plan.columns)}
+    for row in normalized:
+        actual_columns = set(row)
+        if actual_columns != expected_columns:
+            raise GenerationError(
+                "generated row columns do not match the approved plan: "
+                f"expected {sorted(expected_columns)}, got {sorted(actual_columns)}"
+            )
     return GenerationReceipt(
         plan_id=plan.plan_id,
         plan_fingerprint=plan.plan_fingerprint,
