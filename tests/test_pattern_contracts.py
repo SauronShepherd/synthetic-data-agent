@@ -398,6 +398,15 @@ def test_pattern_lifecycle_is_explicit_and_origin_compatible() -> None:
         columns={"x": "int", "y": "int"},
     )
     assert rejected[0].lifecycle is PatternLifecycle.REJECTED
+    insufficient = PatternDetector(
+        PatternConfig(min_support_rows=2),
+        scoring_policy=PatternScoringPolicy(min_support_rows=3),
+    ).detect(
+        [{"x": 1, "y": 2}, {"x": 2, "y": 4}],
+        table="main.s.t",
+        columns={"x": "int", "y": "int"},
+    )
+    assert insufficient[0].lifecycle is PatternLifecycle.INSUFFICIENT_EVIDENCE
     with pytest.raises(ValueError, match="declared_rule lifecycle"):
         Pattern(
             "p",

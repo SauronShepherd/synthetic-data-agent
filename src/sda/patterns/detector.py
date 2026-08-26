@@ -605,6 +605,8 @@ class PatternDetector:
                 if decision == "rejected"
                 else PatternLifecycle.REVIEW_REQUIRED
                 if decision == "review_required"
+                else PatternLifecycle.INSUFFICIENT_EVIDENCE
+                if decision == "insufficient_evidence"
                 else PatternLifecycle.DECLARED_RULE
                 if origin in {PatternOrigin.DECLARED, PatternOrigin.USER_PROVIDED}
                 else PatternLifecycle.APPROVED_RULE

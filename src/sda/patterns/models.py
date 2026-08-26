@@ -69,6 +69,7 @@ class PatternLifecycle(StrEnum):
     APPROVED_RULE = "approved_rule"
     REJECTED = "rejected"
     REVIEW_REQUIRED = "review_required"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
 
 
 @dataclass(frozen=True, slots=True)
