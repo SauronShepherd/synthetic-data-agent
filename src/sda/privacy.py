@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from sda.artifacts.fingerprint import fingerprint
+
 
 class PrivacyDecision(StrEnum):
     APPROVED = "approved"
@@ -55,9 +57,11 @@ def assess_privacy(
                 )
             )
     for table, rows in tables.items():
-        counts: dict[tuple[tuple[str, Any], ...], int] = {}
+        counts: dict[str, int] = {}
         for row in rows:
-            key = tuple(sorted(row.items()))
+            # Canonical fingerprints support nested values without retaining
+            # raw row material in the privacy finding.
+            key = fingerprint(row)
             counts[key] = counts.get(key, 0) + 1
         duplicates = sum(count - 1 for count in counts.values() if count > 1)
         if duplicates > max_duplicate_rows:

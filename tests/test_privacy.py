@@ -23,3 +23,9 @@ def test_clean_approved_output_passes() -> None:
         approved_columns=(("t", "email"),),
     )
     assert report.decision is PrivacyDecision.APPROVED
+
+
+def test_duplicate_detection_handles_nested_values_without_raw_material() -> None:
+    report = assess_privacy({"t": (({"tags": ["a", "b"]}), ({"tags": ["a", "b"]}))})
+    assert report.decision is PrivacyDecision.REVIEW_REQUIRED
+    assert "tags" not in str(report.findings[0].evidence)
