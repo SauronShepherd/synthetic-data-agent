@@ -240,25 +240,25 @@ class PatternDetector:
         # Add bounded conditional and lifecycle evidence to the same aggregate result.
         categorical = [name for name in names if types.get(name) == "string"]
         numeric = [name for name in names if types.get(name) == "double"]
-        if categorical and numeric:
-            driver, outcome = categorical[0], numeric[0]
-            cells = conditional_counts(
-                rows, (driver,), outcome, max_cells=self.config.max_candidates
-            )
-            for cell in cells:
-                if cell["count"] >= self.config.min_support_rows:
-                    patterns += (
-                        self._pattern(
-                            run_id,
-                            table,
-                            PatternFamily.CONDITIONAL_DISTRIBUTION,
-                            (driver, outcome),
-                            cell["condition"],
-                            {"outcome": outcome},
-                            cell["count"],
-                            {"conditional_rate": cell["rate"], "method": "exact"},
-                        ),
-                    )
+        for driver in categorical[: self.config.max_segment_cardinality]:
+            for outcome in numeric[: self.config.max_candidates]:
+                cells = conditional_counts(
+                    rows, (driver,), outcome, max_cells=self.config.max_candidates
+                )
+                for cell in cells:
+                    if cell["count"] >= self.config.min_support_rows:
+                        patterns += (
+                            self._pattern(
+                                run_id,
+                                table,
+                                PatternFamily.CONDITIONAL_DISTRIBUTION,
+                                (driver, outcome),
+                                cell["condition"],
+                                {"outcome": outcome},
+                                cell["count"],
+                                {"conditional_rate": cell["rate"], "method": "exact"},
+                            ),
+                        )
         # Emit conditional-missingness findings for every bounded driver/outcome pair.
         for driver in categorical[: self.config.max_candidates]:
             driver_values = sorted({row.get(driver) for row in rows}, key=lambda value: str(value))[

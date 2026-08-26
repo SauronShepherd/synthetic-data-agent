@@ -98,6 +98,32 @@ def test_coordinator_emits_conditional_missingness_for_each_segment() -> None:
     assert {pattern.condition["segment"] for pattern in findings} == {"A", "B"}
 
 
+def test_coordinator_emits_conditional_distributions_for_each_pair() -> None:
+    refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [
+            {"segment_a": "A", "segment_b": "X", "amount_a": 1, "amount_b": 10},
+            {"segment_a": "A", "segment_b": "X", "amount_a": 1, "amount_b": 10},
+            {"segment_a": "B", "segment_b": "Y", "amount_a": 3, "amount_b": 30},
+            {"segment_a": "B", "segment_b": "Y", "amount_a": 3, "amount_b": 30},
+        ],
+        table="main.s.t",
+        input_refs=refs,
+        run_id="run-distributions",
+        environment="dev",
+        selected_tables=("main.s.t",),
+    )
+    findings = [
+        pattern for pattern in result.patterns if pattern.family.value == "conditional_distribution"
+    ]
+    assert {(pattern.columns[0], pattern.columns[1]) for pattern in findings} == {
+        ("segment_a", "amount_a"),
+        ("segment_a", "amount_b"),
+        ("segment_b", "amount_a"),
+        ("segment_b", "amount_b"),
+    }
+
+
 def test_candidates_are_bounded_and_deterministic() -> None:
     columns = {f"c{i}": "double" for i in range(20)}
     config = PatternConfig(max_candidates=7)
