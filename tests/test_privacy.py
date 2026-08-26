@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from sda.privacy import PrivacyDecision, assess_privacy
 
 
@@ -53,3 +55,12 @@ def test_privacy_report_serializes_decision_and_schema_version() -> None:
         "policy_ref": "strict-default",
         "schema_version": "privacy-report-v1",
     }
+
+
+def test_privacy_finding_evidence_is_deeply_immutable() -> None:
+    report = assess_privacy(
+        {"users": (({"email": "a@example.test"}),)},
+        direct_identifier_columns=(("users", "email"),),
+    )
+    with pytest.raises(TypeError, match="immutable"):
+        report.findings[0].evidence["table"] = "changed"

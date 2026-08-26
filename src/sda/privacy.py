@@ -15,12 +15,30 @@ class PrivacyDecision(StrEnum):
     REVIEW_REQUIRED = "review_required"
 
 
+class _FrozenDict(dict[str, Any]):
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("privacy evidence is immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _FrozenDict({str(key): _freeze(item) for key, item in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class PrivacyFinding:
     code: str
     severity: str
     message: str
     evidence: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "evidence", _freeze(self.evidence))
 
     def to_dict(self) -> dict[str, Any]:
         return {
