@@ -16,6 +16,11 @@ class RuleConflict:
 
 
 def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
+    rule_ids = [getattr(rule, "rule_id", "") for rule in rules]
+    if any(not rule_id for rule_id in rule_ids):
+        raise ValueError("rules must have non-empty rule IDs")
+    if len(rule_ids) != len(set(rule_ids)):
+        raise ValueError("rule IDs must be unique for conflict resolution")
     result = []
     for i, left in enumerate(rules):
         for right in rules[i + 1 :]:
@@ -49,7 +54,18 @@ def resolve_rule_conflicts(rules: list[Any], policy: Any) -> tuple[RuleConflict,
         left_rank = policy.rank(left.origin)
         right_rank = policy.rank(right.origin)
         if left_rank == right_rank:
-            resolved.append(conflict)
+            winner = min(left.rule_id, right.rule_id)
+            resolved.append(
+                RuleConflict(
+                    conflict.left_rule_id,
+                    conflict.right_rule_id,
+                    conflict.conflict_type,
+                    conflict.overlap_scope,
+                    winning_rule_id=winner,
+                    precedence_reason="rule_id_tiebreak",
+                    requires_review=True,
+                )
+            )
             continue
         winner = left if left_rank > right_rank else right
         resolved.append(

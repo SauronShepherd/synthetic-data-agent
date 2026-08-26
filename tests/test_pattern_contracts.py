@@ -2,7 +2,7 @@ import pytest
 
 from sda.patterns import PatternConfig, PatternDetector, PatternInputRefs
 from sda.patterns.candidates import generate_candidates
-from sda.patterns.conflicts import detect_rule_conflicts
+from sda.patterns.conflicts import detect_rule_conflicts, resolve_rule_conflicts
 from sda.patterns.fanout import fanout_by_segment
 from sda.patterns.models import PatternOrigin
 from sda.patterns.persistence import (
@@ -12,6 +12,7 @@ from sda.patterns.persistence import (
     registry_rows,
     require_pattern_schema_version,
 )
+from sda.patterns.precedence import RulePrecedencePolicy
 from sda.patterns.rules import BusinessRule, RuleStrength, evaluate_rule
 from sda.patterns.safety import SafeValueKind, safe_pattern_value
 from sda.patterns.stability import stability
@@ -285,6 +286,19 @@ def test_rule_conflict_detection_handles_unhashable_predicates() -> None:
     )
     conflicts = detect_rule_conflicts([left, right])
     assert conflicts[0].conflict_type == "mutually_exclusive_equality"
+
+
+def test_equal_precedence_conflicts_use_stable_rule_id_tiebreak() -> None:
+    left = BusinessRule(
+        "z-rule", "main.s.t", ({"column": "status", "operator": "eq", "value": "a"},)
+    )
+    right = BusinessRule(
+        "a-rule", "main.s.t", ({"column": "status", "operator": "eq", "value": "b"},)
+    )
+    conflicts = resolve_rule_conflicts([left, right], RulePrecedencePolicy())
+    assert conflicts[0].winning_rule_id == "a-rule"
+    assert conflicts[0].precedence_reason == "rule_id_tiebreak"
+    assert conflicts[0].requires_review
 
 
 def test_profile_index_and_relationship_identity_are_reusable() -> None:
