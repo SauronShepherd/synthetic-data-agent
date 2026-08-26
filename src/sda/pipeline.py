@@ -74,6 +74,8 @@ def run_standalone(
                 plan.privacy_policy_ref,
             )
         )
+        registry.validate(dataset_id, dataset_version, validation=validation)
+        registry.approve(dataset_id, dataset_version, privacy=privacy, actor=actor)
         publication = registry.publish(
             dataset_id, dataset_version, validation=validation, privacy=privacy, actor=actor
         )
