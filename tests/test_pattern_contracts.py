@@ -4,7 +4,7 @@ from sda.patterns import PatternConfig, PatternDetector, PatternInputRefs
 from sda.patterns.candidates import generate_candidates
 from sda.patterns.conflicts import detect_rule_conflicts, resolve_rule_conflicts
 from sda.patterns.fanout import fanout_by_segment
-from sda.patterns.models import PatternExecutionReceipt, PatternOrigin
+from sda.patterns.models import Pattern, PatternExecutionReceipt, PatternFamily, PatternOrigin
 from sda.patterns.persistence import (
     PATTERN_EVIDENCE_SCHEMA_VERSION,
     PATTERN_REGISTRY_SCHEMA_VERSION,
@@ -291,6 +291,27 @@ def test_registry_and_evidence_are_compact_and_json_safe() -> None:
     require_pattern_schema_version(registry, expected=PATTERN_REGISTRY_SCHEMA_VERSION)
     with pytest.raises(ValueError, match="incompatible"):
         require_pattern_schema_version(registry, expected=PATTERN_EVIDENCE_SCHEMA_VERSION)
+
+
+def test_pattern_persistence_redacts_non_numeric_values() -> None:
+    pattern = Pattern(
+        "pattern-secret",
+        "analysis-1",
+        PatternFamily.CONDITIONAL_DISTRIBUTION,
+        PatternOrigin.OBSERVED,
+        "main.s.t",
+        ("segment", "value"),
+        {"segment": "secret-segment"},
+        {"outcome": "value"},
+        2,
+        1.0,
+        {"conditional_rate": 1.0},
+        {"validation_mode": "exact"},
+    )
+    registry = registry_rows((pattern,))[0]
+    evidence = evidence_rows((pattern,))
+    assert "secret-segment" not in str(registry)
+    assert "secret-segment" not in str(evidence)
 
 
 def test_rule_evaluator_separates_condition_support_from_violations() -> None:

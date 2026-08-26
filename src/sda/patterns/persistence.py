@@ -5,6 +5,7 @@ from dataclasses import asdict, is_dataclass
 from typing import Any, cast
 
 from sda.artifacts.delta import persist_artifact_lifecycle, persist_distributed_evidence
+from sda.artifacts.fingerprint import fingerprint
 from sda.patterns.models import Pattern
 
 PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v1"
@@ -16,6 +17,17 @@ def require_pattern_schema_version(row: dict[str, Any], *, expected: str) -> Non
     actual = row.get("schema_version")
     if actual != expected:
         raise ValueError(f"incompatible pattern schema: expected {expected}, got {actual!r}")
+
+
+def _safe_payload(value: Any) -> Any:
+    """Keep structure while replacing non-numeric values with fingerprints."""
+    if isinstance(value, dict):
+        return {str(key): _safe_payload(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_safe_payload(item) for item in value]
+    if isinstance(value, int | float | bool) or value is None:
+        return value
+    return {"fingerprint": fingerprint(value)}
 
 
 class PatternPersistence:
@@ -75,8 +87,8 @@ def registry_rows(
             "primary_table": p.primary_table,
             "table_fqns_json": json.dumps([p.primary_table]),
             "columns_json": json.dumps(p.columns),
-            "condition_json": json.dumps(p.condition, sort_keys=True),
-            "outcome_json": json.dumps(p.outcome, sort_keys=True),
+            "condition_json": json.dumps(_safe_payload(p.condition), sort_keys=True),
+            "outcome_json": json.dumps(_safe_payload(p.outcome), sort_keys=True),
             "population_json": json.dumps(
                 {"support_rows": p.support_rows, "support_rate": p.support_rate},
                 sort_keys=True,
@@ -124,7 +136,7 @@ def evidence_rows(patterns: tuple[Pattern, ...]) -> list[dict[str, Any]]:
                     "evidence_kind": "metric",
                     "metric_name": key,
                     "metric_value": float(value) if isinstance(value, int | float) else None,
-                    "payload_json": json.dumps({key: value}, sort_keys=True),
+                    "payload_json": json.dumps(_safe_payload({key: value}), sort_keys=True),
                     "validation_mode": pattern.evidence_quality.get("validation_mode", "unknown"),
                 }
             )
