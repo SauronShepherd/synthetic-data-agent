@@ -26,6 +26,13 @@ def test_idempotent_run_creation_and_legal_transitions() -> None:
     assert repo.get_run("run-1").version == 3
 
 
+def test_idempotency_key_rejects_conflicting_run_content() -> None:
+    repo = InMemoryStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    with pytest.raises(StateError, match="different content"):
+        repo.create_run(RunRecord("run-2", "req-2", "idem-1"))
+
+
 def test_state_rejects_illegal_transition_and_stale_version() -> None:
     repo = InMemoryStateRepository()
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))

@@ -192,7 +192,10 @@ class InMemoryStateRepository:
         with self._lock:
             existing_id = self._by_idempotency.get(run.idempotency_key)
             if existing_id is not None:
-                return self._runs[existing_id]
+                existing = self._runs[existing_id]
+                if existing.run_id != run.run_id or existing.request_id != run.request_id:
+                    raise StateError("idempotency key already exists with different content")
+                return existing
             if run.run_id in self._runs:
                 raise StateError(f"run already exists: {run.run_id}")
             self._runs[run.run_id] = run
