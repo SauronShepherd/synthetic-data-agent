@@ -248,3 +248,12 @@ def test_validate_tables_preserves_intended_use_validation_vector() -> None:
     assert report.validation_vector["privacy"] is CheckStatus.WARN
     with pytest.raises(TypeError, match="immutable"):
         report.validation_vector["schema"] = CheckStatus.FAIL  # type: ignore[index]
+
+
+def test_validation_checks_time_ordering() -> None:
+    report = validate_tables(
+        {"events": (({"started": 1, "ended": 2}), ({"started": 4, "ended": 3}))},
+        time_orderings=(("events", "started", "ended"),),
+    )
+    assert report.technical_disposition is CheckStatus.FAIL
+    assert report.checks[-1].evidence["invalid"] == 1

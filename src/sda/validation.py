@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -115,6 +116,7 @@ def validate_tables(
     distribution_tolerance: float = 0.0,
     conditional_null_rates: dict[str, dict[tuple[str, str], dict[Any, float]]] | None = None,
     format_patterns: dict[str, dict[str, str]] | None = None,
+    time_orderings: tuple[tuple[str, str, str], ...] = (),
     validation_vector: dict[str, CheckStatus] | None = None,
     intended_use: str = "unspecified",
 ) -> ValidationReport:
@@ -411,6 +413,53 @@ def validate_tables(
                     method="availability_check",
                 )
             )
+    for table, earlier_column, later_column in time_orderings:
+        check_id = f"time_order:{table}.{earlier_column}<={later_column}"
+        if table not in tables:
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.FAIL,
+                    f"{table} is unavailable; cannot validate time ordering",
+                    {"supported": False, "reason": "table_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
+        rows = tables[table]
+        if any(earlier_column not in row or later_column not in row for row in rows):
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.FAIL,
+                    f"time ordering columns are unavailable for {check_id}",
+                    {"supported": False, "reason": "column_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
+        invalid = 0
+        for row in rows:
+            earlier, later = row[earlier_column], row[later_column]
+            if not isinstance(earlier, (date, datetime, int, float, str)) or not isinstance(
+                later, (date, datetime, int, float, str)
+            ):
+                invalid += 1
+            else:
+                try:
+                    invalid += earlier > later
+                except TypeError:
+                    invalid += 1
+        checks.append(
+            ValidationCheck(
+                check_id,
+                CheckStatus.PASS if invalid == 0 else CheckStatus.FAIL,
+                f"{invalid} rows violate time ordering",
+                {"rows": len(rows), "invalid": invalid},
+                method="non_decreasing_order",
+                population="full_table",
+            )
+        )
             continue
         rows = tables[table]
         for column, pattern in format_columns.items():
