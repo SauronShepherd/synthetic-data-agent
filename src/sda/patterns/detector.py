@@ -148,6 +148,7 @@ class PatternDetector:
                         {"outcome": right},
                         metric["valid_pair_count"],
                         metric,
+                        support_rate=metric["valid_pair_count"] / len(rows) if rows else 0.0,
                     )
                 )
                 if len(result) >= self.config.max_candidates:
@@ -167,6 +168,7 @@ class PatternDetector:
                         {"later": later},
                         int(metric["count"]),
                         metric,
+                        support_rate=metric["count"] / len(rows) if rows else 0.0,
                     )
                 )
         return tuple(result)
@@ -414,6 +416,7 @@ class PatternDetector:
         outcome: dict[str, Any],
         support: int,
         metric: dict[str, Any],
+        support_rate: float | None = None,
     ) -> Pattern:
         pid = "pat_" + fingerprint(
             {
@@ -444,7 +447,7 @@ class PatternDetector:
             condition,
             outcome,
             support,
-            None,
+            support_rate,
             metric,
             {"validation_mode": metric.get("method", "exact"), "support_quality": "sufficient"},
             decision=decision,

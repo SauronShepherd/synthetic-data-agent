@@ -77,6 +77,7 @@ def test_detector_emits_temporal_lag_metrics() -> None:
     assert len(temporal) == 1
     assert temporal[0].metric["count"] == 2
     assert temporal[0].metric["p50"] == 3.0
+    assert temporal[0].support_rate == 1.0
 
 
 def test_pattern_nested_evidence_is_immutable() -> None:
