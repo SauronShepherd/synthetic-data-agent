@@ -56,6 +56,8 @@ class StreamManifest:
     last_event_id: str | None
     checkpoint_id: str | None
     replay_fingerprint: str
+    events_per_second: float
+    inter_arrival_seconds: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +153,8 @@ def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamM
         ids[-1] if ids else None,
         plan.checkpoint_id or None,
         replay,
+        plan.events_per_second,
+        plan.inter_arrival_seconds,
     )
 
 

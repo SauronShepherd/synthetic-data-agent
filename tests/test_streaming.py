@@ -80,3 +80,10 @@ def test_bounded_events_have_deterministic_inter_arrival_times() -> None:
     assert events[1]["event_time"] == "2020-01-01T00:00:02.500000+00:00"
     with pytest.raises(ValueError, match="inter_arrival"):
         plan(inter_arrival_seconds=0)
+
+
+def test_manifest_records_the_declared_event_rate_contract() -> None:
+    current = plan(events_per_second=4.0, inter_arrival_seconds=0.25)
+    result = manifest(current, generate_bounded_events(current))
+    assert result.events_per_second == 4.0
+    assert result.inter_arrival_seconds == 0.25
