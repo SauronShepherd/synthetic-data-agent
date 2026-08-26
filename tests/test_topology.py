@@ -48,3 +48,10 @@ def test_directed_degree_limits_and_dag_constraint_are_enforced() -> None:
 def test_topology_rejects_acyclic_self_loops() -> None:
     with pytest.raises(ValueError, match="self-loops"):
         TopologyPlan("g", "fp", node_count=2, edge_count=1, acyclic=True, allow_self_loops=True)
+
+
+def test_directed_max_degree_counts_both_endpoints() -> None:
+    with pytest.raises(TopologyError, match="realize"):
+        generate_topology(
+            TopologyPlan("g", "fp", node_count=3, edge_count=2, max_degree=1)
+        )

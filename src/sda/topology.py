@@ -123,9 +123,8 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
             continue
         used.add(canonical)
         degree[source] += 1
-        if plan.kind is GraphKind.UNDIRECTED:
-            degree[target] += 1
-        else:
+        degree[target] += 1
+        if plan.kind is GraphKind.DIRECTED:
             in_degree[target] += 1
             out_degree[source] += 1
         adjacency[source].add(target)
