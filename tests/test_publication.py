@@ -116,6 +116,15 @@ def test_alias_conflict_does_not_partially_publish() -> None:
         first_registry.publish(
             "other", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest"
         )
+
+
+def test_staging_is_idempotent_but_rejects_conflicting_evidence() -> None:
+    registry, item = staged()
+    assert registry.stage(item) is item
+    with pytest.raises(PublicationError, match="different evidence"):
+        registry.stage(
+            Publication("dataset", "v1", "uc.other.table", item.validation_fingerprint, "strict")
+        )
     assert second.status is PublicationStatus.STAGED
 
 

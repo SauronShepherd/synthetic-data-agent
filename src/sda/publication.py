@@ -64,6 +64,12 @@ class PublicationRegistry:
         key = (publication.dataset_id, publication.dataset_version)
         existing = self._items.get(key)
         if existing is not None:
+            if (
+                existing.location != publication.location
+                or existing.validation_fingerprint != publication.validation_fingerprint
+                or existing.privacy_policy_ref != publication.privacy_policy_ref
+            ):
+                raise PublicationError("dataset version is already staged with different evidence")
             return existing
         self._items[key] = publication
         return publication
