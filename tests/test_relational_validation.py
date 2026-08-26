@@ -72,6 +72,44 @@ def test_relational_generation_is_orphan_free() -> None:
     assert len(report.checks) == 4
 
 
+def test_relational_generation_reproduces_exact_fanout_distribution() -> None:
+    fk = ForeignKeySpec("child", "parent_id", "parent", "id")
+    first = generate_relational(
+        plan(),
+        row_counts={"parent": 3, "child": 6},
+        foreign_keys=(fk,),
+        fanout_distributions={("child", "parent"): (4, 0, 2)},
+    )
+    second = generate_relational(
+        plan(),
+        row_counts={"parent": 3, "child": 6},
+        foreign_keys=(fk,),
+        fanout_distributions={("child", "parent"): (4, 0, 2)},
+    )
+    assert first == second
+    counts = {row["id"]: 0 for row in first["parent"]}
+    for row in first["child"]:
+        counts[row["parent_id"]] += 1
+    assert tuple(counts[row["id"]] for row in first["parent"]) == (4, 0, 2)
+
+
+@pytest.mark.parametrize(
+    "distribution, message",
+    [((1, 1, 1), "one count per parent"), ((1, 1), "sum to the child")],
+)
+def test_relational_generation_rejects_unreconciled_fanout(
+    distribution: tuple[int, ...], message: str
+) -> None:
+    fk = ForeignKeySpec("child", "parent_id", "parent", "id")
+    with pytest.raises(RelationalGenerationError, match=message):
+        generate_relational(
+            plan(),
+            row_counts={"parent": 2, "child": 3},
+            foreign_keys=(fk,),
+            fanout_distributions={("child", "parent"): distribution},
+        )
+
+
 def test_cycles_fail_closed() -> None:
     with pytest.raises(RelationalGenerationError, match="cycle"):
         generate_relational(

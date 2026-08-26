@@ -77,6 +77,7 @@ def generate_relational(
     foreign_keys: tuple[ForeignKeySpec, ...] = (),
     composite_foreign_keys: tuple[CompositeForeignKeySpec, ...] = (),
     vocabularies: dict[str, tuple[str, ...]] | None = None,
+    fanout_distributions: dict[tuple[str, str], tuple[int, ...]] | None = None,
 ) -> dict[str, tuple[dict[str, Any], ...]]:
     """Generate tables in dependency order and wire child rows to parent keys.
 
@@ -94,6 +95,8 @@ def generate_relational(
     if any(count < 0 for count in row_counts.values()):
         raise RelationalGenerationError("row_counts must not contain negative values")
     _validate_graph(plan.tables, foreign_keys, composite_foreign_keys)
+    fanouts = fanout_distributions or {}
+    _validate_fanouts(fanouts, row_counts, foreign_keys, composite_foreign_keys)
     by_table: dict[str, list[dict[str, Any]]] = {table: [] for table in plan.tables}
     all_relationships: tuple[Any, ...] = (*foreign_keys, *composite_foreign_keys)
     for table in _order_tables(plan.tables, all_relationships):
@@ -112,12 +115,13 @@ def generate_relational(
                 raise RelationalGenerationError(
                     f"no parent keys available for {table}.{simple_fk.child_column}"
                 )
+            assignments = _parent_assignments(simple_fk, parent_keys, len(table_rows), fanouts)
             for index, row in enumerate(table_rows):
                 row[simple_fk.child_column] = (
                     None
                     if simple_fk.nullable
                     and (not parent_keys or _optional_slot(plan, simple_fk, index))
-                    else parent_keys[index % len(parent_keys)]
+                    else assignments[index]
                 )
         for composite_fk in [item for item in composite_foreign_keys if item.child_table == table]:
             parent_keys = [
@@ -128,18 +132,65 @@ def generate_relational(
                 raise RelationalGenerationError(
                     f"no parent keys available for {table}.{composite_fk.child_columns}"
                 )
+            assignments = _parent_assignments(composite_fk, parent_keys, len(table_rows), fanouts)
             for index, row in enumerate(table_rows):
                 values: tuple[Any, ...] = (
                     (None,) * len(composite_fk.child_columns)
                     if composite_fk.nullable
                     and (not parent_keys or _optional_slot(plan, composite_fk, index))
-                    else cast(tuple[Any, ...], parent_keys[index % len(parent_keys)])
+                    else cast(tuple[Any, ...], assignments[index])
                 )
                 for column, value in zip(composite_fk.child_columns, values, strict=True):
                     row[column] = value
         by_table[table] = table_rows
     _assert_integrity(by_table, foreign_keys, composite_foreign_keys)
     return {table: tuple(rows) for table, rows in by_table.items()}
+
+
+def _parent_assignments(
+    fk: Any,
+    parent_keys: list[Any],
+    child_count: int,
+    fanouts: dict[tuple[str, str], tuple[int, ...]],
+) -> list[Any]:
+    target = fanouts.get((fk.child_table, fk.parent_table))
+    if target is None:
+        return [parent_keys[index % len(parent_keys)] for index in range(child_count)]
+    assignments: list[Any] = []
+    for parent_key, count in zip(parent_keys, target, strict=True):
+        assignments.extend([parent_key] * count)
+    return assignments
+
+
+def _validate_fanouts(
+    fanouts: dict[tuple[str, str], tuple[int, ...]],
+    row_counts: dict[str, int],
+    foreign_keys: tuple[ForeignKeySpec, ...],
+    composite: tuple[CompositeForeignKeySpec, ...],
+) -> None:
+    relationships: dict[tuple[str, str], Any] = {}
+    for relationship in (*foreign_keys, *composite):
+        fk: Any = relationship
+        relationships[(fk.child_table, fk.parent_table)] = fk
+    for key, distribution in fanouts.items():
+        fk = relationships.get(key)
+        if fk is None:
+            raise RelationalGenerationError(f"fan-out target is not a declared relationship: {key}")
+        if any(count < 0 for count in distribution):
+            raise RelationalGenerationError("fan-out counts must not be negative")
+        if getattr(fk, "optional_rate", 0.0):
+            raise RelationalGenerationError(
+                "explicit fan-out cannot be combined with optional_rate"
+            )
+        expected = row_counts[fk.parent_table]
+        if len(distribution) != expected:
+            raise RelationalGenerationError(
+                f"fan-out for {key} must contain one count per parent row ({expected})"
+            )
+        if sum(distribution) != row_counts[fk.child_table]:
+            raise RelationalGenerationError(
+                f"fan-out for {key} must sum to the child row count ({row_counts[fk.child_table]})"
+            )
 
 
 def _optional_slot(plan: GenerationPlan, fk: Any, index: int) -> bool:
