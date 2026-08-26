@@ -78,7 +78,7 @@ def test_topology_validator_checks_directed_in_and_out_degree_limits() -> None:
     result = generate_topology(plan)
     corrupted = type(result)(
         result.nodes,
-        (result.edges[0], {**result.edges[1], "target": result.edges[0]["target"]}),
+        ({**result.edges[0], "target": result.edges[1]["target"]}, result.edges[1]),
         result.metrics,
     )
     with pytest.raises(TopologyError, match="max_in_degree"):
