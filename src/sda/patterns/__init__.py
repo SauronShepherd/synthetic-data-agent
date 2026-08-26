@@ -1,7 +1,7 @@
 """Deterministic, evidence-preserving SDA 07 pattern detection."""
 
-from sda.patterns.detector import PatternDetector
 from sda.patterns.candidates import PatternCandidate, generate_candidates
+from sda.patterns.detector import PatternDetector
 from sda.patterns.models import (
     Pattern,
     PatternConfig,
