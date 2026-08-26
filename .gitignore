@@ -10,6 +10,7 @@ dist/
 .testdeps/
 .testdeps2/
 .coverage
+test-results.xml
 htmlcov/
 
 # Virtual environments
