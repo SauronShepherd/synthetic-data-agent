@@ -9,6 +9,7 @@ from sda.patterns.persistence import (
     PATTERN_EVIDENCE_SCHEMA_VERSION,
     PATTERN_REGISTRY_SCHEMA_VERSION,
     evidence_rows,
+    require_pattern_schema_version,
     registry_rows,
 )
 from sda.patterns.rules import BusinessRule, RuleStrength, evaluate_rule
@@ -110,6 +111,9 @@ def test_registry_and_evidence_are_compact_and_json_safe() -> None:
     assert registry["schema_version"] == PATTERN_REGISTRY_SCHEMA_VERSION
     assert evidence["evidence_id"].startswith(pattern.pattern_id)
     assert evidence["schema_version"] == PATTERN_EVIDENCE_SCHEMA_VERSION
+    require_pattern_schema_version(registry, expected=PATTERN_REGISTRY_SCHEMA_VERSION)
+    with pytest.raises(ValueError, match="incompatible"):
+        require_pattern_schema_version(registry, expected=PATTERN_EVIDENCE_SCHEMA_VERSION)
 
 
 def test_rule_evaluator_separates_condition_support_from_violations() -> None:

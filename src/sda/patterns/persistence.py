@@ -11,6 +11,13 @@ PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v1"
 PATTERN_EVIDENCE_SCHEMA_VERSION = "sda07-pattern-evidence-v1"
 
 
+def require_pattern_schema_version(row: dict[str, Any], *, expected: str) -> None:
+    """Reject pattern rows from an incompatible persistence schema."""
+    actual = row.get("schema_version")
+    if actual != expected:
+        raise ValueError(f"incompatible pattern schema: expected {expected}, got {actual!r}")
+
+
 class PatternPersistence:
     """Adapter that keeps compact registry rows and large evidence separate."""
 
