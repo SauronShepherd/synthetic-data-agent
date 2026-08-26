@@ -79,6 +79,8 @@ def test_manifest_rejects_schema_mismatch_and_offset_gaps() -> None:
         manifest(current, (events[0], events[2]))
     with pytest.raises(StreamError, match="outside"):
         manifest(current, ({**events[0], "offset": current.event_count},))
+    with pytest.raises(StreamError, match="unique"):
+        manifest(current, (events[0], {**events[1], "event_id": events[0]["event_id"]}))
 
 
 def test_bounded_events_have_deterministic_inter_arrival_times() -> None:

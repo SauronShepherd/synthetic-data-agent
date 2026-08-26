@@ -194,6 +194,8 @@ def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamM
     if offsets and offsets != list(range(offsets[0], offsets[-1] + 1)):
         raise StreamError("manifest events must contain contiguous offsets")
     ids = [str(event["event_id"]) for event in events]
+    if any(not event_id for event_id in ids) or len(ids) != len(set(ids)):
+        raise StreamError("manifest events must have unique non-empty event IDs")
     replay = hashlib.sha256("|".join(ids).encode()).hexdigest()
     return StreamManifest(
         plan.stream_id,
