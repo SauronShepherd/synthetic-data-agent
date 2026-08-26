@@ -68,6 +68,15 @@ class ValidationReport:
         ids = [check.check_id for check in self.checks]
         if len(ids) != len(set(ids)):
             raise ValueError("validation check IDs must be unique")
+        expected = (
+            CheckStatus.FAIL
+            if any(check.status is CheckStatus.FAIL for check in self.checks)
+            else CheckStatus.PASS
+        )
+        if self.technical_disposition is not expected:
+            raise ValueError(
+                f"technical_disposition must match the check results (expected {expected.value})"
+            )
 
     @property
     def fingerprint(self) -> str:

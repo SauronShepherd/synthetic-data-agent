@@ -153,3 +153,12 @@ def test_validation_does_not_turn_missing_inputs_into_success() -> None:
 def test_not_applicable_validation_requires_explicit_reason() -> None:
     with pytest.raises(ValueError, match="unsupported_reason"):
         ValidationCheck("unsupported", CheckStatus.NOT_APPLICABLE, "n/a", {})
+
+
+def test_validation_report_cannot_claim_pass_with_failed_check() -> None:
+    with pytest.raises(ValueError, match="technical_disposition"):
+        ValidationReport(
+            (ValidationCheck("bad", CheckStatus.FAIL, "failed", {}),),
+            "qa",
+            CheckStatus.PASS,
+        )
