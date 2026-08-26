@@ -76,6 +76,13 @@ def test_approved_privacy_report_cannot_contain_findings() -> None:
         )
 
 
+def test_privacy_report_findings_are_immutable() -> None:
+    findings = [PrivacyFinding("risk", "medium", "review", {})]
+    report = PrivacyReport(PrivacyDecision.REVIEW_REQUIRED, findings, "strict")
+    findings.append(PrivacyFinding("other", "medium", "review", {}))
+    assert len(report.findings) == 1
+
+
 def test_privacy_finding_evidence_is_deeply_immutable() -> None:
     report = assess_privacy(
         {"users": (({"email": "a@example.test"}),)},

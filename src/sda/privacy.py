@@ -67,6 +67,7 @@ class PrivacyReport:
     schema_version: str = "privacy-report-v1"
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "findings", tuple(self.findings))
         if not self.policy_ref.strip() or not self.schema_version.strip():
             raise ValueError("privacy policy_ref and schema_version are required")
         if self.decision is PrivacyDecision.APPROVED and self.findings:
