@@ -142,18 +142,18 @@ design evidence; the repository is the source of truth for what is currently pre
 
 ## 4. Generation v1: standalone tables (SDA 10)
 
-- [ ] Define `GenerationPlan` with source evidence refs, target schema, row counts,
+- [x] Define `GenerationPlan` with source evidence refs, target schema, row counts,
   seed policy, column models, null policy, identifier policy, time window, budgets,
   privacy constraints, generator version, and intended use.
-- [ ] Implement a deterministic row skeleton and stable row coordinates independent of
+- [x] Implement a deterministic row skeleton and stable row coordinates independent of
   Spark partitioning.
-- [ ] Implement empirical numeric sampling with quantiles, point masses, tails,
+- [x] Implement empirical numeric sampling with quantiles, point masses, tails,
   clipping policy, and approved approximation limits.
-- [ ] Implement weighted categorical sampling, rare-category policy, string format
+- [x] Implement weighted categorical sampling, rare-category policy, string format
   signatures, safe vocabularies, dates/timestamps, and timezone semantics.
-- [ ] Generate new identifiers; never hash or copy production identifiers as synthetic
+- [x] Generate new identifiers; never hash or copy production identifiers as synthetic
   identity. Persist mapping only when explicitly approved and protected.
-- [ ] Implement exact-count and probabilistic row modes with deterministic rounding.
+- [x] Implement exact-count and probabilistic row modes with deterministic rounding.
 - [ ] Apply only approved conditional null and cross-column rules.
 - [ ] Write staging output, schema, manifest, seed/fingerprint, receipt, and audit row;
   publish only after validation and approvals.
@@ -163,14 +163,14 @@ design evidence; the repository is the source of truth for what is currently pre
 
 ## 5. Generation v2: relational datasets (SDA 11)
 
-- [ ] Freeze and validate the relationship dependency graph from the approved evidence
+- [x] Freeze and validate the relationship dependency graph from the approved evidence
   snapshot; reject unresolved cycles or require an explicit cycle strategy.
-- [ ] Generate parent key domains first, then child rows from synthetic keys; support
+- [x] Generate parent key domains first, then child rows from synthetic keys; support
   composite keys, nullable FKs, optional relationships, bridge tables, self-reference,
   and zero-child parents.
 - [ ] Reproduce fan-out distributions and long tails while reconciling requested table
   totals; record unavoidable deviations and the chosen priority order.
-- [ ] Implement deterministic join allocation, orphan prevention, uniqueness checks,
+- [x] Implement deterministic join allocation, orphan prevention, uniqueness checks,
   cycle handling, and post-generation relationship reconciliation.
 - [ ] Add hand-computable fixtures for one-to-many, many-to-many, composite, optional,
   bridge, self-referential, cyclic, and empty relations.
