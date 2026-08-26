@@ -240,6 +240,10 @@ class PatternDetector:
             for name in names
         }
         candidates = generate_candidates(table, types, config=self.config)
+        candidate_count_by_family: dict[str, int] = {}
+        for candidate in candidates:
+            family = candidate.family.value
+            candidate_count_by_family[family] = candidate_count_by_family.get(family, 0) + 1
         patterns = self.detect(rows, table=table, columns=types, analysis_id=run_id)
         # Add bounded conditional and lifecycle evidence to the same aggregate result.
         categorical = [name for name in names if types.get(name) == "string"]
@@ -365,6 +369,7 @@ class PatternDetector:
         rule_conflicts = resolve_rule_conflicts(list(rules), self.rule_precedence_policy)
         receipt = PatternExecutionReceipt(
             candidate_count_total=len(candidates),
+            candidate_count_by_family=candidate_count_by_family,
             patterns_emitted=len(patterns),
             patterns_accepted_for_planning=accepted,
             patterns_review_required=len(patterns) - accepted - rejected - insufficient,

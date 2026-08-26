@@ -80,6 +80,14 @@ def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> No
     assert result.receipt.source_tables_scanned == 1
     assert result.receipt.patterns_rejected == 0
     assert result.receipt.patterns_insufficient == 0
+    assert result.receipt.candidate_count_by_family == {
+        "correlation": 1,
+        "conditional_distribution": 2,
+    }
+    assert (
+        sum(result.receipt.candidate_count_by_family.values())
+        == result.receipt.candidate_count_total
+    )
     assert (
         result.receipt.patterns_accepted_for_planning
         + result.receipt.patterns_review_required
