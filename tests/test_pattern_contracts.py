@@ -79,6 +79,16 @@ def test_detector_emits_temporal_lag_metrics() -> None:
     assert temporal[0].metric["p50"] == 3.0
 
 
+def test_pattern_nested_evidence_is_immutable() -> None:
+    pattern = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [{"x": 1, "y": 2}, {"x": 2, "y": 4}],
+        table="main.s.t",
+        columns={"x": "int", "y": "int"},
+    )[0]
+    with pytest.raises(TypeError, match="immutable"):
+        pattern.metric["value"] = 99
+
+
 def test_fanout_includes_zero_child_parents() -> None:
     parents = [{"id": 1, "segment": "A"}, {"id": 2, "segment": "A"}]
     children = [{"parent_id": 1}]

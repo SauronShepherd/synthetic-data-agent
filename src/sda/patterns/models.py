@@ -9,6 +9,21 @@ from typing import Any
 from sda.artifacts.fingerprint import fingerprint
 
 
+class _FrozenDict(dict[str, Any]):
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("pattern mappings are immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
+def _freeze(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _FrozenDict({str(key): _freeze(item) for key, item in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
 class PatternFamily(StrEnum):
     CORRELATION = "correlation"
     CONDITIONAL_DISTRIBUTION = "conditional_distribution"
@@ -144,6 +159,17 @@ class Pattern:
     generation_action: dict[str, Any] = field(default_factory=dict)
     validation_action: dict[str, Any] = field(default_factory=dict)
     review_status: str = "not_required"
+
+    def __post_init__(self) -> None:
+        for name in (
+            "condition",
+            "outcome",
+            "metric",
+            "evidence_quality",
+            "generation_action",
+            "validation_action",
+        ):
+            object.__setattr__(self, name, _freeze(getattr(self, name)))
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
