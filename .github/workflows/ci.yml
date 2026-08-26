@@ -25,7 +25,7 @@ jobs:
       - name: Type check
         run: mypy src
       - name: Tests and coverage
-        run: pytest -q --cov=src/sda --cov-report=term-missing
+        run: pytest -q -m "not spark" --cov=src/sda --cov-report=term-missing
       - name: Spark tests
         run: pytest -q -m spark
       - name: Build wheel
