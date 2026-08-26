@@ -202,10 +202,6 @@ def receipt_for(plan: GenerationPlan, rows: Sequence[Mapping[str, Any]]) -> Gene
     normalized = tuple(dict(row) for row in rows)
     if plan.status.value != "approved":
         raise GenerationError("only approved plans may receive a generation receipt")
-    if plan.row_count_mode is RowCountMode.EXACT and plan.requested_row_count != len(normalized):
-        raise GenerationError(
-            "generated row count does not match the approved exact requested_row_count"
-        )
     expected_columns = {spec.column for spec in _unique_specs(plan.columns)}
     for row in normalized:
         actual_columns = set(row)
@@ -214,6 +210,14 @@ def receipt_for(plan: GenerationPlan, rows: Sequence[Mapping[str, Any]]) -> Gene
                 "generated row columns do not match the approved plan: "
                 f"expected {sorted(expected_columns)}, got {sorted(actual_columns)}"
             )
+    if (
+        plan.row_count_mode is RowCountMode.EXACT
+        and plan.requested_row_count is not None
+        and plan.requested_row_count != len(normalized)
+    ):
+        raise GenerationError(
+            "generated row count does not match the approved exact requested_row_count"
+        )
     return GenerationReceipt(
         plan_id=plan.plan_id,
         plan_fingerprint=plan.plan_fingerprint,
