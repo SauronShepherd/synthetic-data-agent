@@ -227,12 +227,15 @@ class InMemoryStateRepository:
 
     def record_approval(self, approval: Approval) -> Approval:
         with self._lock:
-            if any(
-                a.run_id == approval.run_id and a.approval_type == approval.approval_type
-                for a in self._approvals
-            ):
-                raise StateError("approval already recorded")
             self.get_run(approval.run_id)
+            for existing in self._approvals:
+                if (
+                    existing.run_id == approval.run_id
+                    and existing.approval_type == approval.approval_type
+                ):
+                    if existing == approval:
+                        return existing
+                    raise StateError("approval already recorded with different content")
             self._approvals.append(approval)
             return approval
 

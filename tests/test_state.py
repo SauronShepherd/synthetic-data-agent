@@ -71,10 +71,11 @@ def test_approval_is_unique_per_type() -> None:
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
     approval = Approval("run-1", "privacy", "approved", "reviewer")
     repo.record_approval(approval)
+    assert repo.record_approval(approval) == approval
     assert approval.decided_at
     assert repo.list_approvals("run-1") == (approval,)
-    with pytest.raises(StateError, match="already recorded"):
-        repo.record_approval(approval)
+    with pytest.raises(StateError, match="different content"):
+        repo.record_approval(Approval("run-1", "privacy", "rejected", "reviewer"))
 
 
 def test_in_memory_lease_renewal_and_stale_recovery_match_durable_contract() -> None:
