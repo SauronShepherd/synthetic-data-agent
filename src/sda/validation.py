@@ -345,7 +345,7 @@ def validate_tables(
                     population="full_table_by_driver",
                 )
             )
-    for table, columns in format_patterns.items():
+    for table, format_columns in format_patterns.items():
         if table not in tables:
             checks.append(
                 ValidationCheck(
@@ -358,7 +358,7 @@ def validate_tables(
             )
             continue
         rows = tables[table]
-        for column, pattern in columns.items():
+        for column, pattern in format_columns.items():
             check_id = f"format:{table}.{column}"
             try:
                 matcher = re.compile(pattern)
