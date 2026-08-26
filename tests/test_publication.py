@@ -113,3 +113,14 @@ def test_publication_rejects_mismatched_validation_evidence() -> None:
         ).status
         is PublicationStatus.PUBLISHED
     )
+
+
+def test_approved_publication_binds_privacy_evidence() -> None:
+    registry, _ = staged()
+    validation, privacy = reports()
+    registry.validate("dataset", "v1", validation=validation)
+    approved = registry.approve("dataset", "v1", privacy=privacy, actor="reviewer")
+    assert approved.privacy_fingerprint == privacy.fingerprint
+    changed = PrivacyReport(PrivacyDecision.APPROVED, (), "different-policy")
+    with pytest.raises(PublicationError, match="privacy evidence fingerprint"):
+        registry.publish("dataset", "v1", validation=validation, privacy=changed, actor="reviewer")

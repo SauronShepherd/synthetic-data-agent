@@ -28,6 +28,7 @@ class Publication:
     location: str
     validation_fingerprint: str
     privacy_policy_ref: str
+    privacy_fingerprint: str = ""
     status: PublicationStatus = PublicationStatus.STAGED
     published_by: str | None = None
     revocation_reason: str | None = None
@@ -82,6 +83,10 @@ class PublicationRegistry:
             if current.status is PublicationStatus.VALIDATED:
                 raise PublicationError("human approval is required")
             if current.status is PublicationStatus.APPROVED:
+                if current.privacy_fingerprint != privacy.fingerprint:
+                    raise PublicationError(
+                        "privacy evidence fingerprint does not match approved artifact"
+                    )
                 self._check_alias_available(alias, key)
                 published = replace(current, status=PublicationStatus.PUBLISHED, published_by=actor)
                 self._items[key] = published
@@ -97,6 +102,8 @@ class PublicationRegistry:
             raise PublicationError("validation intended use is required")
         if privacy.decision is not PrivacyDecision.APPROVED:
             raise PublicationError("privacy approval is required")
+        if current.privacy_fingerprint and current.privacy_fingerprint != privacy.fingerprint:
+            raise PublicationError("privacy evidence fingerprint does not match approved artifact")
         self._check_alias_available(alias, key)
         published = replace(current, status=PublicationStatus.PUBLISHED, published_by=actor)
         self._items[key] = published
@@ -149,7 +156,12 @@ class PublicationRegistry:
             raise PublicationError("technical validation is required before approval")
         if privacy.decision is not PrivacyDecision.APPROVED:
             raise PublicationError("privacy approval is required")
-        approved = replace(current, status=PublicationStatus.APPROVED, published_by=actor)
+        approved = replace(
+            current,
+            status=PublicationStatus.APPROVED,
+            published_by=actor,
+            privacy_fingerprint=privacy.fingerprint,
+        )
         self._items[key] = approved
         return approved
 

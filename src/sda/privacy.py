@@ -68,6 +68,10 @@ class PrivacyReport:
             "schema_version": self.schema_version,
         }
 
+    @property
+    def fingerprint(self) -> str:
+        return fingerprint(self)
+
 
 def assess_privacy(
     tables: dict[str, tuple[dict[str, Any], ...]],
