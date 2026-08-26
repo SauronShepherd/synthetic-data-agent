@@ -73,7 +73,12 @@ def test_publication_exposes_validated_and_approved_lifecycle_states() -> None:
     )
     assert (
         registry.publish(
-            "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer"
+            "dataset",
+            "v1",
+            validation=validation,
+            privacy=privacy,
+            actor="reviewer",
+            alias="latest",
         ).status
         is PublicationStatus.PUBLISHED
     )

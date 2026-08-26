@@ -84,6 +84,11 @@ class PublicationRegistry:
             if current.status is PublicationStatus.APPROVED:
                 published = replace(current, status=PublicationStatus.PUBLISHED, published_by=actor)
                 self._items[key] = published
+                if alias:
+                    previous = self._aliases.get(alias)
+                    if previous is not None and previous != key:
+                        raise PublicationError(f"alias already points to another dataset: {alias}")
+                    self._aliases[alias] = key
                 return published
             return current
         if validation.technical_disposition is not CheckStatus.PASS:
