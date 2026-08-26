@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sda.operations import ResourceBudget, enforce_budget
-from sda.planning import ColumnGenerationSpec, GenerationPlan
+from sda.planning import ColumnGenerationSpec, GenerationPlan, RowCountMode
 
 
 class GenerationError(ValueError):
@@ -18,7 +18,7 @@ class GenerationError(ValueError):
 def generate_rows(
     plan: GenerationPlan,
     *,
-    row_count: int,
+    row_count: int | None = None,
     vocabularies: Mapping[str, Sequence[str]] | None = None,
     empirical_samples: Mapping[str, Sequence[Any]] | None = None,
 ) -> tuple[dict[str, Any], ...]:
@@ -29,6 +29,8 @@ def generate_rows(
     """
     if plan.status.value != "approved":
         raise GenerationError("only approved plans may be executed")
+    if row_count is None:
+        row_count = resolve_row_count(plan)
     if row_count < 0:
         raise GenerationError("row_count must not be negative")
     max_rows = int(plan.budgets.get("max_rows", row_count))
@@ -51,6 +53,22 @@ def generate_rows(
             )
         result.append(row)
     return tuple(result)
+
+
+def resolve_row_count(plan: GenerationPlan, *, source_row_count: int | None = None) -> int:
+    """Resolve a deterministic output count from the immutable plan contract."""
+    if plan.requested_row_count is not None:
+        return plan.requested_row_count
+    if plan.row_count_mode is RowCountMode.EXACT:
+        raise GenerationError("exact plans require requested_row_count")
+    if source_row_count is None or source_row_count < 0:
+        raise GenerationError("probabilistic plans require a non-negative source_row_count")
+    scaled = source_row_count * plan.scale_factor
+    lower = int(scaled)
+    fraction = scaled - lower
+    if fraction > 0.5 or (fraction == 0.5 and plan.seed % 2 == 1):
+        lower += 1
+    return lower
 
 
 def _unique_specs(specs: Sequence[ColumnGenerationSpec]) -> tuple[ColumnGenerationSpec, ...]:

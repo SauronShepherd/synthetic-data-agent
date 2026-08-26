@@ -38,6 +38,11 @@ class GenerationMode(StrEnum):
     TOPOLOGY = "topology"
 
 
+class RowCountMode(StrEnum):
+    EXACT = "exact"
+    PROBABILISTIC = "probabilistic"
+
+
 @dataclass(frozen=True, slots=True)
 class ColumnGenerationSpec:
     """Safe, declarative generation instructions for one column."""
@@ -78,6 +83,8 @@ class GenerationPlan:
     intended_use: str = "unspecified"
     privacy_policy_ref: str = "strict-default"
     validation_policy_ref: str = "default"
+    row_count_mode: RowCountMode = RowCountMode.EXACT
+    requested_row_count: int | None = None
     budgets: dict[str, int | float] = field(default_factory=dict)
     status: PlanStatus = PlanStatus.DRAFT
     plan_fingerprint: str = ""
@@ -96,6 +103,8 @@ class GenerationPlan:
             raise ValueError("scale_factor must be greater than zero")
         if self.seed < 0:
             raise ValueError("seed must not be negative")
+        if self.requested_row_count is not None and self.requested_row_count < 0:
+            raise ValueError("requested_row_count must not be negative")
         if any(value < 0 for value in self.budgets.values()):
             raise ValueError("budgets must not be negative")
         expected = self.compute_fingerprint()

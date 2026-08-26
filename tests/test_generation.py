@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from sda.generation import GenerationError, generate_rows
-from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus
+from sda.generation import GenerationError, generate_rows, resolve_row_count
+from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus, RowCountMode
 
 
 def plan() -> GenerationPlan:
@@ -27,6 +27,7 @@ def plan() -> GenerationPlan:
                 ),
             ),
             budgets={"max_rows": 3},
+            requested_row_count=3,
         )
         .transition(PlanStatus.AWAITING_APPROVAL)
         .transition(PlanStatus.APPROVED)
@@ -64,3 +65,17 @@ def test_empirical_models_are_replayable_and_type_checked() -> None:
     assert {row["segment"] for row in first} <= {"A", "B"}
     with pytest.raises(GenerationError, match="requires empirical"):
         generate_rows(empirical_plan, row_count=1)
+
+
+def test_plan_resolves_exact_and_probabilistic_row_counts() -> None:
+    exact = plan()
+    assert resolve_row_count(exact) == 3
+    assert len(generate_rows(exact, vocabularies={"segment": ("a", "b")})) == 3
+    probabilistic = replace(
+        exact,
+        requested_row_count=None,
+        row_count_mode=RowCountMode.PROBABILISTIC,
+        scale_factor=1.5,
+        plan_fingerprint="",
+    )
+    assert resolve_row_count(probabilistic, source_row_count=3) == 5
