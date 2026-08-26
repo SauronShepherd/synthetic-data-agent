@@ -148,3 +148,8 @@ def test_validation_does_not_turn_missing_inputs_into_success() -> None:
     )
     assert report.technical_disposition is CheckStatus.FAIL
     assert all(check.status is CheckStatus.FAIL for check in report.checks)
+
+
+def test_not_applicable_validation_requires_explicit_reason() -> None:
+    with pytest.raises(ValueError, match="unsupported_reason"):
+        ValidationCheck("unsupported", CheckStatus.NOT_APPLICABLE, "n/a", {})

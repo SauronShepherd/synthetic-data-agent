@@ -41,10 +41,18 @@ class ValidationCheck:
     evidence: dict[str, Any]
     threshold: float | int | str | None = None
     method: str = "deterministic"
+    freshness: str | None = None
+    population: str | None = None
+    severity: str = "error"
+    unsupported_reason: str | None = None
 
     def __post_init__(self) -> None:
         if not self.check_id.strip() or not self.message.strip() or not self.method.strip():
             raise ValueError("validation check identity, message, and method are required")
+        if self.severity not in {"info", "warning", "error"}:
+            raise ValueError("validation severity must be info, warning, or error")
+        if self.status is CheckStatus.NOT_APPLICABLE and not self.unsupported_reason:
+            raise ValueError("NOT_APPLICABLE checks require unsupported_reason")
         object.__setattr__(self, "evidence", _freeze(self.evidence))
 
 
@@ -74,6 +82,8 @@ def not_applicable_check(check_id: str, reason: str) -> ValidationCheck:
         reason,
         {"supported": False, "reason": reason},
         method="unsupported",
+        severity="info",
+        unsupported_reason=reason,
     )
 
 
