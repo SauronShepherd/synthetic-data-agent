@@ -227,13 +227,15 @@ def validate_tables(
             )
             continue
         rows = tables[table]
-        for column, expected in distribution_columns.items():
+        for column, expected_distribution in distribution_columns.items():
             check_id = f"distribution:{table}.{column}"
-            if not expected or any(probability < 0 for probability in expected.values()):
+            if not expected_distribution or any(
+                probability < 0 for probability in expected_distribution.values()
+            ):
                 raise ValueError(
                     f"expected distribution must contain non-negative probabilities: {check_id}"
                 )
-            if abs(sum(expected.values()) - 1.0) > 1e-9:
+            if abs(sum(expected_distribution.values()) - 1.0) > 1e-9:
                 raise ValueError(f"expected distribution must sum to one: {check_id}")
             if any(column not in row for row in rows):
                 checks.append(
@@ -254,13 +256,13 @@ def validate_tables(
             observed = {value: count / total for value, count in counts.items()} if total else {}
             errors = {
                 str(value): abs(observed.get(value, 0.0) - probability)
-                for value, probability in expected.items()
+                for value, probability in expected_distribution.items()
             }
             errors.update(
                 {
                     str(value): probability
                     for value, probability in observed.items()
-                    if value not in expected
+                    if value not in expected_distribution
                 }
             )
             maximum_error = max(errors.values(), default=0.0)
@@ -271,7 +273,11 @@ def validate_tables(
                     if maximum_error <= distribution_tolerance
                     else CheckStatus.FAIL,
                     f"{table}.{column} distribution maximum error is {maximum_error:.6f}",
-                    {"expected": expected, "observed": observed, "maximum_error": maximum_error},
+                    {
+                        "expected": expected_distribution,
+                        "observed": observed,
+                        "maximum_error": maximum_error,
+                    },
                     distribution_tolerance,
                     method="categorical_distribution",
                     population="full_table",
