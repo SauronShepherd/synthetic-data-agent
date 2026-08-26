@@ -154,7 +154,7 @@ design evidence; the repository is the source of truth for what is currently pre
 - [x] Generate new identifiers; never hash or copy production identifiers as synthetic
   identity. Persist mapping only when explicitly approved and protected.
 - [x] Implement exact-count and probabilistic row modes with deterministic rounding.
-- [ ] Apply only approved conditional null and cross-column rules.
+- [x] Apply only approved conditional null and cross-column rules.
 - [ ] Write staging output, schema, manifest, seed/fingerprint, receipt, and audit row;
   publish only after validation and approvals.
 - [ ] Add tests for exact counts, replay, partition independence, null rates, formats,
