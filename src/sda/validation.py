@@ -61,6 +61,13 @@ class ValidationCheck:
     schema_version: str = "validation-check-v1"
 
     def __post_init__(self) -> None:
+        try:
+            normalized_status = (
+                self.status if isinstance(self.status, CheckStatus) else CheckStatus(self.status)
+            )
+        except ValueError as exc:
+            raise ValueError(f"unsupported validation status: {self.status!r}") from exc
+        object.__setattr__(self, "status", normalized_status)
         if not self.check_id.strip() or not self.message.strip() or not self.method.strip():
             raise ValueError("validation check identity, message, and method are required")
         if self.severity not in {"info", "warning", "error"}:
@@ -97,6 +104,18 @@ class ValidationReport:
     schema_version: str = "validation-report-v1"
 
     def __post_init__(self) -> None:
+        try:
+            normalized_disposition = (
+                self.technical_disposition
+                if isinstance(self.technical_disposition, CheckStatus)
+                else CheckStatus(self.technical_disposition)
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"unsupported technical disposition: {self.technical_disposition!r}"
+            ) from exc
+        object.__setattr__(self, "technical_disposition", normalized_disposition)
+        object.__setattr__(self, "checks", tuple(self.checks))
         if not self.intended_use.strip():
             raise ValueError("validation intended use is required")
         if not self.schema_version.strip():
@@ -115,9 +134,14 @@ class ValidationReport:
             )
         if any(not key.strip() for key in self.validation_vector):
             raise ValueError("validation vector dimensions must not be empty")
-        if any(not isinstance(value, CheckStatus) for value in self.validation_vector.values()):
-            raise ValueError("validation vector values must be CheckStatus values")
-        object.__setattr__(self, "validation_vector", _FrozenDict(self.validation_vector))
+        try:
+            normalized_vector = {
+                key: value if isinstance(value, CheckStatus) else CheckStatus(value)
+                for key, value in self.validation_vector.items()
+            }
+        except ValueError as exc:
+            raise ValueError("validation vector values must be valid CheckStatus values") from exc
+        object.__setattr__(self, "validation_vector", _FrozenDict(normalized_vector))
 
     @property
     def fingerprint(self) -> str:

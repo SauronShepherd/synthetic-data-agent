@@ -15,6 +15,22 @@ from sda.relational import (
 from sda.validation import CheckStatus, ValidationCheck, ValidationReport, validate_tables
 
 
+def test_validation_models_normalize_status_strings_and_freeze_checks() -> None:
+    check = ValidationCheck("check", "PASS", "ok", {})
+    report = ValidationReport([check], "qa", "PASS", {"schema": "PASS"})
+    assert check.status is CheckStatus.PASS
+    assert report.technical_disposition is CheckStatus.PASS
+    assert report.checks == (check,)
+    assert report.validation_vector["schema"] is CheckStatus.PASS
+
+
+def test_validation_models_reject_unknown_status_strings() -> None:
+    with pytest.raises(ValueError, match="unsupported validation status"):
+        ValidationCheck("check", "MAYBE", "invalid", {})
+    with pytest.raises(ValueError, match="valid CheckStatus"):
+        ValidationReport((), "qa", CheckStatus.PASS, {"schema": "MAYBE"})
+
+
 def test_validation_evidence_is_immutable_and_check_ids_are_unique() -> None:
     check = ValidationCheck("schema", CheckStatus.PASS, "ok", {"actual": 1, "details": [{"x": 2}]})
     with pytest.raises(TypeError, match="immutable"):
