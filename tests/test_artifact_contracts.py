@@ -105,3 +105,10 @@ def test_artifact_lineage_sequences_are_frozen() -> None:
     assert ref.source_references == (source,)
     assert ref.warnings == ("w",)
     assert ref.input_artifact_ids == ("input",)
+
+
+def test_source_reference_rejects_ambiguous_selected_columns() -> None:
+    with pytest.raises(ValueError, match="empty values"):
+        SourceReference("main.t", "TABLE", "metadata_only", None, None, None, [""])
+    with pytest.raises(ValueError, match="unique"):
+        SourceReference("main.t", "TABLE", "metadata_only", None, None, None, ["id", "id"])

@@ -50,6 +50,10 @@ class SourceReference:
         object.__setattr__(self, "selected_columns", tuple(self.selected_columns))
         if not self.full_name.strip():
             raise ValueError("source full_name must not be empty")
+        if any(not column.strip() for column in self.selected_columns):
+            raise ValueError("source selected_columns must not contain empty values")
+        if len(set(self.selected_columns)) != len(self.selected_columns):
+            raise ValueError("source selected_columns must be unique")
         if self.snapshot_kind not in {
             "delta_version",
             "timestamp",
