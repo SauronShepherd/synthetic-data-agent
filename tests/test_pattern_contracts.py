@@ -81,6 +81,20 @@ def test_standalone_detection_emits_conditional_categorical_patterns() -> None:
     )
 
 
+def test_standalone_detection_emits_conditional_missingness_patterns() -> None:
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [
+            {"segment": "a", "value": None},
+            {"segment": "a", "value": None},
+            {"segment": "b", "value": 1},
+        ],
+        table="main.s.t",
+    )
+    missing = [p for p in result if p.family is PatternFamily.CONDITIONAL_MISSINGNESS]
+    assert len(missing) == 1
+    assert missing[0].metric["missing_rate"] == 1.0
+
+
 def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> None:
     refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(

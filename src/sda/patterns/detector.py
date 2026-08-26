@@ -202,6 +202,35 @@ class PatternDetector:
                     )
                     if len(result) >= self.config.max_candidates:
                         return tuple(result)
+        # Evaluate conditional null rates in the standalone path as well as the
+        # coordinated path, using stable segment ordering and the same support gate.
+        for driver in categorical:
+            values = sorted({row.get(driver) for row in rows}, key=lambda value: str(value))[
+                : self.config.max_segment_cardinality
+            ]
+            for value in values:
+                for outcome in names:
+                    if driver == outcome:
+                        continue
+                    metric = conditional_missingness(rows, {driver: value}, outcome)
+                    support = int(metric["support_rows"])
+                    if support < self.config.min_support_rows:
+                        continue
+                    result.append(
+                        self._pattern(
+                            analysis_id,
+                            table,
+                            PatternFamily.CONDITIONAL_MISSINGNESS,
+                            (driver, outcome),
+                            {driver: value},
+                            {"outcome": outcome},
+                            support,
+                            metric,
+                            support_rate=support / len(rows) if rows else 0.0,
+                        )
+                    )
+                    if len(result) >= self.config.max_candidates:
+                        return tuple(result)
         temporal_columns = tuple(name for name in names if name.endswith(("_at", "_date")))
         if len(temporal_columns) >= 2:
             earlier, later = temporal_columns[:2]
