@@ -135,7 +135,7 @@ def test_manifest_rejects_schema_mismatch_and_offset_gaps() -> None:
 
 
 def test_bounded_events_have_deterministic_inter_arrival_times() -> None:
-    current = plan(inter_arrival_seconds=2.5)
+    current = plan(events_per_second=0.4, inter_arrival_seconds=2.5)
     events = generate_bounded_events(current)
     assert events[0]["event_time"] == "2020-01-01T00:00:00+00:00"
     assert events[1]["event_time"] == "2020-01-01T00:00:02.500000+00:00"
