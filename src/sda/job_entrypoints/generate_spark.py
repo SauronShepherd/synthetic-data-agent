@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import os
+import tempfile
+from pathlib import Path
+from typing import Any
 
 from sda.generation import generate_rows, manifest_for, receipt_for
 from sda.planning import ColumnGenerationSpec, GenerationMode, GenerationPlan, PlanStatus
@@ -29,7 +34,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--privacy-policy-ref", default="strict-default")
     parser.add_argument("--seed", type=int, default=1729)
     parser.add_argument("--approved", default="false")
+    parser.add_argument("--manifest-path")
     return parser.parse_args()
+
+
+def write_manifest(path: str, payload: dict[str, Any]) -> None:
+    """Atomically publish a JSON manifest without exposing a partial file."""
+    destination = Path(path)
+    if not destination.name:
+        raise ValueError("manifest path must name a file")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, sort_keys=True, separators=(",", ":"))
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+        raise
 
 
 def main() -> None:
@@ -77,13 +105,11 @@ def main() -> None:
         run_id=args.run_id,
         output_table=args.output_table,
     )
-    print(
-        json.dumps(
-            {
-                "status": "complete",
-                "receipt": receipt.to_dict(),
-                "manifest": generation_manifest.to_dict(),
-            },
-            sort_keys=True,
-        )
-    )
+    result = {
+        "status": "complete",
+        "receipt": receipt.to_dict(),
+        "manifest": generation_manifest.to_dict(),
+    }
+    if args.manifest_path:
+        write_manifest(args.manifest_path, result)
+    print(json.dumps(result, sort_keys=True))

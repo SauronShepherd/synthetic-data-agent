@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import replace
 
 import pytest
@@ -12,6 +13,7 @@ from sda.generation import (
     receipt_for,
     resolve_row_count,
 )
+from sda.job_entrypoints.generate_spark import write_manifest
 from sda.planning import (
     ColumnGenerationSpec,
     CrossColumnRule,
@@ -188,6 +190,16 @@ def test_generation_manifest_binds_receipt_and_plan_lineage() -> None:
             run_id="r",
             output_table="t",
         )
+
+
+def test_generation_manifest_writer_replaces_partial_output_atomically(tmp_path) -> None:
+    destination = tmp_path / "nested" / "manifest.json"
+    write_manifest(str(destination), {"status": "complete", "run_id": "run-1"})
+    assert json.loads(destination.read_text(encoding="utf-8")) == {
+        "run_id": "run-1",
+        "status": "complete",
+    }
+    assert not list(destination.parent.glob("*.tmp"))
 
 
 def test_approved_cross_column_rules_are_deterministic_and_plan_bound() -> None:
