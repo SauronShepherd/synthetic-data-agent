@@ -93,6 +93,14 @@ class PatternExecutionReceipt:
     sample_fraction: float | None = None
     sample_seed: int | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "candidate_count_by_family", _freeze(self.candidate_count_by_family)
+        )
+        object.__setattr__(
+            self, "candidate_skipped_by_reason", _freeze(self.candidate_skipped_by_reason)
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class PatternDetectionResult:

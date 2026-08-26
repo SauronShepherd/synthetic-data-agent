@@ -89,6 +89,21 @@ def test_pattern_nested_evidence_is_immutable() -> None:
         pattern.metric["value"] = 99
 
 
+def test_pattern_receipt_counts_are_immutable() -> None:
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [{"x": 1, "y": 2}, {"x": 2, "y": 4}],
+        table="main.s.t",
+        columns={"x": "int", "y": "int"},
+    )
+    # The local overload returns patterns; coordinated execution exposes receipts.
+    assert result
+    from sda.patterns.models import PatternExecutionReceipt
+
+    receipt = PatternExecutionReceipt(candidate_count_by_family={"correlation": 1})
+    with pytest.raises(TypeError, match="immutable"):
+        receipt.candidate_count_by_family["correlation"] = 2
+
+
 def test_fanout_includes_zero_child_parents() -> None:
     parents = [{"id": 1, "segment": "A"}, {"id": 2, "segment": "A"}]
     children = [{"parent_id": 1}]
