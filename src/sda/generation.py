@@ -91,6 +91,11 @@ class GenerationManifest:
     output_columns: tuple[tuple[str, str, bool], ...] = ()
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "source_snapshot_ids", tuple(self.source_snapshot_ids))
+        object.__setattr__(self, "input_artifact_ids", tuple(self.input_artifact_ids))
+        object.__setattr__(
+            self, "output_columns", tuple(tuple(column) for column in self.output_columns)
+        )
         for name in ("run_id", "output_table", "plan_id", "plan_fingerprint"):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must not be empty")

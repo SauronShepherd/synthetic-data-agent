@@ -8,6 +8,7 @@ import pytest
 
 from sda.generation import (
     GenerationError,
+    GenerationManifest,
     generate_rows,
     manifest_for,
     receipt_for,
@@ -203,6 +204,28 @@ def test_generation_manifest_binds_receipt_and_plan_lineage() -> None:
             run_id="r",
             output_table="t",
         )
+
+
+def test_generation_manifest_freezes_lineage_sequences() -> None:
+    current_plan = plan()
+    receipt = receipt_for(
+        current_plan,
+        generate_rows(current_plan, row_count=3, vocabularies={"segment": ("a",)}),
+    )
+    manifest = GenerationManifest(
+        "run-1",
+        "catalog.schema.synthetic",
+        current_plan.plan_id,
+        current_plan.plan_fingerprint,
+        current_plan.seed,
+        ["snapshot-1"],
+        ["artifact-1"],
+        receipt,
+        output_columns=[["id", "string", False]],  # type: ignore[list-item]
+    )
+    assert manifest.source_snapshot_ids == ("snapshot-1",)
+    assert manifest.input_artifact_ids == ("artifact-1",)
+    assert manifest.output_columns == (("id", "string", False),)
 
 
 def test_generation_manifest_writer_replaces_partial_output_atomically(tmp_path) -> None:
