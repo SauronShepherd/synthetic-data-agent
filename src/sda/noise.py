@@ -33,6 +33,7 @@ SUPPORTED_DEFECTS = frozenset(
         "invalid_state",
         "out_of_order_timestamp",
         "broken_foreign_key",
+        "drift",
     }
 )
 
@@ -201,6 +202,10 @@ def apply_noise(
             after = f"__INVALID_STATE_{plan.scenario or 'synthetic'}"
         elif plan.defect_type == "broken_foreign_key":
             after = f"__ORPHAN_FK_{plan.scenario or 'synthetic'}"
+        elif plan.defect_type == "drift":
+            if not isinstance(before, int | float) or isinstance(before, bool):
+                raise NoiseError("drift defects require a numeric column")
+            after = before + (1 if before >= 0 else -1)
         elif plan.defect_type == "omission":
             after = None
             del rows[index][column]
