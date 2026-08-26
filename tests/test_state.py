@@ -53,6 +53,7 @@ def test_attempt_lease_is_idempotent_and_completion_is_terminal() -> None:
     attempt = repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "generate"))
     assert attempt.status is AttemptStatus.RUNNING
     assert repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "generate")) == attempt
+    assert repo.list_attempts("run-1") == (attempt,)
     repo.complete_attempt("attempt-1", success=False, error_code="timeout")
     with pytest.raises(StateError, match="already complete"):
         repo.complete_attempt("attempt-1", success=True)

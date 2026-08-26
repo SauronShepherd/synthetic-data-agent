@@ -239,6 +239,11 @@ class InMemoryStateRepository:
             self._attempts[attempt.attempt_id] = claimed
             return claimed
 
+    def list_attempts(self, run_id: str) -> tuple[ExecutionAttempt, ...]:
+        with self._lock:
+            self.get_run(run_id)
+            return tuple(attempt for attempt in self._attempts.values() if attempt.run_id == run_id)
+
     def complete_attempt(
         self, attempt_id: str, *, success: bool, error_code: str | None = None
     ) -> ExecutionAttempt:

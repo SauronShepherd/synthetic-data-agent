@@ -219,6 +219,14 @@ class SQLiteStateRepository:
             raise StateError("attempt cannot be acquired") from exc
         return claimed
 
+    def list_attempts(self, run_id: str) -> tuple[ExecutionAttempt, ...]:
+        self.get_run(run_id)
+        rows = self._connection.execute(
+            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code FROM attempts WHERE run_id = ? ORDER BY retry_number, attempt_id",
+            (run_id,),
+        ).fetchall()
+        return tuple(self._attempt_from_row(row) for row in rows)
+
     def complete_attempt(
         self, attempt_id: str, *, success: bool, error_code: str | None = None
     ) -> ExecutionAttempt:
