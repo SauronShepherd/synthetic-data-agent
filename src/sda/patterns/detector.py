@@ -359,12 +359,17 @@ class PatternDetector:
                 for pattern in patterns
             )
         accepted = sum(p.decision == "accepted_for_planning" for p in patterns)
+        rejected = sum(p.decision == "rejected" for p in patterns)
+        insufficient = sum(p.decision == "insufficient_evidence" for p in patterns)
         rule_conflicts = resolve_rule_conflicts(list(rules), self.rule_precedence_policy)
         receipt = PatternExecutionReceipt(
             candidate_count_total=len(candidates),
             patterns_emitted=len(patterns),
             patterns_accepted_for_planning=accepted,
             patterns_review_required=len(patterns) - accepted,
+            patterns_rejected=rejected,
+            patterns_insufficient=insufficient,
+            conflicts_found=len(rule_conflicts),
             rules_evaluated=sum(
                 1
                 for rule in rules

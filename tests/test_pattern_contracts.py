@@ -78,6 +78,8 @@ def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> No
     )
     assert result.receipt.patterns_emitted == 1
     assert result.receipt.source_tables_scanned == 1
+    assert result.receipt.patterns_rejected == 0
+    assert result.receipt.patterns_insufficient == 0
 
 
 def test_coordinator_fails_closed_when_input_rows_are_unavailable() -> None:
