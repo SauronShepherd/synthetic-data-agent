@@ -16,6 +16,9 @@ dependencies = []
 databricks = [
   "databricks-sql-connector>=3,<5",
 ]
+postgres = [
+  "psycopg[binary]>=3,<4",
+]
 dev = [
   "build>=1.2,<2",
   "mypy>=1.15,<2",
