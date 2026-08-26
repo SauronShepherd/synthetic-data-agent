@@ -65,6 +65,21 @@ def test_correlation_infers_numeric_columns_when_types_are_omitted() -> None:
     assert result[0].metric["valid_pair_count"] == 3
 
 
+def test_standalone_detection_emits_conditional_categorical_patterns() -> None:
+    rows = [
+        {"segment": "A", "amount": 10},
+        {"segment": "A", "amount": 20},
+        {"segment": "A", "amount": 10},
+        {"segment": "B", "amount": 1},
+    ]
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(rows, table="main.s.t")
+    assert any(
+        pattern.family is PatternFamily.CONDITIONAL_DISTRIBUTION
+        and pattern.condition == {"segment": "A"}
+        for pattern in result
+    )
+
+
 def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> None:
     refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(

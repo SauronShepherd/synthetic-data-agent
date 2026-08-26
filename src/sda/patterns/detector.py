@@ -158,6 +158,39 @@ class PatternDetector:
                 )
                 if len(result) >= self.config.max_candidates:
                     return tuple(result)
+        categorical = [
+            name
+            for name in names
+            if name not in numeric
+            and len({row.get(name) for row in rows}) <= self.config.max_segment_cardinality
+        ]
+        for driver in categorical:
+            for outcome in names:
+                if driver == outcome:
+                    continue
+                cells = conditional_counts(
+                    rows,
+                    (driver,),
+                    outcome,
+                    max_cells=self.config.max_candidates - len(result),
+                )
+                for cell in cells:
+                    if cell["count"] < self.config.min_support_rows:
+                        continue
+                    result.append(
+                        self._pattern(
+                            analysis_id,
+                            table,
+                            PatternFamily.CONDITIONAL_DISTRIBUTION,
+                            (driver, outcome),
+                            cell["condition"],
+                            {"outcome": outcome},
+                            cell["count"],
+                            {"conditional_rate": cell["rate"], "method": "exact"},
+                        )
+                    )
+                    if len(result) >= self.config.max_candidates:
+                        return tuple(result)
         temporal_columns = tuple(name for name in names if name.endswith(("_at", "_date")))
         if len(temporal_columns) >= 2:
             earlier, later = temporal_columns[:2]
@@ -244,7 +277,11 @@ class PatternDetector:
         for candidate in candidates:
             family = candidate.family.value
             candidate_count_by_family[family] = candidate_count_by_family.get(family, 0) + 1
-        patterns = self.detect(rows, table=table, columns=types, analysis_id=run_id)
+        patterns = tuple(
+            pattern
+            for pattern in self.detect(rows, table=table, columns=types, analysis_id=run_id)
+            if pattern.family in {PatternFamily.CORRELATION, PatternFamily.TEMPORAL_ORDER}
+        )
         # Add bounded conditional and lifecycle evidence to the same aggregate result.
         categorical = [name for name in names if types.get(name) == "string"]
         numeric = [name for name in names if types.get(name) == "double"]
