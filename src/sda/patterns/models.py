@@ -70,10 +70,11 @@ class PatternInputRefs:
 
     def __post_init__(self) -> None:
         if (
-            not self.metadata_artifact_id
+            not self.metadata_artifact_id.strip()
             or not self.profile_artifact_ids
-            or not self.relationship_artifact_id
-            or not self.dependency_graph_artifact_id
+            or any(not artifact_id.strip() for artifact_id in self.profile_artifact_ids)
+            or not self.relationship_artifact_id.strip()
+            or not self.dependency_graph_artifact_id.strip()
         ):
             raise ValueError("all upstream pattern artifacts are required")
 

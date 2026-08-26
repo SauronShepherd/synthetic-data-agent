@@ -124,6 +124,13 @@ def test_coordinator_fails_closed_when_input_rows_are_unavailable() -> None:
         )
 
 
+def test_pattern_input_refs_reject_whitespace_artifact_ids() -> None:
+    with pytest.raises(ValueError, match="upstream pattern artifacts"):
+        PatternInputRefs(" ", ("profile",), "relationship", "graph")
+    with pytest.raises(ValueError, match="upstream pattern artifacts"):
+        PatternInputRefs("metadata", ("profile", " "), "relationship", "graph")
+
+
 def test_coordinator_emits_conditional_missingness_for_each_segment() -> None:
     refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
