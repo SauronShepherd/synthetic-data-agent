@@ -166,6 +166,12 @@ def test_generation_receipt_rejects_unapproved_or_schema_mismatched_rows() -> No
         receipt_for(plan(), ({"id": rows[0]["id"]},))
 
 
+def test_generation_receipt_enforces_approved_exact_row_count() -> None:
+    rows = generate_rows(plan(), row_count=2, vocabularies={"segment": ("a",)})
+    with pytest.raises(GenerationError, match="exact requested_row_count"):
+        receipt_for(plan(), rows)
+
+
 def test_standalone_generation_rejects_multi_table_plans() -> None:
     multi_table = replace(plan(), tables=("t", "u"), plan_fingerprint="")
     with pytest.raises(GenerationError, match="relational generator"):
