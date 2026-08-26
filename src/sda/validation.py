@@ -418,10 +418,13 @@ def validate_tables(
                 )
             )
             continue
-        fanout_counts = {row[parent_column]: 0 for row in tables[parent]}
+        # Keys may be composite/nested values; use canonical fingerprints so
+        # validation remains bounded and never depends on Python hashability.
+        fanout_counts = {fingerprint(row[parent_column]): 0 for row in tables[parent]}
         for row in tables[child]:
-            if row[child_column] in fanout_counts:
-                fanout_counts[row[child_column]] += 1
+            child_key = fingerprint(row[child_column])
+            if child_key in fanout_counts:
+                fanout_counts[child_key] += 1
         violations = sum(not minimum <= count <= maximum for count in fanout_counts.values())
         checks.append(
             ValidationCheck(

@@ -31,6 +31,20 @@ def test_validation_models_reject_unknown_status_strings() -> None:
         ValidationReport((), "qa", CheckStatus.PASS, {"schema": "MAYBE"})
 
 
+def test_fanout_validation_handles_nested_identifier_values() -> None:
+    report = validate_tables(
+        {
+            "parent": ({"key": {"region": "eu", "id": 1}},),
+            "child": (
+                {"parent_key": {"region": "eu", "id": 1}},
+                {"parent_key": {"region": "eu", "id": 1}},
+            ),
+        },
+        fanout_bounds={("child", "parent_key", "parent", "key"): (2, 2)},
+    )
+    assert report.technical_disposition is CheckStatus.PASS
+
+
 def test_validation_evidence_is_immutable_and_check_ids_are_unique() -> None:
     check = ValidationCheck("schema", CheckStatus.PASS, "ok", {"actual": 1, "details": [{"x": 2}]})
     with pytest.raises(TypeError, match="immutable"):
