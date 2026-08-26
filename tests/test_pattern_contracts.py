@@ -9,7 +9,6 @@ from sda.patterns.models import (
     PatternDetectionResult,
     PatternExecutionReceipt,
     PatternFamily,
-    PatternLifecycle,
     PatternOrigin,
 )
 from sda.patterns.persistence import (

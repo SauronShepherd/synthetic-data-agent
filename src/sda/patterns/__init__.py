@@ -8,8 +8,8 @@ from sda.patterns.models import (
     PatternDetectionResult,
     PatternFamily,
     PatternInputRefs,
-    PatternOrigin,
     PatternLifecycle,
+    PatternOrigin,
 )
 from sda.patterns.precedence import RulePrecedencePolicy
 from sda.patterns.scoring import EvidenceQuality, PatternScoringPolicy
