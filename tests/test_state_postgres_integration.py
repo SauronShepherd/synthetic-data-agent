@@ -19,7 +19,9 @@ def test_postgres_state_lifecycle() -> None:
     try:
         run = repository.create_run(RunRecord(run_id, "request", uuid4().hex))
         assert repository.get_run(run.run_id).status is WorkflowStatus.REQUESTED
-        repository.record_approval(Approval(run_id, "human", "approved", "integration"))
+        repository.record_approval(
+            Approval(run_id, "human", "approved", "integration", "integration approval")
+        )
         claimed = repository.acquire_attempt(
             ExecutionAttempt(run_id, attempt_id, "generate", worker_id="integration")
         )
