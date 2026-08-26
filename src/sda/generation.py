@@ -20,6 +20,7 @@ def generate_rows(
     *,
     row_count: int | None = None,
     vocabularies: Mapping[str, Sequence[str]] | None = None,
+    weighted_vocabularies: Mapping[str, Sequence[tuple[str, float]]] | None = None,
     empirical_samples: Mapping[str, Sequence[Any]] | None = None,
 ) -> tuple[dict[str, Any], ...]:
     """Generate bounded rows from an approved plan without reading source data.
@@ -39,6 +40,7 @@ def generate_rows(
     enforce_budget(ResourceBudget(max_rows=max_rows), rows=row_count)
     specs = _unique_specs(plan.columns)
     vocabularies = vocabularies or {}
+    weighted_vocabularies = weighted_vocabularies or {}
     empirical_samples = empirical_samples or {}
     result: list[dict[str, Any]] = []
     for index in range(row_count):
@@ -49,6 +51,7 @@ def generate_rows(
                 spec,
                 index,
                 vocabularies.get(spec.column, ()),
+                weighted_vocabularies.get(spec.column, ()),
                 empirical_samples.get(spec.column, ()),
             )
         result.append(row)
@@ -88,6 +91,7 @@ def _value(
     spec: ColumnGenerationSpec,
     index: int,
     vocabulary: Sequence[str],
+    weighted_vocabulary: Sequence[tuple[str, float]],
     empirical_sample: Sequence[Any],
 ) -> Any:
     model = spec.model.lower()
@@ -100,6 +104,18 @@ def _value(
     if model in {"identifier", "id"}:
         return _stable_id(plan, spec, index)
     if model in {"categorical", "vocabulary"}:
+        if weighted_vocabulary:
+            total = sum(weight for _, weight in weighted_vocabulary)
+            if total <= 0 or any(weight < 0 for _, weight in weighted_vocabulary):
+                raise GenerationError(
+                    f"categorical weights must be non-negative and non-zero for {spec.column}"
+                )
+            point = rng.random() * total
+            for category, weight in weighted_vocabulary:
+                point -= weight
+                if point < 0:
+                    return category
+            return weighted_vocabulary[-1][0]
         if not vocabulary:
             raise GenerationError(f"model {model} requires vocabulary for {spec.column}")
         return vocabulary[index % len(vocabulary)]

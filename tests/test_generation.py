@@ -89,3 +89,15 @@ def test_generation_rejects_invalid_null_probabilities() -> None:
     )
     with pytest.raises(GenerationError, match="null_rate"):
         generate_rows(invalid, row_count=1)
+
+
+def test_weighted_categorical_sampling_is_replayable_and_validated() -> None:
+    first = generate_rows(
+        plan(), row_count=3, weighted_vocabularies={"segment": (("rare", 1.0), ("common", 9.0))}
+    )
+    assert first == generate_rows(
+        plan(), row_count=3, weighted_vocabularies={"segment": (("rare", 1.0), ("common", 9.0))}
+    )
+    assert {row["segment"] for row in first} <= {"rare", "common"}
+    with pytest.raises(GenerationError, match="weights"):
+        generate_rows(plan(), row_count=1, weighted_vocabularies={"segment": (("x", -1.0),)})
