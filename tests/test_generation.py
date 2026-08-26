@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import re
+from dataclasses import replace
 
 import pytest
 
