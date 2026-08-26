@@ -63,6 +63,8 @@ class ColumnGenerationSpec:
                 raise ValueError(f"{name} must not be empty")
         if any(not value.strip() for value in self.source_evidence_ids):
             raise ValueError("source_evidence_ids must not contain empty values")
+        if len(set(self.source_evidence_ids)) != len(self.source_evidence_ids):
+            raise ValueError("source_evidence_ids must be unique")
         object.__setattr__(self, "parameters", _FrozenDict(self.parameters))
 
 
@@ -138,6 +140,10 @@ class GenerationPlan:
             raise ValueError("plan_version must be positive")
         if not self.source_snapshot_ids or not self.input_artifact_ids:
             raise ValueError("plans require source snapshots and input artifacts")
+        if len(set(self.source_snapshot_ids)) != len(self.source_snapshot_ids):
+            raise ValueError("source snapshot ids must be unique")
+        if len(set(self.input_artifact_ids)) != len(self.input_artifact_ids):
+            raise ValueError("input artifact ids must be unique")
         if not self.tables or len(set(self.tables)) != len(self.tables):
             raise ValueError("plans require unique target tables")
         column_keys = [(column.table, column.column) for column in self.columns]

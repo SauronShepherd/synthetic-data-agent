@@ -124,6 +124,35 @@ def test_column_evidence_ids_are_frozen_when_constructed_from_a_list() -> None:
     assert spec.source_evidence_ids == ("e1", "e2")
     with pytest.raises(AttributeError):
         spec.source_evidence_ids.append("e3")  # type: ignore[attr-defined]
+    with pytest.raises(ValueError, match="source_evidence_ids must be unique"):
+        ColumnGenerationSpec("t", "id", "string", source_evidence_ids=("e1", "e1"))
+
+
+def test_plan_rejects_duplicate_lineage_references() -> None:
+    with pytest.raises(ValueError, match="source snapshot ids must be unique"):
+        GenerationPlan(
+            "p",
+            1,
+            "r",
+            ("s", "s"),
+            ("a",),
+            "c",
+            "s",
+            ("t",),
+            (ColumnGenerationSpec("t", "id", "string"),),
+        )
+    with pytest.raises(ValueError, match="input artifact ids must be unique"):
+        GenerationPlan(
+            "p",
+            1,
+            "r",
+            ("s",),
+            ("a", "a"),
+            "c",
+            "s",
+            ("t",),
+            (ColumnGenerationSpec("t", "id", "string"),),
+        )
 
 
 def test_plan_rejects_ambiguous_or_undeclared_columns() -> None:
