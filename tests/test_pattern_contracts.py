@@ -325,6 +325,8 @@ def test_equal_precedence_conflicts_use_stable_rule_id_tiebreak() -> None:
     assert conflicts[0].winning_rule_id == "a-rule"
     assert conflicts[0].precedence_reason == "rule_id_tiebreak"
     assert conflicts[0].requires_review
+    assert conflicts == resolve_rule_conflicts([right, left], RulePrecedencePolicy())
+    assert conflicts[0].to_dict()["winning_rule_id"] == "a-rule"
 
 
 def test_profile_index_and_relationship_identity_are_reusable() -> None:

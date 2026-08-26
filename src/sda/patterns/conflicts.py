@@ -14,6 +14,17 @@ class RuleConflict:
     precedence_reason: str | None = None
     requires_review: bool = True
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "left_rule_id": self.left_rule_id,
+            "right_rule_id": self.right_rule_id,
+            "conflict_type": self.conflict_type,
+            "overlap_scope": self.overlap_scope,
+            "winning_rule_id": self.winning_rule_id,
+            "precedence_reason": self.precedence_reason,
+            "requires_review": self.requires_review,
+        }
+
 
 def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
     rule_ids = [getattr(rule, "rule_id", "") for rule in rules]
@@ -22,8 +33,9 @@ def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
     if len(rule_ids) != len(set(rule_ids)):
         raise ValueError("rule IDs must be unique for conflict resolution")
     result = []
-    for i, left in enumerate(rules):
-        for right in rules[i + 1 :]:
+    ordered_rules = sorted(rules, key=lambda rule: rule.rule_id)
+    for i, left in enumerate(ordered_rules):
+        for right in ordered_rules[i + 1 :]:
             if getattr(left, "table", None) != getattr(right, "table", None):
                 continue
             for lpred in getattr(left, "predicates", ()):
@@ -40,7 +52,16 @@ def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
                                 {"table": left.table, "column": lpred["column"]},
                             )
                         )
-    return tuple(result)
+    return tuple(
+        sorted(
+            result,
+            key=lambda conflict: (
+                conflict.left_rule_id,
+                conflict.right_rule_id,
+                conflict.conflict_type,
+            ),
+        )
+    )
 
 
 def resolve_rule_conflicts(rules: list[Any], policy: Any) -> tuple[RuleConflict, ...]:
