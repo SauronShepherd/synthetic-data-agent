@@ -187,6 +187,8 @@ def apply_noise(
         return inject_nulls(baseline, plan, column=column)
     if any(column not in row for row in baseline):
         raise NoiseError(f"column not present in baseline: {column}")
+    if plan.defect_type == "duplicate" and len(baseline) < 2:
+        raise NoiseError("duplicate defects require at least two baseline rows")
     candidates = sorted(
         range(len(baseline)),
         key=lambda index: _selection_key(plan, index),

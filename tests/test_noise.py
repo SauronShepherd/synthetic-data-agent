@@ -109,6 +109,16 @@ def test_duplicate_noise_copies_a_stable_neighbor_value() -> None:
     assert baseline == (({"id": 1, "value": "a"}), ({"id": 2, "value": "b"}))
 
 
+def test_duplicate_noise_rejects_single_row_baselines() -> None:
+    baseline = (({"value": "a"}),)
+    with pytest.raises(NoiseError, match="at least two"):
+        apply_noise(
+            baseline,
+            NoisePlan("n", fingerprint(baseline), defect_type="duplicate", budget=1),
+            column="value",
+        )
+
+
 def test_near_duplicate_noise_is_bounded_and_type_checked() -> None:
     baseline = (({"value": "alpha"}), ({"value": "beta"}))
     result = apply_noise(
