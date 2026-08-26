@@ -29,3 +29,17 @@ def test_duplicate_detection_handles_nested_values_without_raw_material() -> Non
     report = assess_privacy({"t": (({"tags": ["a", "b"]}), ({"tags": ["a", "b"]}))})
     assert report.decision is PrivacyDecision.REVIEW_REQUIRED
     assert "tags" not in str(report.findings[0].evidence)
+
+
+def test_direct_identifiers_and_rare_quasi_identifiers_are_checked() -> None:
+    report = assess_privacy(
+        {"users": (({"email": "a@example.test", "zip": "10001"}),)},
+        direct_identifier_columns=(("users", "email"),),
+        quasi_identifier_columns=(("users", "zip"),),
+    )
+    assert report.decision is PrivacyDecision.REJECTED
+    assert {finding.code for finding in report.findings} == {
+        "direct_identifier_not_approved",
+        "rare_quasi_identifier_values",
+    }
+    assert "a@example.test" not in str(report.findings)
