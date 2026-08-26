@@ -277,6 +277,15 @@ def test_pattern_detection_serialization_redacts_raw_pattern_values() -> None:
     assert "secret-metric" not in str(payload)
 
 
+def test_pattern_detection_serializes_artifact_references() -> None:
+    class Reference:
+        def to_dict(self) -> dict[str, str]:
+            return {"artifact_id": "artifact-1"}
+
+    result = PatternDetectionResult((), Reference(), PatternExecutionReceipt())
+    assert result.to_dict()["artifact_ref"] == {"artifact_id": "artifact-1"}
+
+
 def test_pattern_rejects_invalid_support_metrics() -> None:
     pattern = PatternDetector(PatternConfig(min_support_rows=2)).detect(
         [{"x": 1, "y": 2}, {"x": 2, "y": 4}],

@@ -152,6 +152,9 @@ class PatternDetectionResult:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        artifact = self.artifact_ref
+        if artifact is not None and hasattr(artifact, "to_dict"):
+            artifact = artifact.to_dict()
         return {
             "patterns": tuple(
                 {
@@ -162,7 +165,7 @@ class PatternDetectionResult:
                 }
                 for pattern in self.patterns
             ),
-            "artifact_ref": self.artifact_ref,
+            "artifact_ref": artifact,
             "receipt": self.receipt.to_dict(),
             "warnings": self.warnings,
             "review_questions": self.review_questions,
