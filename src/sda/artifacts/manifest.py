@@ -35,6 +35,8 @@ class RunManifest:
     locations: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "input_artifact_ids", tuple(self.input_artifact_ids))
+        object.__setattr__(self, "output_artifact_ids", tuple(self.output_artifact_ids))
         for field_name in (
             "run_id",
             "tool_name",

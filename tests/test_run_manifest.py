@@ -26,3 +26,20 @@ def test_manifest_locations_are_immutable() -> None:
     with pytest.raises(TypeError, match="immutable"):
         manifest.locations["output"] = "other"  # type: ignore[index]
     assert manifest.locations == {"output": "uc.t"}
+
+
+def test_manifest_artifact_id_sequences_are_frozen() -> None:
+    manifest = RunManifest(
+        "run-1",
+        "tool",
+        "0.6.0",
+        "1.0",
+        "dev",
+        "config",
+        input_artifact_ids=["a"],
+        output_artifact_ids=["b"],
+    )
+    assert manifest.input_artifact_ids == ("a",)
+    assert manifest.output_artifact_ids == ("b",)
+    with pytest.raises(AttributeError):
+        manifest.input_artifact_ids.append("c")  # type: ignore[attr-defined]
