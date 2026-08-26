@@ -196,9 +196,7 @@ def apply_noise(
             after = before + timedelta(days=365)
         elif plan.defect_type == "out_of_order_timestamp":
             if not isinstance(before, date | datetime):
-                raise NoiseError(
-                    "out_of_order_timestamp defects require a date or datetime column"
-                )
+                raise NoiseError("out_of_order_timestamp defects require a date or datetime column")
             after = before - timedelta(days=365)
         else:
             if not isinstance(before, int | float) or isinstance(before, bool):
