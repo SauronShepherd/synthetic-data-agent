@@ -86,6 +86,13 @@ def generate_relational(
     """
     if set(row_counts) - set(plan.tables):
         raise RelationalGenerationError("row_counts contains tables outside the plan")
+    if set(row_counts) != set(plan.tables):
+        missing = sorted(set(plan.tables) - set(row_counts))
+        raise RelationalGenerationError(
+            f"row_counts must specify every planned table; missing: {missing}"
+        )
+    if any(count < 0 for count in row_counts.values()):
+        raise RelationalGenerationError("row_counts must not contain negative values")
     _validate_graph(plan.tables, foreign_keys, composite_foreign_keys)
     by_table: dict[str, list[dict[str, Any]]] = {table: [] for table in plan.tables}
     all_relationships: tuple[Any, ...] = (*foreign_keys, *composite_foreign_keys)

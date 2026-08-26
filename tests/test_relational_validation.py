@@ -238,6 +238,11 @@ def test_validation_checks_parent_fanout_including_zero_child_parents() -> None:
     assert report.checks[-1].evidence["zero_child_parents"] == 1
 
 
+def test_relational_generation_requires_explicit_count_for_each_table() -> None:
+    with pytest.raises(RelationalGenerationError, match="every planned table"):
+        generate_relational(plan(), row_counts={"parent": 2})
+
+
 def test_validate_tables_preserves_intended_use_validation_vector() -> None:
     report = validate_tables(
         {"users": (({"id": 1}),)},
