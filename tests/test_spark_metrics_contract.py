@@ -137,6 +137,38 @@ def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
         tie_breakers=("status",),
     )
     assert transitions.count() == 1
+    assert (
+        spark_metric(frame, "pearson", left="value", right="value").first()["valid_pair_count"] == 3
+    )
+    assert (
+        spark_metric(
+            frame, "conditional_distribution", drivers=("segment",), outcome="status"
+        ).count()
+        == 4
+    )
+    assert (
+        spark_metric(
+            frame, "conditional_missingness", drivers=("segment",), outcome="value"
+        ).count()
+        == 2
+    )
+    assert (
+        spark_metric(frame, "temporal_order", earlier="event_time", later="event_time").count() == 1
+    )
+    assert (
+        spark_metric(frame, "temporal_lag", earlier="event_time", later="event_time").count() == 1
+    )
+    assert (
+        spark_metric(
+            frame,
+            "state_transitions",
+            entity_keys=("entity",),
+            state_column="status",
+            event_time="event_time",
+            tie_breakers=("status",),
+        ).count()
+        == 1
+    )
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]

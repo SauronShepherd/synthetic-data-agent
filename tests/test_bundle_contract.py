@@ -10,6 +10,19 @@ def test_bundle_contract_accepts_all_targets() -> None:
     assert main(ROOT) == 0
 
 
+def test_pattern_task_receives_all_upstream_artifact_references() -> None:
+    resources = (ROOT / "bundle" / "resources.yml").read_text(encoding="utf-8")
+    block = resources.split("pattern_detector:", 1)[1].split("standalone_generator:", 1)[0]
+    for parameter in (
+        "metadata_artifact_id",
+        "profile_artifact_ids_json",
+        "relationship_artifact_id",
+        "dependency_graph_artifact_id",
+    ):
+        assert f"name: {parameter}" in block
+        assert f"--{parameter.replace('_', '-')}" in block
+
+
 def test_bundle_contract_rejects_target_missing_pattern_variable(tmp_path: Path) -> None:
     (tmp_path / "bundle" / "targets").mkdir(parents=True)
     (tmp_path / "bundle" / "targets" / "dev.yml").write_text(
