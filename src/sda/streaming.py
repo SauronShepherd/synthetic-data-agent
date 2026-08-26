@@ -155,7 +155,10 @@ def checkpoint(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> Strea
     """Create a checkpoint that can only be resumed by the same stream plan."""
     if any(event.get("stream_id") != plan.stream_id for event in events):
         raise StreamError("checkpoint events belong to a different stream")
-    offsets = [int(event["offset"]) for event in events]
+    try:
+        offsets = [int(event["offset"]) for event in events]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise StreamError("checkpoint events require integer offsets") from exc
     if any(offset < 0 or offset >= plan.event_count for offset in offsets):
         raise StreamError("checkpoint event offset is outside the stream range")
     if offsets and offsets[0] != 0:
@@ -226,12 +229,18 @@ def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamM
         for event in events
     ):
         raise StreamError("manifest events do not belong to the stream plan")
-    offsets = [int(event["offset"]) for event in events]
+    try:
+        offsets = [int(event["offset"]) for event in events]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise StreamError("manifest events require integer offsets") from exc
     if any(offset < 0 or offset >= plan.event_count for offset in offsets):
         raise StreamError("manifest event offset is outside the stream range")
     if offsets and offsets != list(range(offsets[0], offsets[-1] + 1)):
         raise StreamError("manifest events must contain contiguous offsets")
-    ids = [str(event["event_id"]) for event in events]
+    try:
+        ids = [str(event["event_id"]) for event in events]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise StreamError("manifest events require event IDs") from exc
     if any(not event_id for event_id in ids) or len(ids) != len(set(ids)):
         raise StreamError("manifest events must have unique non-empty event IDs")
     replay = hashlib.sha256("|".join(ids).encode()).hexdigest()
