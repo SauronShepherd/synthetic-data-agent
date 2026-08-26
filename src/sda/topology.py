@@ -40,6 +40,7 @@ class TopologyPlan:
     max_in_degree: int | None = None
     max_out_degree: int | None = None
     acyclic: bool = False
+    bipartite: bool = False
 
     def __post_init__(self) -> None:
         if not self.topology_id.strip() or not self.plan_fingerprint.strip():
@@ -112,6 +113,8 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
         cursor += 1
         attempts += 1
         if plan.node_count == 0 or (not plan.allow_self_loops and source == target):
+            continue
+        if plan.bipartite and source % 2 == target % 2:
             continue
         pair = (source, target)
         canonical: tuple[int, int] = (
@@ -189,6 +192,11 @@ def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
             raise TopologyError("topology result contains an unknown endpoint")
         if not plan.allow_self_loops and source == target:
             raise TopologyError("topology result contains a forbidden self-loop")
+        if plan.bipartite and (
+            int(result.nodes[node_ids.index(source)].get("node_index", 0)) % 2
+            == int(result.nodes[node_ids.index(target)].get("node_index", 0)) % 2
+        ):
+            raise TopologyError("topology result violates bipartite partitions")
         if plan.kind is GraphKind.DIRECTED:
             pair = (source, target)
         else:

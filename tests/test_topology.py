@@ -86,6 +86,13 @@ def test_topology_validator_rejects_duplicate_edge_ids() -> None:
         validate_topology(plan, corrupted)
 
 
+def test_bipartite_topology_uses_opposite_node_partitions() -> None:
+    plan = TopologyPlan("b", "fp", node_count=4, edge_count=3, bipartite=True)
+    result = generate_topology(plan)
+    indexes = {node["node_id"]: node["node_index"] for node in result.nodes}
+    assert all(indexes[edge["source"]] % 2 != indexes[edge["target"]] % 2 for edge in result.edges)
+
+
 def test_topology_validator_accepts_acyclic_undirected_tree() -> None:
     plan = TopologyPlan(
         "tree", "fp", node_count=3, edge_count=2, kind=GraphKind.UNDIRECTED, acyclic=True
