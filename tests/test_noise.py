@@ -35,6 +35,7 @@ def test_noise_rejects_unknown_columns() -> None:
         ("malformed_value", "value", "a__MALFORMED"),
         ("invalid_category", "value", "__INVALID_CATEGORY_synthetic"),
         ("invalid_state", "value", "__INVALID_STATE_synthetic"),
+        ("broken_foreign_key", "value", "__ORPHAN_FK_synthetic"),
         ("out_of_range", "number", 11),
     ],
 )
