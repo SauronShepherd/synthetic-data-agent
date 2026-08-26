@@ -29,6 +29,7 @@ SUPPORTED_DEFECTS = frozenset(
         "duplicate",
         "near_duplicate",
         "future_timestamp",
+        "invalid_state",
     }
 )
 
@@ -175,6 +176,8 @@ def apply_noise(
             after = f"{before}__MALFORMED"
         elif plan.defect_type == "invalid_category":
             after = f"__INVALID_CATEGORY_{plan.scenario or 'synthetic'}"
+        elif plan.defect_type == "invalid_state":
+            after = f"__INVALID_STATE_{plan.scenario or 'synthetic'}"
         elif plan.defect_type == "omission":
             after = None
             del rows[index][column]
