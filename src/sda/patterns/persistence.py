@@ -100,6 +100,16 @@ def registry_rows(
             "baseline_json": json.dumps(p.evidence_quality.get("baseline", {}), sort_keys=True),
             "validation_mode": p.evidence_quality.get("validation_mode", "unknown"),
             "stability_json": json.dumps(p.evidence_quality.get("stability", {}), sort_keys=True),
+            "evidence_quality_json": json.dumps(_safe_payload(p.evidence_quality), sort_keys=True),
+            "confidence": p.evidence_quality.get("confidence"),
+            "violation_count": p.evidence_quality.get("violation_count", 0),
+            "violation_rate": p.evidence_quality.get("violation_rate"),
+            "sampling_json": json.dumps(
+                _safe_payload(p.evidence_quality.get("sampling", {})), sort_keys=True
+            ),
+            "limitations_json": json.dumps(
+                _safe_payload(p.evidence_quality.get("limitations", ())), sort_keys=True
+            ),
             "generation_action_json": json.dumps(p.generation_action, sort_keys=True),
             "validation_action_json": json.dumps(p.validation_action, sort_keys=True),
             "decision": p.decision,
