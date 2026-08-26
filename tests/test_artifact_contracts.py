@@ -63,7 +63,7 @@ def test_snapshot_compatibility_rejects_wrong_source() -> None:
 def test_artifact_related_locations_are_immutable() -> None:
     ref = make_ref()
     with pytest.raises(TypeError, match="immutable"):
-    ref.related_locations["details"] = "other"  # type: ignore[index]
+        ref.related_locations["details"] = "other"  # type: ignore[index]
 
 
 def test_compatibility_failure_is_structured_and_value_error_compatible() -> None:
