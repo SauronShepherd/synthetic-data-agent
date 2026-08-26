@@ -42,6 +42,9 @@ def unsupported_metric_result(metric: str, reason: str) -> UnsupportedMetricResu
 
 def spark_metric(frame: Any, metric: str, **kwargs: Any) -> Any:
     """Dispatch a configured metric or return an actionable unsupported result."""
+    metric = metric.strip().lower()
+    if not metric:
+        return unsupported_metric_result("unknown", "metric name must not be empty")
     handlers = {
         "pearson": spark_pearson,
         "conditional_distribution": spark_conditional_distribution,

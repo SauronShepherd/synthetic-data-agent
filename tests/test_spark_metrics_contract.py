@@ -56,6 +56,7 @@ def test_unsupported_spark_metric_result_is_actionable_and_raw_value_free() -> N
     assert result == unsupported_metric_result(
         "spearman", "metric is not implemented by the Spark adapter"
     )
+    assert spark_metric(object(), "  SPEARMAN ") == result
 
 
 def test_temporal_lag_dispatch_is_registered() -> None:
