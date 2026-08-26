@@ -120,6 +120,20 @@ class StreamCheckpoint:
     next_offset: int
     replay_fingerprint: str
 
+    def __post_init__(self) -> None:
+        if any(
+            not value.strip()
+            for value in (
+                self.stream_id,
+                self.plan_fingerprint,
+                self.schema_version,
+                self.replay_fingerprint,
+            )
+        ):
+            raise ValueError("checkpoint identity and replay fingerprint are required")
+        if self.next_offset < 0:
+            raise ValueError("checkpoint next_offset must not be negative")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "stream_id": self.stream_id,

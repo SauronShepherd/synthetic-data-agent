@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sda.streaming import (
+    StreamCheckpoint,
     StreamError,
     StreamingPlan,
     StreamMode,
@@ -69,6 +70,13 @@ def test_checkpoint_rejects_gaps_and_cross_stream_events() -> None:
         checkpoint(current, ({**events[0], "stream_id": "other"},))
     with pytest.raises(StreamError, match="offset zero"):
         checkpoint(current, (events[1],))
+
+
+def test_checkpoint_rejects_invalid_direct_construction() -> None:
+    with pytest.raises(ValueError, match="identity"):
+        StreamCheckpoint("", "plan", "1", "query", 0, "replay")
+    with pytest.raises(ValueError, match="next_offset"):
+        StreamCheckpoint("stream", "plan", "1", "query", -1, "replay")
 
 
 def test_manifest_rejects_schema_mismatch_and_offset_gaps() -> None:
