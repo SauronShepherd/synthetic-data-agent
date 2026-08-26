@@ -163,6 +163,8 @@ def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
     pairs: set[tuple[str, str]] = set()
     adjacency: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
     degree = {node_id: 0 for node_id in node_ids}
+    in_degree = {node_id: 0 for node_id in node_ids}
+    out_degree = {node_id: 0 for node_id in node_ids}
     for edge in result.edges:
         source, target = str(edge.get("source", "")), str(edge.get("target", ""))
         if source not in node_set or target not in node_set:
@@ -179,11 +181,21 @@ def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
         pairs.add(pair)
         degree[source] += 1
         degree[target] += 1
+        out_degree[source] += 1
+        in_degree[target] += 1
         adjacency[source].add(target)
         if plan.kind is GraphKind.UNDIRECTED:
             adjacency[target].add(source)
     if plan.max_degree is not None and any(value > plan.max_degree for value in degree.values()):
         raise TopologyError("topology result exceeds max_degree")
+    if plan.max_in_degree is not None and any(
+        value > plan.max_in_degree for value in in_degree.values()
+    ):
+        raise TopologyError("topology result exceeds max_in_degree")
+    if plan.max_out_degree is not None and any(
+        value > plan.max_out_degree for value in out_degree.values()
+    ):
+        raise TopologyError("topology result exceeds max_out_degree")
     if plan.acyclic:
         if plan.kind is GraphKind.DIRECTED:
             if any(_reaches_named(adjacency, target, source) for source, target in pairs):

@@ -73,6 +73,18 @@ def test_topology_validator_accepts_acyclic_undirected_tree() -> None:
     validate_topology(plan, generate_topology(plan))
 
 
+def test_topology_validator_checks_directed_in_and_out_degree_limits() -> None:
+    plan = TopologyPlan("g", "fp", node_count=3, edge_count=2, max_in_degree=1)
+    result = generate_topology(plan)
+    corrupted = type(result)(
+        result.nodes,
+        (result.edges[0], {**result.edges[1], "target": result.edges[0]["target"]}),
+        result.metrics,
+    )
+    with pytest.raises(TopologyError, match="max_in_degree"):
+        validate_topology(plan, corrupted)
+
+
 def test_directed_max_degree_counts_both_endpoints() -> None:
     with pytest.raises(TopologyError, match="realize"):
         generate_topology(TopologyPlan("g", "fp", node_count=3, edge_count=2, max_degree=1))
