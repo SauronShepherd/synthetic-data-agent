@@ -106,6 +106,7 @@ def spark_conditional_distribution(frame: Any, drivers: tuple[str, ...], outcome
     F = _functions()
     if not drivers:
         raise ValueError("at least one driver column is required")
+    _require_columns(frame, (*drivers, outcome), metric="spark_conditional_distribution")
     grouped = frame.groupBy(*(F.col(column) for column in drivers), F.col(outcome)).count()
     totals = (
         frame.groupBy(*(F.col(column) for column in drivers))
@@ -128,6 +129,9 @@ def spark_conditional_distribution(frame: Any, drivers: tuple[str, ...], outcome
 
 def spark_conditional_missingness(frame: Any, drivers: tuple[str, ...], outcome: str) -> Any:
     F = _functions()
+    if not drivers:
+        raise ValueError("at least one driver column is required")
+    _require_columns(frame, (*drivers, outcome), metric="spark_conditional_missingness")
     return (
         frame.groupBy(*drivers)
         .agg(
@@ -151,6 +155,8 @@ def spark_fanout_by_segment(
         raise ValueError("parent and child key widths must match")
     if not segments:
         raise ValueError("fan-out metrics require at least one segment column")
+    _require_columns(parent, (*parent_keys, *segments), metric="spark_fanout_by_segment parent")
+    _require_columns(child, child_keys, metric="spark_fanout_by_segment child")
     counts = child.groupBy(*child_keys).agg(F.count(F.lit(1)).alias("child_count"))
     condition = [
         F.col(f"parent.{left}") == F.col(f"counts.{right}")

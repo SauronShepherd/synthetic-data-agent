@@ -78,6 +78,17 @@ def test_temporal_metric_missing_columns_returns_actionable_result() -> None:
     }
 
 
+def test_conditional_metric_missing_columns_returns_actionable_result() -> None:
+    class Frame:
+        schema = type("Schema", (), {"fields": ()})()
+
+    result = spark_metric(
+        Frame(), "conditional_distribution", drivers=("segment",), outcome="value"
+    )
+    assert not result.supported
+    assert result.reason == "spark_conditional_distribution requires columns: segment, value"
+
+
 @pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
     frame = spark.createDataFrame(
