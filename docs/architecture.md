@@ -128,3 +128,12 @@ review, managed Lakebase integration, and governed Unity Catalog integration-tes
 still outstanding. Local privacy checks cover direct identifiers, quasi-identifier
 rarity, duplicate-row risk, and raw-value-free report serialization; they do not
 replace governed external privacy approval.
+
+## Topology lineage boundary
+
+Bounded topology generation emits immutable node and edge results. The
+`manifest_for_topology` contract validates the structure against its
+`TopologyPlan` and records the topology identity, plan fingerprint, node/edge
+counts, output fingerprint, and `topology-manifest-v1` schema version. The
+manifest contains no generated row values and cannot be created for a result
+whose counts, endpoints, or hard constraints fail validation.
