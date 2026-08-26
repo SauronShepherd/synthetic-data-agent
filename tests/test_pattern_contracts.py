@@ -227,6 +227,20 @@ def test_candidates_are_bounded_and_deterministic() -> None:
     assert left == right
 
 
+def test_pattern_candidate_nested_fields_are_immutable() -> None:
+    candidate = PatternCandidate(
+        PatternFamily.BUSINESS_RULE,
+        "main.s.t",
+        ["driver"],
+        ["outcome"],
+        {"operator": "equals"},
+    )
+    assert candidate.driver_columns == ("driver",)
+    assert candidate.outcome_columns == ("outcome",)
+    with pytest.raises(TypeError, match="immutable"):
+        candidate.condition["operator"] = "contains"  # type: ignore[index]
+
+
 def test_candidates_include_structural_pattern_families() -> None:
     candidates = generate_candidates(
         "main.events",

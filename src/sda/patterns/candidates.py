@@ -15,6 +15,19 @@ class PatternCandidate:
     outcome_columns: tuple[str, ...] = ()
     condition: Mapping[str, object] = None  # type: ignore[assignment]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "driver_columns", tuple(self.driver_columns))
+        object.__setattr__(self, "outcome_columns", tuple(self.outcome_columns))
+        if self.condition is not None:
+            object.__setattr__(self, "condition", _FrozenMapping(self.condition))
+
+
+class _FrozenMapping(dict[str, object]):
+    def _immutable(self, *args: object, **kwargs: object) -> None:
+        raise TypeError("pattern candidates are immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
 
 @dataclass(frozen=True, slots=True)
 class NumericCorrelationCandidate:
