@@ -4,6 +4,8 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
+from sda.artifacts.fingerprint import fingerprint
+
 
 @dataclass(frozen=True, slots=True)
 class FallbackLevel:
@@ -32,14 +34,24 @@ def deterministic_fallback_plan(
 def conditional_counts(
     rows: list[dict[str, Any]], drivers: tuple[str, ...], outcome: str, *, max_cells: int = 1000
 ) -> list[dict[str, Any]]:
-    counts: Counter[tuple[tuple[tuple[str, Any], ...], Any]] = Counter()
+    counts: Counter[tuple[tuple[str, ...], str]] = Counter()
+    condition_values: dict[tuple[str, ...], tuple[tuple[str, Any], ...]] = {}
+    outcome_values: dict[tuple[tuple[str, ...], str], Any] = {}
     for row in rows:
-        key = tuple((col, row.get(col)) for col in drivers)
-        counts[(key, row.get(outcome))] += 1
+        key = tuple(fingerprint(row.get(col)) for col in drivers)
+        condition_values.setdefault(key, tuple((col, row.get(col)) for col in drivers))
+        outcome_key = fingerprint(row.get(outcome))
+        outcome_values.setdefault((key, outcome_key), row.get(outcome))
+        counts[(key, outcome_key)] += 1
     if len(counts) > max_cells:
         return []
     totals = Counter(key for key, _ in counts)
     return [
-        {"condition": dict(key), "outcome": value, "count": count, "rate": count / totals[key]}
-        for (key, value), count in sorted(counts.items(), key=lambda item: str(item[0]))
+        {
+            "condition": dict(condition_values[key]),
+            "outcome": outcome_values[(key, outcome_key)],
+            "count": count,
+            "rate": count / totals[key],
+        }
+        for (key, outcome_key), count in sorted(counts.items(), key=lambda item: item[0])
     ]
