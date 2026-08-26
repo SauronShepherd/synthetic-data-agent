@@ -19,6 +19,13 @@ class StreamError(ValueError):
     """Raised for incompatible stream plans or unsafe bounds."""
 
 
+class _FrozenDict(dict[str, Any]):
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("stream events are immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
 @dataclass(frozen=True, slots=True)
 class StreamingPlan:
     stream_id: str
@@ -130,7 +137,7 @@ def generate_bounded_events(
     if plan.mode is StreamMode.CONTINUOUS:
         raise StreamError("continuous mode requires a Structured Streaming adapter")
     events = tuple(_event(plan, offset) for offset in range(start_offset, plan.event_count))
-    return events
+    return tuple(_FrozenDict(event) for event in events)
 
 
 def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamManifest:

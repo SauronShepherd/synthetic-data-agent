@@ -26,6 +26,8 @@ def test_bounded_stream_is_replayable_and_offset_stable() -> None:
     assert suffix == first[2:]
     assert len({event["event_id"] for event in first}) == 4
     assert manifest(plan(), first).replay_fingerprint == manifest(plan(), replay).replay_fingerprint
+    with pytest.raises(TypeError, match="immutable"):
+        first[0]["offset"] = 99  # type: ignore[index]
 
 
 def test_continuous_requires_checkpoint_and_local_generator_rejects_it() -> None:
