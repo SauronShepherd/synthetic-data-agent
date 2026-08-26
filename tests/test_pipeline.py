@@ -45,6 +45,7 @@ def test_pipeline_runs_all_gates_and_publishes() -> None:
     assert result.publication.status.value == "published"
     assert result.manifest.status == "complete"
     assert result.manifest.input_artifact_ids == ("a",)
+    assert result.manifest.output_fingerprint == result.receipt.output_fingerprint
     assert result.manifest.locations == {"output": "uc.t"}
     assert result.publication.validation_fingerprint != approved_plan().plan_fingerprint
 

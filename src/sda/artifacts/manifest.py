@@ -25,6 +25,7 @@ class RunManifest:
     configuration_hash: str
     input_artifact_ids: tuple[str, ...] = ()
     output_artifact_ids: tuple[str, ...] = ()
+    output_fingerprint: str | None = None
     status: str = "running"
     started_at: str = ""
     completed_at: str | None = None
@@ -47,6 +48,8 @@ class RunManifest:
             raise ValueError("status must be running, complete, or failed")
         if self.warning_count < 0:
             raise ValueError("warning_count must not be negative")
+        if self.output_fingerprint is not None and not self.output_fingerprint.strip():
+            raise ValueError("output_fingerprint must not be empty when provided")
         object.__setattr__(self, "locations", _FrozenDict(self.locations))
 
     @property

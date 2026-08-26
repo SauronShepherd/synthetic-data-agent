@@ -107,6 +107,7 @@ def run_standalone(
         environment="local",
         configuration_hash=plan.plan_fingerprint,
         input_artifact_ids=plan.input_artifact_ids,
+        output_fingerprint=receipt.output_fingerprint,
         status="complete",
         started_at=datetime.now(UTC).isoformat(),
         completed_at=datetime.now(UTC).isoformat(),
