@@ -557,19 +557,68 @@ class TableProfiler:
                                 "accuracy": self.request.percentile_accuracy,
                             },
                         )
-                    if "iqr" in self.request.outlier_methods and percentile_values[2] is not None:
-                        q1, q3 = percentile_values[2], percentile_values[4]
+                    requested_outliers = tuple(
+                        dict.fromkeys(method.lower() for method in self.request.outlier_methods)
+                    )
+                    findings: list[dict[str, Any]] = []
+                    q1, median, q3 = (
+                        percentile_values[2],
+                        percentile_values[3],
+                        percentile_values[4],
+                    )
+                    if "iqr" in requested_outliers and q1 is not None and q3 is not None:
                         low, high = q1 - 1.5 * (q3 - q1), q3 + 1.5 * (q3 - q1)
-                        outlier_count = scan.where((col < low) | (col > high)).count()
-                        outliers = (
+                        findings.append(
                             {
                                 "method": "iqr",
                                 "thresholds": {"lower": low, "upper": high},
-                                "outlier_count": outlier_count,
+                                "outlier_count": scan.where((col < low) | (col > high)).count(),
                                 "population_count": row_count,
                                 "count_method": "spark_filter_count",
-                            },
+                            }
                         )
+                    if "percentile" in requested_outliers:
+                        p01, p99 = percentile_values[0], percentile_values[6]
+                        if p01 is not None and p99 is not None:
+                            findings.append(
+                                {
+                                    "method": "percentile",
+                                    "thresholds": {"lower": p01, "upper": p99},
+                                    "outlier_count": scan.where((col < p01) | (col > p99)).count(),
+                                    "population_count": row_count,
+                                    "count_method": "spark_filter_count",
+                                }
+                            )
+                    if "mad" in requested_outliers and median is not None:
+                        deviation = scan.select(F.abs(col - F.lit(median)).alias("__sda_deviation"))
+                        mad = deviation.agg(
+                            F.percentile_approx(
+                                "__sda_deviation", 0.5, self.request.percentile_accuracy
+                            ).alias("mad")
+                        ).first()["mad"]
+                        if mad:
+                            scale = 3 * 1.4826 * float(mad)
+                            low, high = float(median) - scale, float(median) + scale
+                            findings.append(
+                                {
+                                    "method": "mad",
+                                    "thresholds": {"lower": low, "upper": high},
+                                    "outlier_count": scan.where((col < low) | (col > high)).count(),
+                                    "population_count": row_count,
+                                    "count_method": "spark_filter_count",
+                                }
+                            )
+                        else:
+                            findings.append(
+                                {
+                                    "method": "mad",
+                                    "thresholds": {},
+                                    "outlier_count": 0,
+                                    "population_count": row_count,
+                                    "warning": "mad_zero_scale",
+                                }
+                            )
+                    outliers = tuple(findings)
                 frequency_summary = (
                     scan.where(col.isNotNull())
                     .groupBy(col)
