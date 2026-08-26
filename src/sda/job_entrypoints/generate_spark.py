@@ -96,9 +96,13 @@ def main() -> None:
     output = QualifiedName.parse(args.output_table)
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{output.catalog}`.`{output.schema}`")
     frame = spark.createDataFrame([{"run_id": args.run_id, **row} for row in rows])
-    frame.write.mode("overwrite").option(
-        "userMetadata", f"sda-run-id={args.run_id};plan={plan.plan_fingerprint}"
-    ).saveAsTable(output.quoted)
+    frame.createOrReplaceTempView("__sda_generated_output")
+    spark.sql(
+        f"CREATE OR REPLACE TABLE {output.quoted} USING DELTA "
+        "TBLPROPERTIES ('delta.userMetadata' = "
+        f"'sda-run-id={args.run_id};plan={plan.plan_fingerprint}') AS "
+        "SELECT * FROM __sda_generated_output"
+    )
     receipt = receipt_for(plan, rows)
     generation_manifest = manifest_for(
         plan,
