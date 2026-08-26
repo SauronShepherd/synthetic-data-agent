@@ -11,6 +11,7 @@ from sda.patterns.conditionals import conditional_counts
 from sda.patterns.conflicts import resolve_rule_conflicts
 from sda.patterns.correlations import pearson
 from sda.patterns.fanout import fanout_by_segment
+from sda.patterns.loaders import load_pattern_inputs
 from sda.patterns.missingness import conditional_missingness
 from sda.patterns.models import (
     ColumnRoleAssignment,
@@ -344,6 +345,10 @@ class PatternDetector:
             }
         )
         if self.artifact_registry is not None:
+            # Validate every upstream artifact through the shared contract before
+            # reuse or detection; callers may additionally provide the bounded
+            # row evidence used by this local coordinator.
+            load_pattern_inputs(self.artifact_registry, input_refs, environment=environment)
             reusable = self.artifact_registry.find_reusable(
                 artifact_type=ArtifactType.PATTERN_REGISTRY,
                 reuse_fingerprint=reuse_fingerprint,
