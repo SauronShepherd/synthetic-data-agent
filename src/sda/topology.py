@@ -43,6 +43,13 @@ class TopologyPlan:
     bipartite: bool = False
 
     def __post_init__(self) -> None:
+        try:
+            normalized_kind = (
+                self.kind if isinstance(self.kind, GraphKind) else GraphKind(self.kind)
+            )
+        except ValueError as exc:
+            raise ValueError(f"unsupported graph kind: {self.kind!r}") from exc
+        object.__setattr__(self, "kind", normalized_kind)
         if not self.topology_id.strip() or not self.plan_fingerprint.strip():
             raise ValueError("topology identity and plan fingerprint are required")
         if self.node_count < 0 or self.edge_count < 0:

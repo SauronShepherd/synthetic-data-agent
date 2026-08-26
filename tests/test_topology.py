@@ -149,3 +149,10 @@ def test_topology_plan_rejects_degree_capacity_before_generation() -> None:
         TopologyPlan("g", "fp", node_count=3, edge_count=4, max_in_degree=1)
     with pytest.raises(ValueError, match="max_degree capacity"):
         TopologyPlan("g", "fp", node_count=3, edge_count=2, max_degree=1)
+
+
+def test_topology_plan_normalizes_graph_kind_strings() -> None:
+    plan = TopologyPlan("g", "fp", node_count=2, edge_count=1, kind="directed")
+    assert plan.kind is GraphKind.DIRECTED
+    with pytest.raises(ValueError, match="unsupported graph kind"):
+        TopologyPlan("g", "fp", node_count=2, edge_count=1, kind="unknown")
