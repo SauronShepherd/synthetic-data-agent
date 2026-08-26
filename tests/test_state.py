@@ -33,7 +33,7 @@ def test_state_rejects_illegal_transition_and_stale_version() -> None:
         repo.transition_run("run-1", WorkflowStatus.PUBLISHED)
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
     with pytest.raises(StateError, match="concurrency"):
-        repo.transition_run("run-1", WorkflowStatus.APPROVED, expected_version=0)
+    repo.transition_run("run-1", WorkflowStatus.APPROVED, expected_version=0)
 
 
 def test_failed_run_can_be_explicitly_retried() -> None:
@@ -58,6 +58,12 @@ def test_attempt_lease_is_idempotent_and_completion_is_terminal() -> None:
     assert repo.list_attempts("run-1")[0].completed_at
     with pytest.raises(StateError, match="already complete"):
         repo.complete_attempt("attempt-1", success=True)
+
+
+def test_attempt_acquisition_rejects_unknown_runs() -> None:
+    repo = InMemoryStateRepository()
+    with pytest.raises(StateError, match="unknown run"):
+        repo.acquire_attempt(ExecutionAttempt("missing", "attempt-1", "generate"))
 
 
 def test_approval_is_unique_per_type() -> None:

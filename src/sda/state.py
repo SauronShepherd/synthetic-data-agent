@@ -263,6 +263,7 @@ class InMemoryStateRepository:
         if lease_seconds < 1:
             raise ValueError("lease_seconds must be positive")
         with self._lock:
+            self.get_run(attempt.run_id)
             existing = self._attempts.get(attempt.attempt_id)
             if existing is not None:
                 return existing
