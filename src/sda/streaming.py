@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -29,6 +30,7 @@ class StreamingPlan:
     schema_version: str = "1"
     checkpoint_id: str = ""
     max_events: int = 100_000
+    inter_arrival_seconds: float = 1.0
 
     def __post_init__(self) -> None:
         if not self.stream_id.strip() or not self.plan_fingerprint.strip():
@@ -37,6 +39,8 @@ class StreamingPlan:
             raise ValueError("event_count must not be negative and max_events must be positive")
         if self.events_per_second <= 0:
             raise ValueError("events_per_second must be positive")
+        if self.inter_arrival_seconds <= 0:
+            raise ValueError("inter_arrival_seconds must be positive")
         if self.event_count > self.max_events:
             raise ValueError("event_count exceeds max_events")
         if self.mode is StreamMode.CONTINUOUS and not self.checkpoint_id.strip():
@@ -141,10 +145,12 @@ def _event(plan: StreamingPlan, offset: int) -> dict[str, Any]:
     event_id = hashlib.sha256(
         f"{plan.plan_fingerprint}|{plan.stream_id}|{offset}".encode()
     ).hexdigest()[:32]
+    start = datetime.fromisoformat(plan.start_time.replace("Z", "+00:00"))
+    event_time = (start + timedelta(seconds=offset * plan.inter_arrival_seconds)).isoformat()
     return {
         "event_id": event_id,
         "stream_id": plan.stream_id,
         "offset": offset,
-        "event_time": plan.start_time,
+        "event_time": event_time,
         "schema_version": plan.schema_version,
     }

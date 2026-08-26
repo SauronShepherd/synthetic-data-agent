@@ -60,3 +60,12 @@ def test_checkpoint_rejects_gaps_and_cross_stream_events() -> None:
         checkpoint(current, (events[0], events[2]))
     with pytest.raises(StreamError, match="different stream"):
         checkpoint(current, ({**events[0], "stream_id": "other"},))
+
+
+def test_bounded_events_have_deterministic_inter_arrival_times() -> None:
+    current = plan(inter_arrival_seconds=2.5)
+    events = generate_bounded_events(current)
+    assert events[0]["event_time"] == "2020-01-01T00:00:00+00:00"
+    assert events[1]["event_time"] == "2020-01-01T00:00:02.500000+00:00"
+    with pytest.raises(ValueError, match="inter_arrival"):
+        plan(inter_arrival_seconds=0)
