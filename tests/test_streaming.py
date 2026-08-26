@@ -128,6 +128,8 @@ def test_manifest_rejects_schema_mismatch_and_offset_gaps() -> None:
         manifest(current, ({**events[0], "offset": current.event_count},))
     with pytest.raises(StreamError, match="unique"):
         manifest(current, (events[0], {**events[1], "event_id": events[0]["event_id"]}))
+    with pytest.raises(StreamError, match="exceeds"):
+        manifest(current, events + (dict(events[-1], offset=4, event_id="extra"),))
     with pytest.raises(StreamError, match="integer offsets"):
         manifest(
             current, ({"stream_id": current.stream_id, "schema_version": current.schema_version},)

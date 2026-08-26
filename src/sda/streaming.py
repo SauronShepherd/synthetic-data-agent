@@ -243,6 +243,8 @@ def generate_bounded_events(
 
 
 def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamManifest:
+    if len(events) > plan.event_count:
+        raise StreamError("manifest event count exceeds the stream plan")
     if any(
         event.get("stream_id") != plan.stream_id
         or event.get("schema_version") != plan.schema_version
