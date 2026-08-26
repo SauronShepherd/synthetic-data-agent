@@ -162,3 +162,12 @@ def test_validation_report_cannot_claim_pass_with_failed_check() -> None:
             "qa",
             CheckStatus.PASS,
         )
+
+
+def test_validation_vector_is_immutable_and_dimensioned() -> None:
+    report = ValidationReport(
+        (), "qa", CheckStatus.PASS, {"schema": CheckStatus.PASS, "privacy": CheckStatus.WARN}
+    )
+    assert report.validation_vector["privacy"] is CheckStatus.WARN
+    with pytest.raises(TypeError, match="immutable"):
+        report.validation_vector["schema"] = CheckStatus.FAIL  # type: ignore[index]

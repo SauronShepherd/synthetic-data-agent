@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -61,6 +61,7 @@ class ValidationReport:
     checks: tuple[ValidationCheck, ...]
     intended_use: str
     technical_disposition: CheckStatus
+    validation_vector: dict[str, CheckStatus] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.intended_use.strip():
@@ -77,6 +78,11 @@ class ValidationReport:
             raise ValueError(
                 f"technical_disposition must match the check results (expected {expected.value})"
             )
+        if any(not key.strip() for key in self.validation_vector):
+            raise ValueError("validation vector dimensions must not be empty")
+        if any(not isinstance(value, CheckStatus) for value in self.validation_vector.values()):
+            raise ValueError("validation vector values must be CheckStatus values")
+        object.__setattr__(self, "validation_vector", _FrozenDict(self.validation_vector))
 
     @property
     def fingerprint(self) -> str:
