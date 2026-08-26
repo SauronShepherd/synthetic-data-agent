@@ -33,6 +33,17 @@ def test_idempotency_key_rejects_conflicting_run_content() -> None:
         repo.create_run(RunRecord("run-2", "req-2", "idem-1"))
 
 
+def test_state_status_strings_are_normalized_and_invalid_values_rejected() -> None:
+    assert RunRecord("run", "request", "key", status="planned").status is WorkflowStatus.PLANNED
+    assert (
+        ExecutionAttempt("run", "attempt", "stage", status="failed").status is AttemptStatus.FAILED
+    )
+    with pytest.raises(ValueError, match="unsupported workflow status"):
+        RunRecord("run", "request", "key", status="unknown")
+    with pytest.raises(ValueError, match="unsupported attempt status"):
+        ExecutionAttempt("run", "attempt", "stage", status="unknown")
+
+
 def test_state_rejects_illegal_transition_and_stale_version() -> None:
     repo = InMemoryStateRepository()
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))

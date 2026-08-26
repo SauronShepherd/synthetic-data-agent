@@ -47,6 +47,11 @@ class RunRecord:
     updated_at: str = ""
 
     def __post_init__(self) -> None:
+        if not isinstance(self.status, WorkflowStatus):
+            try:
+                object.__setattr__(self, "status", WorkflowStatus(self.status))
+            except ValueError as exc:
+                raise ValueError(f"unsupported workflow status: {self.status}") from exc
         if (
             not self.run_id.strip()
             or not self.request_id.strip()
@@ -73,6 +78,11 @@ class ExecutionAttempt:
     completed_at: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.status, AttemptStatus):
+            try:
+                object.__setattr__(self, "status", AttemptStatus(self.status))
+            except ValueError as exc:
+                raise ValueError(f"unsupported attempt status: {self.status}") from exc
         if not self.run_id.strip() or not self.attempt_id.strip() or not self.stage.strip():
             raise ValueError("attempt identity and stage must not be empty")
         if self.retry_number < 0:
