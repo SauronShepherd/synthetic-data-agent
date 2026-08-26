@@ -130,6 +130,13 @@ class ArtifactRef:
         object.__setattr__(self, "source_references", tuple(self.source_references))
         object.__setattr__(self, "warnings", tuple(self.warnings))
         object.__setattr__(self, "input_artifact_ids", tuple(self.input_artifact_ids))
+        for field_name, enum_type in (("artifact_type", ArtifactType), ("status", ArtifactStatus)):
+            value = getattr(self, field_name)
+            if not isinstance(value, enum_type):
+                try:
+                    object.__setattr__(self, field_name, enum_type(value))
+                except ValueError as exc:
+                    raise ValueError(f"unsupported {field_name}: {value!r}") from exc
         for name in (
             "artifact_id",
             "artifact_schema_version",

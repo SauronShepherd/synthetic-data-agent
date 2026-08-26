@@ -112,3 +112,25 @@ def test_source_reference_rejects_ambiguous_selected_columns() -> None:
         SourceReference("main.t", "TABLE", "metadata_only", None, None, None, [""])
     with pytest.raises(ValueError, match="unique"):
         SourceReference("main.t", "TABLE", "metadata_only", None, None, None, ["id", "id"])
+
+
+def test_artifact_reference_normalizes_enum_strings() -> None:
+    ref = ArtifactRef(
+        "id",
+        "table_profile",
+        "1.0",
+        "complete",
+        "tool",
+        "0.6.0",
+        "run",
+        "dev",
+        "now",
+        "hash",
+        "db.schema.table",
+        {},
+        (),
+        "checksum",
+        "summary",
+    )
+    assert ref.artifact_type is ArtifactType.TABLE_PROFILE
+    assert ref.status is ArtifactStatus.COMPLETE
