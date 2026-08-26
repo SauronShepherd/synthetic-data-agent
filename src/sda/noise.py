@@ -129,6 +129,16 @@ class NoiseResult:
     baseline_fingerprint: str
     output_fingerprint: str
 
+    def __post_init__(self) -> None:
+        if not self.baseline_fingerprint.strip() or not self.output_fingerprint.strip():
+            raise ValueError("noise result fingerprints are required")
+        if any(mutation.row_index < 0 for mutation in self.mutations):
+            raise ValueError("noise mutation row_index must not be negative")
+        object.__setattr__(self, "rows", _freeze_rows(tuple(dict(row) for row in self.rows)))
+        object.__setattr__(self, "mutations", tuple(self.mutations))
+        if fingerprint(self.rows) != self.output_fingerprint:
+            raise ValueError("noise output_fingerprint does not match rows")
+
     def truth_ledger(self) -> tuple[dict[str, Any], ...]:
         """Return deterministic, raw-value-free mutation evidence."""
         return tuple(mutation.to_dict() for mutation in self.mutations)

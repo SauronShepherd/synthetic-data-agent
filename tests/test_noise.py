@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from sda.artifacts.fingerprint import fingerprint
-from sda.noise import NoiseError, NoisePlan, NoiseProfile, apply_noise, inject_nulls
+from sda.noise import NoiseError, NoisePlan, NoiseProfile, NoiseResult, apply_noise, inject_nulls
 
 
 def test_noise_is_deterministic_and_preserves_baseline() -> None:
@@ -162,6 +162,11 @@ def test_noise_truth_ledger_is_raw_value_free() -> None:
     serialized = result.to_dict()
     assert "secret" not in str(serialized)
     assert serialized["mutation_count"] == 1
+
+
+def test_noise_result_rejects_forged_output_fingerprint() -> None:
+    with pytest.raises(ValueError, match="does not match"):
+        NoiseResult(({"value": "clean"},), (), "baseline", "forged")
 
 
 def test_historical_noise_profile_is_a_supported_plan_contract() -> None:
