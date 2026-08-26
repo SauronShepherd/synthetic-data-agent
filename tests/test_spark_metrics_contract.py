@@ -12,6 +12,7 @@ from sda.patterns.spark_metrics import (
     spark_pearson,
     spark_state_transitions,
     spark_temporal_order,
+    unsupported_metric_result,
 )
 
 
@@ -39,6 +40,16 @@ def test_spark_metrics_does_not_collect_key_domains() -> None:
     assert not any(
         isinstance(node, ast.Attribute) and node.attr == "collect" for node in ast.walk(tree)
     )
+
+
+def test_unsupported_spark_metric_result_is_actionable_and_raw_value_free() -> None:
+    result = unsupported_metric_result("spearman", "requires numeric columns")
+    assert result.to_dict() == {
+        "metric": "spearman",
+        "supported": False,
+        "reason": "requires numeric columns",
+        "schema_version": "spark-metric-result-v1",
+    }
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]

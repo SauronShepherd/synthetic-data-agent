@@ -7,8 +7,37 @@ they never collect source rows to the driver.
 from __future__ import annotations
 
 from functools import reduce
+from dataclasses import dataclass
 from operator import and_
 from typing import Any
+
+
+@dataclass(frozen=True, slots=True)
+class UnsupportedMetricResult:
+    """Raw-value-free, actionable result for an unavailable Spark metric."""
+
+    metric: str
+    reason: str
+    supported: bool = False
+    schema_version: str = "spark-metric-result-v1"
+
+    def __post_init__(self) -> None:
+        if not self.metric.strip() or not self.reason.strip():
+            raise ValueError("unsupported metric identity and reason are required")
+        if self.supported:
+            raise ValueError("unsupported metric results must set supported=false")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "metric": self.metric,
+            "supported": self.supported,
+            "reason": self.reason,
+            "schema_version": self.schema_version,
+        }
+
+
+def unsupported_metric_result(metric: str, reason: str) -> UnsupportedMetricResult:
+    return UnsupportedMetricResult(metric, reason)
 
 
 def _functions() -> Any:
