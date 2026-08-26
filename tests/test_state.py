@@ -36,6 +36,17 @@ def test_state_rejects_illegal_transition_and_stale_version() -> None:
         repo.transition_run("run-1", WorkflowStatus.APPROVED, expected_version=0)
 
 
+def test_failed_run_can_be_explicitly_retried() -> None:
+    repo = InMemoryStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    repo.transition_run("run-1", WorkflowStatus.PLANNED)
+    repo.transition_run("run-1", WorkflowStatus.APPROVED)
+    repo.transition_run("run-1", WorkflowStatus.EXECUTING)
+    repo.transition_run("run-1", WorkflowStatus.FAILED)
+    retried = repo.transition_run("run-1", WorkflowStatus.EXECUTING)
+    assert retried.status is WorkflowStatus.EXECUTING
+
+
 def test_attempt_lease_is_idempotent_and_completion_is_terminal() -> None:
     repo = InMemoryStateRepository()
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))

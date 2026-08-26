@@ -133,7 +133,8 @@ _ALLOWED: dict[WorkflowStatus, frozenset[WorkflowStatus]] = {
     WorkflowStatus.PUBLISHED: frozenset(),
     WorkflowStatus.REJECTED: frozenset(),
     WorkflowStatus.CANCELLED: frozenset(),
-    WorkflowStatus.FAILED: frozenset(),
+    # Retry is explicit: orchestration must create a new attempt before re-entry.
+    WorkflowStatus.FAILED: frozenset({WorkflowStatus.EXECUTING, WorkflowStatus.CANCELLED}),
 }
 
 

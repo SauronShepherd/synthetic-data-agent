@@ -72,6 +72,20 @@ def test_sqlite_state_renews_and_recovers_stale_leases() -> None:
     repo.close()
 
 
+def test_sqlite_failed_run_can_be_explicitly_retried() -> None:
+    repo = SQLiteStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    for status in (
+        WorkflowStatus.PLANNED,
+        WorkflowStatus.APPROVED,
+        WorkflowStatus.EXECUTING,
+        WorkflowStatus.FAILED,
+    ):
+        repo.transition_run("run-1", status)
+    assert repo.transition_run("run-1", WorkflowStatus.EXECUTING).status is WorkflowStatus.EXECUTING
+    repo.close()
+
+
 def test_sqlite_feedback_is_idempotent_and_survives_reopen(tmp_path: object) -> None:
     path = str(tmp_path / "state.db")
     repo = SQLiteStateRepository(path)
