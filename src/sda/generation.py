@@ -53,6 +53,7 @@ class GenerationManifest:
     output_table: str
     plan_id: str
     plan_fingerprint: str
+    seed: int
     source_snapshot_ids: tuple[str, ...]
     input_artifact_ids: tuple[str, ...]
     receipt: GenerationReceipt
@@ -65,6 +66,8 @@ class GenerationManifest:
             raise ValueError("receipt plan_id does not match manifest plan_id")
         if self.receipt.plan_fingerprint != self.plan_fingerprint:
             raise ValueError("receipt plan_fingerprint does not match manifest plan_fingerprint")
+        if self.seed < 0:
+            raise ValueError("seed must not be negative")
         if not self.source_snapshot_ids:
             raise ValueError("source_snapshot_ids must not be empty")
 
@@ -89,6 +92,7 @@ def manifest_for(
         output_table=output_table,
         plan_id=plan.plan_id,
         plan_fingerprint=plan.plan_fingerprint,
+        seed=plan.seed,
         source_snapshot_ids=plan.source_snapshot_ids,
         input_artifact_ids=plan.input_artifact_ids,
         receipt=receipt,
