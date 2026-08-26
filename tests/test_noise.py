@@ -31,6 +31,7 @@ def test_noise_rejects_unknown_columns() -> None:
     [
         ("casing", "value", "A"),
         ("malformed_value", "value", "a__MALFORMED"),
+        ("invalid_category", "value", "__INVALID_CATEGORY_synthetic"),
         ("out_of_range", "number", 11),
     ],
 )

@@ -22,6 +22,7 @@ SUPPORTED_DEFECTS = frozenset(
         "null_injection",
         "casing",
         "malformed_value",
+        "invalid_category",
         "out_of_range",
         "omission",
         "duplicate",
@@ -170,6 +171,8 @@ def apply_noise(
             after = before.swapcase()
         elif plan.defect_type == "malformed_value":
             after = f"{before}__MALFORMED"
+        elif plan.defect_type == "invalid_category":
+            after = f"__INVALID_CATEGORY_{plan.scenario or 'synthetic'}"
         elif plan.defect_type == "omission":
             after = None
             del rows[index][column]
