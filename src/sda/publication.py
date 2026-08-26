@@ -82,12 +82,10 @@ class PublicationRegistry:
             if current.status is PublicationStatus.VALIDATED:
                 raise PublicationError("human approval is required")
             if current.status is PublicationStatus.APPROVED:
+                self._check_alias_available(alias, key)
                 published = replace(current, status=PublicationStatus.PUBLISHED, published_by=actor)
                 self._items[key] = published
                 if alias:
-                    previous = self._aliases.get(alias)
-                    if previous is not None and previous != key:
-                        raise PublicationError(f"alias already points to another dataset: {alias}")
                     self._aliases[alias] = key
                 return published
             return current
@@ -99,14 +97,16 @@ class PublicationRegistry:
             raise PublicationError("validation intended use is required")
         if privacy.decision is not PrivacyDecision.APPROVED:
             raise PublicationError("privacy approval is required")
+        self._check_alias_available(alias, key)
         published = replace(current, status=PublicationStatus.PUBLISHED, published_by=actor)
         self._items[key] = published
         if alias:
-            previous = self._aliases.get(alias)
-            if previous is not None and previous != key:
-                raise PublicationError(f"alias already points to another dataset: {alias}")
             self._aliases[alias] = key
         return published
+
+    def _check_alias_available(self, alias: str | None, key: tuple[str, str]) -> None:
+        if alias and (previous := self._aliases.get(alias)) is not None and previous != key:
+            raise PublicationError(f"alias already points to another dataset: {alias}")
 
     def validate(
         self, dataset_id: str, dataset_version: str, *, validation: ValidationReport

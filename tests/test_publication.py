@@ -84,6 +84,23 @@ def test_publication_exposes_validated_and_approved_lifecycle_states() -> None:
     )
 
 
+def test_alias_conflict_does_not_partially_publish() -> None:
+    first_registry, _ = staged()
+    validation, privacy = reports()
+    first_registry.publish(
+        "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest"
+    )
+    second = first_registry.stage(
+        Publication("other", "v1", "uc.other", validation.fingerprint, "strict")
+    )
+    assert second.status is PublicationStatus.STAGED
+    with pytest.raises(PublicationError, match="alias already"):
+        first_registry.publish(
+            "other", "v1", validation=validation, privacy=privacy, actor="reviewer", alias="latest"
+        )
+    assert second.status is PublicationStatus.STAGED
+
+
 def test_publication_rejects_mismatched_validation_evidence() -> None:
     registry, _ = staged()
     validation, privacy = reports()
