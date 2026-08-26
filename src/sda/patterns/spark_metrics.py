@@ -236,6 +236,13 @@ def spark_state_transitions(
     tie_breakers: tuple[str, ...] = (),
 ) -> Any:
     F = _functions()
+    if not entity_keys:
+        raise ValueError("spark_state_transitions requires at least one entity key")
+    _require_columns(
+        frame,
+        (*entity_keys, state_column, event_time, *tie_breakers),
+        metric="spark_state_transitions",
+    )
     from pyspark.sql.window import Window
 
     ordering = [

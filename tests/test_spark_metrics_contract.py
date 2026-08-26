@@ -89,6 +89,23 @@ def test_conditional_metric_missing_columns_returns_actionable_result() -> None:
     assert result.reason == "spark_conditional_distribution requires columns: segment, value"
 
 
+def test_transition_metric_missing_columns_returns_actionable_result() -> None:
+    class Frame:
+        schema = type("Schema", (), {"fields": ()})()
+
+    result = spark_metric(
+        Frame(),
+        "state_transitions",
+        entity_keys=("entity_id",),
+        state_column="status",
+        event_time="event_time",
+    )
+    assert not result.supported
+    assert result.reason == (
+        "spark_state_transitions requires columns: entity_id, status, event_time"
+    )
+
+
 @pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
     frame = spark.createDataFrame(
