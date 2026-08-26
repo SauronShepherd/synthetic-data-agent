@@ -106,6 +106,17 @@ class GenerationPlan:
     plan_fingerprint: str = ""
 
     def __post_init__(self) -> None:
+        for field_name, enum_type in (
+            ("status", PlanStatus),
+            ("mode", GenerationMode),
+            ("row_count_mode", RowCountMode),
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, enum_type):
+                try:
+                    object.__setattr__(self, field_name, enum_type(value))
+                except ValueError as exc:
+                    raise ValueError(f"unsupported {field_name}: {value}") from exc
         for name in ("plan_id", "request_id", "target_catalog", "target_schema", "intended_use"):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must not be empty")

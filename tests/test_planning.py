@@ -27,6 +27,37 @@ def test_plan_fingerprint_is_stable_and_serializable() -> None:
     assert plan.to_dict()["status"] == "draft"
 
 
+def test_plan_normalizes_enum_strings_and_rejects_unknown_values() -> None:
+    plan = GenerationPlan(
+        "p",
+        1,
+        "r",
+        ("s",),
+        ("a",),
+        "c",
+        "s",
+        ("t",),
+        (ColumnGenerationSpec("t", "id", "string"),),
+        status="awaiting_approval",
+        mode="clean",
+        row_count_mode="exact",
+    )
+    assert plan.status is PlanStatus.AWAITING_APPROVAL
+    with pytest.raises(ValueError, match="unsupported status"):
+        GenerationPlan(
+            "p",
+            1,
+            "r",
+            ("s",),
+            ("a",),
+            "c",
+            "s",
+            ("t",),
+            (ColumnGenerationSpec("t", "id", "string"),),
+            status="unknown",
+        )
+
+
 def test_plan_requires_evidence() -> None:
     with pytest.raises(ValueError, match="source snapshots"):
         GenerationPlan(
