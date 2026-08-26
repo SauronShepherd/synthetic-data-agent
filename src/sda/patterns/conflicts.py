@@ -33,6 +33,7 @@ def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
     if len(rule_ids) != len(set(rule_ids)):
         raise ValueError("rule IDs must be unique for conflict resolution")
     result = []
+    seen: set[tuple[str, str, str, str]] = set()
     ordered_rules = sorted(rules, key=lambda rule: rule.rule_id)
     for i, left in enumerate(ordered_rules):
         for right in ordered_rules[i + 1 :]:
@@ -44,6 +45,10 @@ def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
                         continue
                     conflict_type = _conflict_type(lpred, rpred)
                     if conflict_type:
+                        key = (left.rule_id, right.rule_id, lpred["column"], conflict_type)
+                        if key in seen:
+                            continue
+                        seen.add(key)
                         result.append(
                             RuleConflict(
                                 left.rule_id,

@@ -586,6 +586,23 @@ def test_equal_precedence_conflicts_use_stable_rule_id_tiebreak() -> None:
     assert conflicts[0].to_dict()["winning_rule_id"] == "a-rule"
 
 
+def test_conflict_detection_deduplicates_repeated_predicate_pairs() -> None:
+    left = BusinessRule(
+        rule_id="left",
+        table="main.s.t",
+        predicates=({"column": "x", "operator": "eq", "value": 1},) * 2,
+        origin=PatternOrigin.DECLARED,
+    )
+    right = BusinessRule(
+        rule_id="right",
+        table="main.s.t",
+        predicates=({"column": "x", "operator": "eq", "value": 2},),
+        origin=PatternOrigin.DECLARED,
+    )
+    conflicts = detect_rule_conflicts([left, right])
+    assert len(conflicts) == 1
+
+
 def test_profile_index_and_relationship_identity_are_reusable() -> None:
     index = ProfileIndex.from_rows([{"source_table": "main.s.t", "columns": ["id"]}])
     assert index.has_column("main.s.t", "id")
