@@ -257,3 +257,12 @@ def test_validation_checks_time_ordering() -> None:
     )
     assert report.technical_disposition is CheckStatus.FAIL
     assert report.checks[-1].evidence["invalid"] == 1
+
+
+def test_validation_checks_numeric_bounds_and_allows_nulls() -> None:
+    report = validate_tables(
+        {"metrics": (({"score": 0.5}), ({"score": None}), ({"score": 2.0}))},
+        numeric_bounds={"metrics": {"score": (0.0, 1.0)}},
+    )
+    assert report.technical_disposition is CheckStatus.FAIL
+    assert report.checks[-1].evidence["invalid"] == 1

@@ -117,6 +117,7 @@ def validate_tables(
     conditional_null_rates: dict[str, dict[tuple[str, str], dict[Any, float]]] | None = None,
     format_patterns: dict[str, dict[str, str]] | None = None,
     time_orderings: tuple[tuple[str, str, str], ...] = (),
+    numeric_bounds: dict[str, dict[str, tuple[float, float]]] | None = None,
     validation_vector: dict[str, CheckStatus] | None = None,
     intended_use: str = "unspecified",
 ) -> ValidationReport:
@@ -128,6 +129,7 @@ def validate_tables(
     conditional_null_rates = conditional_null_rates or {}
     fanout_bounds = fanout_bounds or {}
     format_patterns = format_patterns or {}
+    numeric_bounds = numeric_bounds or {}
     validation_vector = validation_vector or {}
     if distribution_tolerance < 0:
         raise ValueError("distribution_tolerance must not be negative")
@@ -494,6 +496,54 @@ def validate_tables(
                 population="full_table",
             )
         )
+    for table, numeric_columns in numeric_bounds.items():
+        if table not in tables:
+            checks.append(
+                ValidationCheck(
+                    f"numeric_bounds:{table}",
+                    CheckStatus.FAIL,
+                    f"{table} is unavailable; cannot validate numeric bounds",
+                    {"supported": False, "reason": "table_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
+        rows = tables[table]
+        for column, bounds in numeric_columns.items():
+            minimum, maximum = bounds
+            check_id = f"numeric_bounds:{table}.{column}"
+            if maximum < minimum:
+                raise ValueError(f"numeric bounds must be ordered for {check_id}")
+            if any(column not in row for row in rows):
+                checks.append(
+                    ValidationCheck(
+                        check_id,
+                        CheckStatus.FAIL,
+                        f"{table}.{column} is unavailable; cannot validate numeric bounds",
+                        {"supported": False, "reason": "column_missing"},
+                        method="availability_check",
+                    )
+                )
+                continue
+            invalid = sum(
+                value is not None
+                and (
+                    isinstance(value, bool)
+                    or not isinstance(value, int | float)
+                    or not minimum <= value <= maximum
+                )
+                for value in (row[column] for row in rows)
+            )
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.PASS if invalid == 0 else CheckStatus.FAIL,
+                    f"{invalid} values violate numeric bounds [{minimum}, {maximum}]",
+                    {"rows": len(rows), "invalid": invalid, "minimum": minimum, "maximum": maximum},
+                    method="numeric_bounds",
+                    population="non_null_values",
+                )
+            )
     disposition = (
         CheckStatus.FAIL if any(c.status is CheckStatus.FAIL for c in checks) else CheckStatus.PASS
     )
