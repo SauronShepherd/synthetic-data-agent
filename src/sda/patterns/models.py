@@ -240,6 +240,8 @@ class PatternConfig:
             or self.max_segment_cardinality < 1
             or not 0 < self.sample_fraction <= 1
             or self.max_rows_scanned < 1
+            or not self.detector_version.strip()
+            or not self.scoring_version.strip()
         ):
             raise ValueError("invalid pattern configuration")
 

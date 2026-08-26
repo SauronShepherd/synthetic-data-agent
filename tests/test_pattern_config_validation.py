@@ -11,6 +11,8 @@ from sda.patterns.models import PatternConfig
         ("max_category_values", 0),
         ("max_condition_depth", -1),
         ("max_segment_cardinality", 0),
+        ("detector_version", " "),
+        ("scoring_version", " "),
     ],
 )
 def test_pattern_config_rejects_invalid_bounds(field, value):
