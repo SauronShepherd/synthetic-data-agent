@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import reduce
 from operator import and_
-from typing import Any
+from typing import Any, cast
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +38,25 @@ class UnsupportedMetricResult:
 
 def unsupported_metric_result(metric: str, reason: str) -> UnsupportedMetricResult:
     return UnsupportedMetricResult(metric, reason)
+
+
+def spark_metric(frame: Any, metric: str, **kwargs: Any) -> Any:
+    """Dispatch a configured metric or return an actionable unsupported result."""
+    handlers = {
+        "pearson": spark_pearson,
+        "conditional_distribution": spark_conditional_distribution,
+        "conditional_missingness": spark_conditional_missingness,
+        "temporal_order": spark_temporal_order,
+        "state_transitions": spark_state_transitions,
+        "fanout_by_segment": spark_fanout_by_segment,
+    }
+    handler = cast(Any, handlers.get(metric))
+    if handler is None:
+        return unsupported_metric_result(metric, "metric is not implemented by the Spark adapter")
+    try:
+        return handler(frame, **kwargs)
+    except (TypeError, ValueError) as exc:
+        return unsupported_metric_result(metric, str(exc))
 
 
 def _functions() -> Any:

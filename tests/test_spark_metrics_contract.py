@@ -9,6 +9,7 @@ from sda.patterns.spark_metrics import (
     spark_conditional_distribution,
     spark_conditional_missingness,
     spark_fanout_by_segment,
+    spark_metric,
     spark_pearson,
     spark_state_transitions,
     spark_temporal_order,
@@ -50,6 +51,10 @@ def test_unsupported_spark_metric_result_is_actionable_and_raw_value_free() -> N
         "reason": "requires numeric columns",
         "schema_version": "spark-metric-result-v1",
     }
+    result = spark_metric(object(), "spearman")
+    assert result == unsupported_metric_result(
+        "spearman", "metric is not implemented by the Spark adapter"
+    )
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]
