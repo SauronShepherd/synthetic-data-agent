@@ -53,6 +53,8 @@ def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
         "segment string, status string, value double, event_time string, entity string",
     )
     assert spark_pearson(frame, "value", "value").first()["valid_pair_count"] == 3
+    with pytest.raises(ValueError, match="requires numeric columns"):
+        spark_pearson(frame, "status", "value")
     assert spark_conditional_distribution(frame, ("segment",), "status").count() == 4
     missing = spark_conditional_missingness(frame, ("segment",), "value").collect()
     assert {row["support_rows"] for row in missing} == {2}

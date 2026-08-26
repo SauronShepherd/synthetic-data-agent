@@ -19,6 +19,21 @@ def _functions() -> Any:
 
 def spark_pearson(frame: Any, left: str, right: str) -> Any:
     F = _functions()
+    numeric_types = (
+        "ByteType",
+        "ShortType",
+        "IntegerType",
+        "LongType",
+        "FloatType",
+        "DoubleType",
+        "DecimalType",
+    )
+    fields = {field.name: field.dataType.__class__.__name__ for field in frame.schema.fields}
+    unsupported = [column for column in (left, right) if fields.get(column) not in numeric_types]
+    if unsupported:
+        raise ValueError(
+            "spark_pearson requires numeric columns; unsupported columns: " + ", ".join(unsupported)
+        )
     valid = frame.where(F.col(left).isNotNull() & F.col(right).isNotNull())
     return (
         valid.agg(
