@@ -46,7 +46,11 @@ def score_relationship(
         "origin_evidence": policy.origin_evidence_weight
         * (1 if declared else min(1, len(hints) / 2)),
     }
-    score = sum(contributions.values())
+    # Keep the exposed explainability components algebraically consistent with
+    # the published score despite binary floating-point accumulation.
+    score = round(sum(contributions.values()), 6)
+    non_origin = sum(value for key, value in contributions.items() if key != "origin_evidence")
+    contributions["origin_evidence"] = score - non_origin
     if reasons:
         band, decision = "low", "rejected"
     elif score >= policy.accepted_threshold:
@@ -56,7 +60,7 @@ def score_relationship(
     else:
         band, decision = "low", "rejected"
     return {
-        "confidence_score": round(score, 6),
+        "confidence_score": score,
         "confidence_band": band,
         "decision": decision,
         "reason_codes": reasons,
