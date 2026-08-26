@@ -140,6 +140,10 @@ class GenerationPlan:
             raise ValueError("plan_version must be positive")
         if not self.source_snapshot_ids or not self.input_artifact_ids:
             raise ValueError("plans require source snapshots and input artifacts")
+        if any(not value.strip() for value in self.source_snapshot_ids):
+            raise ValueError("source snapshot ids must not be empty")
+        if any(not value.strip() for value in self.input_artifact_ids):
+            raise ValueError("input artifact ids must not be empty")
         if len(set(self.source_snapshot_ids)) != len(self.source_snapshot_ids):
             raise ValueError("source snapshot ids must be unique")
         if len(set(self.input_artifact_ids)) != len(self.input_artifact_ids):

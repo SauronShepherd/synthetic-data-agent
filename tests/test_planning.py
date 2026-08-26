@@ -141,6 +141,33 @@ def test_plan_rejects_duplicate_lineage_references() -> None:
             ("t",),
             (ColumnGenerationSpec("t", "id", "string"),),
         )
+
+
+def test_plan_rejects_blank_lineage_references() -> None:
+    with pytest.raises(ValueError, match="source snapshot ids must not be empty"):
+        GenerationPlan(
+            "p",
+            1,
+            "r",
+            ("",),
+            ("a",),
+            "c",
+            "s",
+            ("t",),
+            (ColumnGenerationSpec("t", "id", "string"),),
+        )
+    with pytest.raises(ValueError, match="input artifact ids must not be empty"):
+        GenerationPlan(
+            "p",
+            1,
+            "r",
+            ("s",),
+            ("",),
+            "c",
+            "s",
+            ("t",),
+            (ColumnGenerationSpec("t", "id", "string"),),
+        )
     with pytest.raises(ValueError, match="input artifact ids must be unique"):
         GenerationPlan(
             "p",
