@@ -57,11 +57,14 @@ class GenerationManifest:
     source_snapshot_ids: tuple[str, ...]
     input_artifact_ids: tuple[str, ...]
     receipt: GenerationReceipt
+    schema_version: str = "generation-manifest-v1"
 
     def __post_init__(self) -> None:
         for name in ("run_id", "output_table", "plan_id", "plan_fingerprint"):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must not be empty")
+        if not self.schema_version.strip():
+            raise ValueError("schema_version must not be empty")
         if self.receipt.plan_id != self.plan_id:
             raise ValueError("receipt plan_id does not match manifest plan_id")
         if self.receipt.plan_fingerprint != self.plan_fingerprint:

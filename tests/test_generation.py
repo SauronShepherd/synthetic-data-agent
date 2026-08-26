@@ -182,6 +182,7 @@ def test_generation_manifest_binds_receipt_and_plan_lineage() -> None:
     )
     assert manifest.to_dict()["receipt"] == receipt.to_dict()
     assert manifest.to_dict()["seed"] == current_plan.seed
+    assert manifest.to_dict()["schema_version"] == "generation-manifest-v1"
     assert manifest.source_snapshot_ids == current_plan.source_snapshot_ids
     with pytest.raises(GenerationError, match="does not belong"):
         manifest_for(
