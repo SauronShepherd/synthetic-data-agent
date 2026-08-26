@@ -243,12 +243,14 @@ def test_pattern_candidate_nested_fields_are_immutable() -> None:
         "main.s.t",
         ["driver"],
         ["outcome"],
-        {"operator": "equals"},
+        {"operator": "equals", "nested": {"values": ["a"]}},
     )
     assert candidate.driver_columns == ("driver",)
     assert candidate.outcome_columns == ("outcome",)
     with pytest.raises(TypeError, match="immutable"):
         candidate.condition["operator"] = "contains"  # type: ignore[index]
+    with pytest.raises(TypeError, match="immutable"):
+        candidate.condition["nested"]["values"][0] = "b"  # type: ignore[index]
 
 
 def test_candidates_include_structural_pattern_families() -> None:

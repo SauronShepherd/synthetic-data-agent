@@ -19,7 +19,7 @@ class PatternCandidate:
         object.__setattr__(self, "driver_columns", tuple(self.driver_columns))
         object.__setattr__(self, "outcome_columns", tuple(self.outcome_columns))
         if self.condition is not None:
-            object.__setattr__(self, "condition", _FrozenMapping(self.condition))
+            object.__setattr__(self, "condition", _freeze(self.condition))
 
 
 class _FrozenMapping(dict[str, object]):
@@ -27,6 +27,14 @@ class _FrozenMapping(dict[str, object]):
         raise TypeError("pattern candidates are immutable")
 
     __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
+def _freeze(value: object) -> object:
+    if isinstance(value, dict):
+        return _FrozenMapping({str(key): _freeze(item) for key, item in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_freeze(item) for item in value)
+    return value
 
 
 @dataclass(frozen=True, slots=True)
