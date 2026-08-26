@@ -65,6 +65,19 @@ def test_temporal_lag_dispatch_is_registered() -> None:
     assert "required" in result.reason.lower()
 
 
+def test_temporal_metric_missing_columns_returns_actionable_result() -> None:
+    class Frame:
+        schema = type("Schema", (), {"fields": ()})()
+
+    result = spark_metric(Frame(), "temporal_lag", earlier="started_at", later="finished_at")
+    assert result.to_dict() == {
+        "metric": "temporal_lag",
+        "supported": False,
+        "reason": "spark_temporal_lag requires columns: started_at, finished_at",
+        "schema_version": "spark-metric-result-v1",
+    }
+
+
 @pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
     frame = spark.createDataFrame(

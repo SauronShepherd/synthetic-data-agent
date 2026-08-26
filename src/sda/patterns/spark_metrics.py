@@ -66,6 +66,13 @@ def _functions() -> Any:
     return F
 
 
+def _require_columns(frame: Any, columns: tuple[str, ...], *, metric: str) -> None:
+    available = {field.name for field in frame.schema.fields}
+    missing = [column for column in columns if column not in available]
+    if missing:
+        raise ValueError(f"{metric} requires columns: {', '.join(missing)}")
+
+
 def spark_pearson(frame: Any, left: str, right: str) -> Any:
     F = _functions()
     numeric_types = (
@@ -174,6 +181,7 @@ def spark_fanout_by_segment(
 
 def spark_temporal_order(frame: Any, earlier: str, later: str) -> Any:
     F = _functions()
+    _require_columns(frame, (earlier, later), metric="spark_temporal_order")
     eligible = frame.where(F.col(earlier).isNotNull() & F.col(later).isNotNull())
     return eligible.agg(
         F.count(F.lit(1)).alias("eligible_rows"),
@@ -186,6 +194,7 @@ def spark_temporal_order(frame: Any, earlier: str, later: str) -> Any:
 def spark_temporal_lag(frame: Any, earlier: str, later: str) -> Any:
     """Return bounded lag distribution aggregates without collecting timestamps."""
     F = _functions()
+    _require_columns(frame, (earlier, later), metric="spark_temporal_lag")
     earlier_ts = F.col(earlier).cast("timestamp")
     later_ts = F.col(later).cast("timestamp")
     eligible = frame.where(earlier_ts.isNotNull() & later_ts.isNotNull())
