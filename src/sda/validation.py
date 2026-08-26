@@ -9,6 +9,13 @@ from typing import Any
 from sda.artifacts.fingerprint import fingerprint
 
 
+class _FrozenDict(dict[str, Any]):
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("validation evidence is immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
 class CheckStatus(StrEnum):
     PASS = "PASS"
     WARN = "WARN"
@@ -25,12 +32,24 @@ class ValidationCheck:
     threshold: float | int | str | None = None
     method: str = "deterministic"
 
+    def __post_init__(self) -> None:
+        if not self.check_id.strip() or not self.message.strip() or not self.method.strip():
+            raise ValueError("validation check identity, message, and method are required")
+        object.__setattr__(self, "evidence", _FrozenDict(self.evidence))
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationReport:
     checks: tuple[ValidationCheck, ...]
     intended_use: str
     technical_disposition: CheckStatus
+
+    def __post_init__(self) -> None:
+        if not self.intended_use.strip():
+            raise ValueError("validation intended use is required")
+        ids = [check.check_id for check in self.checks]
+        if len(ids) != len(set(ids)):
+            raise ValueError("validation check IDs must be unique")
 
     @property
     def fingerprint(self) -> str:

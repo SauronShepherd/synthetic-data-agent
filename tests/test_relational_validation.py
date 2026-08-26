@@ -9,7 +9,15 @@ from sda.relational import (
     RelationalGenerationError,
     generate_relational,
 )
-from sda.validation import CheckStatus, validate_tables
+from sda.validation import CheckStatus, ValidationCheck, ValidationReport, validate_tables
+
+
+def test_validation_evidence_is_immutable_and_check_ids_are_unique() -> None:
+    check = ValidationCheck("schema", CheckStatus.PASS, "ok", {"actual": 1})
+    with pytest.raises(TypeError, match="immutable"):
+        check.evidence["actual"] = 2
+    with pytest.raises(ValueError, match="unique"):
+        ValidationReport((check, check), "qa", CheckStatus.PASS)
 
 
 def plan() -> GenerationPlan:
