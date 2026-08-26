@@ -54,7 +54,7 @@ design evidence; the repository is the source of truth for what is currently pre
   pattern-detection capability.
 - [x] Reconcile `README.md`, `docs/architecture.md`, and bundle descriptions so they
   say consistently that patterns are implemented while generation is not.
-- [ ] Add a formal SDA 07 schema/version compatibility policy for registry and evidence
+- [x] Add a formal SDA 07 schema/version compatibility policy for registry and evidence
   artifacts; reject incompatible upstream versions instead of accepting best effort.
 - [ ] Make `sda_pattern_mode`, sample fraction, seed, support thresholds, budgets, and
   detector/scoring versions part of one validated configuration object and fingerprint.
