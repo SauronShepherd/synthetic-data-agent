@@ -64,3 +64,11 @@ def test_privacy_finding_evidence_is_deeply_immutable() -> None:
     )
     with pytest.raises(TypeError, match="immutable"):
         report.findings[0].evidence["table"] = "changed"
+
+
+def test_privacy_finding_serialization_redacts_raw_evidence() -> None:
+    report = assess_privacy(
+        {"users": (({"email": "secret@example.test"}),)},
+        direct_identifier_columns=(("users", "email"),),
+    )
+    assert "secret@example.test" not in str(report.findings[0].to_dict())

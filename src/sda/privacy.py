@@ -30,6 +30,16 @@ def _freeze(value: Any) -> Any:
     return value
 
 
+def _safe_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _safe_payload(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return tuple(_safe_payload(item) for item in value)
+    if isinstance(value, int | float | bool) or value is None:
+        return value
+    return {"fingerprint": fingerprint(value)}
+
+
 @dataclass(frozen=True, slots=True)
 class PrivacyFinding:
     code: str
@@ -45,7 +55,7 @@ class PrivacyFinding:
             "code": self.code,
             "severity": self.severity,
             "message": self.message,
-            "evidence": self.evidence,
+            "evidence": _safe_payload(self.evidence),
         }
 
 
