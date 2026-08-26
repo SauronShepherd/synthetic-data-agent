@@ -180,6 +180,10 @@ def resume_from_checkpoint(
         raise StreamError("checkpoint is incompatible with the stream plan")
     if saved.next_offset < 0 or saved.next_offset > plan.event_count:
         raise StreamError("checkpoint offset is outside the stream range")
+    prefix = generate_bounded_events(plan, start_offset=0)[: saved.next_offset]
+    expected_replay = manifest(plan, prefix).replay_fingerprint
+    if saved.replay_fingerprint != expected_replay:
+        raise StreamError("checkpoint replay fingerprint does not match the stream")
     return generate_bounded_events(plan, start_offset=saved.next_offset)
 
 

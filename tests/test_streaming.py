@@ -59,6 +59,18 @@ def test_checkpoint_resume_is_plan_bound_and_duplicate_safe() -> None:
         resume_from_checkpoint(
             StreamingPlan("stream-1", "fp-1", event_count=4, query_id="other"), saved
         )
+    with pytest.raises(StreamError, match="replay fingerprint"):
+        resume_from_checkpoint(
+            current,
+            StreamCheckpoint(
+                saved.stream_id,
+                saved.plan_fingerprint,
+                saved.schema_version,
+                saved.query_id,
+                saved.next_offset,
+                "tampered",
+            ),
+        )
 
 
 def test_checkpoint_rejects_gaps_and_cross_stream_events() -> None:
