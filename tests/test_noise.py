@@ -169,6 +169,22 @@ def test_historical_noise_profile_is_a_supported_plan_contract() -> None:
     assert plan.profile.value == "historical"
 
 
+def test_noise_profiles_have_deterministic_default_budgets() -> None:
+    baseline = tuple({"value": str(index)} for index in range(20))
+    results = {
+        profile: apply_noise(
+            baseline,
+            NoisePlan("n", fingerprint(baseline), profile=profile, defect_type="casing"),
+            column="value",
+        )
+        for profile in NoiseProfile
+    }
+    assert len(results[NoiseProfile.HISTORICAL].mutations) == 0
+    assert len(results[NoiseProfile.MILD].mutations) == 1
+    assert len(results[NoiseProfile.QA].mutations) == 2
+    assert len(results[NoiseProfile.STRESS].mutations) == 5
+
+
 def test_noise_scenarios_are_deterministic_but_independently_selected() -> None:
     baseline = tuple({"value": str(index)} for index in range(4))
     first = apply_noise(

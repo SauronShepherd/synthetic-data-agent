@@ -37,6 +37,13 @@ SUPPORTED_DEFECTS = frozenset(
     }
 )
 
+PROFILE_DEFAULT_RATES: dict[NoiseProfile, float] = {
+    NoiseProfile.HISTORICAL: 0.01,
+    NoiseProfile.MILD: 0.05,
+    NoiseProfile.QA: 0.10,
+    NoiseProfile.STRESS: 0.25,
+}
+
 
 class NoiseError(ValueError):
     """Raised when a noise plan is invalid or exceeds its budget."""
@@ -142,7 +149,9 @@ def _selection_key(plan: NoisePlan, index: int) -> bytes:
 
 def _resolved_budget(plan: NoisePlan, row_count: int) -> int:
     if plan.budget_rate is None:
-        return min(plan.budget, row_count)
+        if plan.budget:
+            return min(plan.budget, row_count)
+        return min(int(PROFILE_DEFAULT_RATES[plan.profile] * row_count + 0.5), row_count)
     return min(int(plan.budget_rate * row_count + 0.5), row_count)
 
 
