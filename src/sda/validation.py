@@ -227,6 +227,7 @@ def validate_tables(
                     method="availability_check",
                 )
             )
+            continue
         rows = tables[table]
         for column, expected_distribution in distribution_columns.items():
             check_id = f"distribution:{table}.{column}"
@@ -254,15 +255,17 @@ def validate_tables(
                 value = row[column]
                 counts[value] = counts.get(value, 0) + 1
             total = len(rows)
-            observed = {value: count / total for value, count in counts.items()} if total else {}
+            observed_distribution = (
+                {value: count / total for value, count in counts.items()} if total else {}
+            )
             errors = {
-                str(value): abs(observed.get(value, 0.0) - probability)
+                str(value): abs(observed_distribution.get(value, 0.0) - probability)
                 for value, probability in expected_distribution.items()
             }
             errors.update(
                 {
                     str(value): probability
-                    for value, probability in observed.items()
+                    for value, probability in observed_distribution.items()
                     if value not in expected_distribution
                 }
             )
@@ -276,7 +279,7 @@ def validate_tables(
                     f"{table}.{column} distribution maximum error is {maximum_error:.6f}",
                     {
                         "expected": expected_distribution,
-                        "observed": observed,
+                        "observed": observed_distribution,
                         "maximum_error": maximum_error,
                     },
                     distribution_tolerance,
