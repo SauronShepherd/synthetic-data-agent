@@ -473,13 +473,15 @@ def validate_tables(
         invalid = 0
         for row in rows:
             earlier, later = row[earlier_column], row[later_column]
-            if not isinstance(earlier, (date, datetime, int, float, str)) or not isinstance(
-                later, (date, datetime, int, float, str)
+            if (
+                not isinstance(earlier, date | datetime | int | float | str)
+                or not isinstance(later, date | datetime | int | float | str)
+                or type(earlier) is not type(later)
             ):
                 invalid += 1
             else:
                 try:
-                    invalid += earlier > later
+                    invalid += bool(earlier > later)
                 except TypeError:
                     invalid += 1
         checks.append(
