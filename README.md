@@ -82,6 +82,15 @@ To execute real Unity Catalog queries from your laptop through a Databricks SQL 
 python -m pip install -e ".[dev,databricks]"
 ```
 
+For durable workflow state in PostgreSQL or Databricks Lakebase, install the
+optional PostgreSQL extra and construct `PostgreSQLStateRepository` with a DSN
+or an injected DB-API connection. Apply `sql/lakebase_state_schema.sql` before
+starting the service; generated rows and analytical evidence remain in Delta.
+
+```bash
+python -m pip install -e ".[postgres]"
+```
+
 Or use:
 
 ```bash
