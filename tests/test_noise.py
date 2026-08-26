@@ -109,3 +109,16 @@ def test_near_duplicate_noise_rejects_empty_strings() -> None:
             NoisePlan("n", fingerprint(baseline), defect_type="near_duplicate", budget=1),
             column="value",
         )
+
+
+def test_noise_truth_ledger_is_raw_value_free() -> None:
+    baseline = (({"value": "secret"}),)
+    result = apply_noise(
+        baseline,
+        NoisePlan("n", fingerprint(baseline), defect_type="casing", budget=1),
+        column="value",
+    )
+    ledger = result.truth_ledger()
+    assert ledger[0]["before_fingerprint"] == fingerprint("secret")
+    assert ledger[0]["after_fingerprint"] == fingerprint("SECRET")
+    assert "secret" not in str(ledger)

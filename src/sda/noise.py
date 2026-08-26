@@ -73,6 +73,17 @@ class Mutation:
     before: Any
     after: Any
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return an audit record without exposing mutated values."""
+        return {
+            "noise_id": self.noise_id,
+            "row_index": self.row_index,
+            "column": self.column,
+            "defect_type": self.defect_type,
+            "before_fingerprint": fingerprint(self.before),
+            "after_fingerprint": fingerprint(self.after),
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class NoiseResult:
@@ -80,6 +91,10 @@ class NoiseResult:
     mutations: tuple[Mutation, ...]
     baseline_fingerprint: str
     output_fingerprint: str
+
+    def truth_ledger(self) -> tuple[dict[str, Any], ...]:
+        """Return deterministic, raw-value-free mutation evidence."""
+        return tuple(mutation.to_dict() for mutation in self.mutations)
 
 
 def inject_nulls(
