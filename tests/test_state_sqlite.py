@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -88,6 +89,27 @@ def test_sqlite_failed_run_can_be_explicitly_retried() -> None:
     ):
         repo.transition_run("run-1", status)
     assert repo.transition_run("run-1", WorkflowStatus.EXECUTING).status is WorkflowStatus.EXECUTING
+    repo.close()
+
+
+def test_sqlite_migrates_legacy_approvals_table(tmp_path: object) -> None:
+    path = str(tmp_path / "legacy.db")
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE runs (run_id TEXT PRIMARY KEY, request_id TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL, plan_id TEXT, plan_fingerprint TEXT, version INTEGER NOT NULL, updated_at TEXT NOT NULL)"
+    )
+    connection.execute(
+        "CREATE TABLE approvals (run_id TEXT NOT NULL, approval_type TEXT NOT NULL, decision TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY (run_id, approval_type))"
+    )
+    connection.commit()
+    connection.close()
+    repo = SQLiteStateRepository(path)
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    approval = Approval("run-1", "human", "approved", "reviewer")
+    repo.record_approval(approval)
+    assert (
+        repo._connection.execute("PRAGMA table_info(approvals)").fetchall()[-1][1] == "decided_at"
+    )
     repo.close()
 
 
