@@ -80,6 +80,21 @@ def test_detector_emits_temporal_lag_metrics() -> None:
     assert temporal[0].support_rate == 1.0
 
 
+def test_coordinated_detector_persists_support_rates() -> None:
+    refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [{"x": 1, "y": 2}, {"x": 2, "y": 4}],
+        table="main.s.t",
+        columns={"x": "int", "y": "int"},
+        input_refs=refs,
+        run_id="run",
+        environment="dev",
+        selected_tables=("main.s.t",),
+    )
+    assert result.patterns
+    assert all(pattern.support_rate is not None for pattern in result.patterns)
+
+
 def test_pattern_nested_evidence_is_immutable() -> None:
     pattern = PatternDetector(PatternConfig(min_support_rows=2)).detect(
         [{"x": 1, "y": 2}, {"x": 2, "y": 4}],

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any, overload
 
@@ -338,6 +339,13 @@ class PatternDetector:
                         metric,
                     ),
                 )
+        if rows:
+            patterns = tuple(
+                replace(pattern, support_rate=pattern.support_rows / len(rows))
+                if pattern.support_rate is None
+                else pattern
+                for pattern in patterns
+            )
         accepted = sum(p.decision == "accepted_for_planning" for p in patterns)
         rule_conflicts = resolve_rule_conflicts(list(rules), self.rule_precedence_policy)
         receipt = PatternExecutionReceipt(
