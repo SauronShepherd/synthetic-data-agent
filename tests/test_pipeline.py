@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from sda.pipeline import run_standalone
 from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus
 
@@ -50,6 +52,19 @@ def test_pipeline_runs_all_gates_and_publishes() -> None:
     assert result.manifest.output_fingerprint == result.receipt.output_fingerprint
     assert result.manifest.locations == {"output": "uc.t"}
     assert result.publication.validation_fingerprint != approved_plan().plan_fingerprint
+
+
+def test_pipeline_can_write_atomic_staging_output(tmp_path) -> None:
+    destination = tmp_path / "staging" / "rows.jsonl"
+    result = run_standalone(
+        approved_plan(),
+        row_count=2,
+        dataset_id="d",
+        dataset_version="v1",
+        location="uc.t",
+        staging_path=str(destination),
+    )
+    assert [json.loads(line) for line in destination.read_text().splitlines()] == list(result.rows)
 
 
 def test_pipeline_blocks_publication_for_unapproved_direct_identifier() -> None:

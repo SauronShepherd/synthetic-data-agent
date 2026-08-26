@@ -44,6 +44,7 @@ def run_standalone(
     direct_identifier_columns: tuple[tuple[str, str], ...] = (),
     quasi_identifier_columns: tuple[tuple[str, str], ...] = (),
     min_quasi_group_size: int = 2,
+    staging_path: str | None = None,
     audit_log: AuditLog | None = None,
 ) -> PipelineResult:
     """Execute generation, validation, privacy assessment, and optional publication."""
@@ -63,6 +64,10 @@ def run_standalone(
         )
     )
     rows = generate_rows(plan, row_count=row_count)
+    if staging_path is not None:
+        from sda.generation import write_staging_rows
+
+        write_staging_rows(staging_path, rows)
     receipt = receipt_for(plan, rows)
     generation_manifest = manifest_for(plan, receipt, run_id=plan.request_id, output_table=location)
     table_name = plan.tables[0]
