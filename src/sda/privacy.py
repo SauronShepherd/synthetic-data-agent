@@ -90,6 +90,7 @@ def assess_privacy(
     direct_identifier_columns: tuple[tuple[str, str], ...] = (),
     quasi_identifier_columns: tuple[tuple[str, str], ...] = (),
     approved_columns: tuple[tuple[str, str], ...] = (),
+    approved_vocabularies: dict[tuple[str, str], tuple[Any, ...]] | None = None,
     max_duplicate_rows: int = 0,
     reference_tables: dict[str, tuple[dict[str, Any], ...]] | None = None,
     max_reference_matches: int = 0,
@@ -118,6 +119,29 @@ def assess_privacy(
                     "high",
                     f"{table}.{column} is sensitive and has no explicit approval",
                     {"table": table, "column": column},
+                )
+            )
+    for (table, column), vocabulary in (approved_vocabularies or {}).items():
+        rows = tables.get(table)
+        if rows is None:
+            findings.append(
+                PrivacyFinding(
+                    "approved_vocabulary_table_missing",
+                    "high",
+                    f"{table} is unavailable for vocabulary review",
+                    {"table": table, "column": column},
+                )
+            )
+            continue
+        allowed = {fingerprint(value) for value in vocabulary}
+        invalid = sum(fingerprint(row.get(column)) not in allowed for row in rows)
+        if invalid:
+            findings.append(
+                PrivacyFinding(
+                    "unapproved_vocabulary_value",
+                    "high",
+                    f"{table}.{column} contains {invalid} values outside the approved vocabulary",
+                    {"table": table, "column": column, "invalid_values": invalid},
                 )
             )
     for table, column in quasi_identifier_columns:

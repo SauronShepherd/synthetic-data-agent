@@ -83,3 +83,13 @@ def test_reference_matches_are_rejected_without_raw_values() -> None:
     finding = report.findings[0]
     assert finding.code == "memorization_match_risk"
     assert "1" in str(finding.to_dict())
+
+
+def test_approved_vocabulary_rejects_unknown_values_without_raw_values() -> None:
+    report = assess_privacy(
+        {"t": (({"status": "secret"}),)},
+        approved_vocabularies={("t", "status"): ("approved", "rejected")},
+    )
+    assert report.decision is PrivacyDecision.REJECTED
+    assert report.findings[0].code == "unapproved_vocabulary_value"
+    assert "secret" not in str(report.findings[0].to_dict())
