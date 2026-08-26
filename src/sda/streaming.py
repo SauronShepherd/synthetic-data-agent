@@ -116,6 +116,16 @@ class StreamCheckpoint:
     next_offset: int
     replay_fingerprint: str
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stream_id": self.stream_id,
+            "plan_fingerprint": self.plan_fingerprint,
+            "schema_version": self.schema_version,
+            "query_id": self.query_id,
+            "next_offset": self.next_offset,
+            "replay_fingerprint": self.replay_fingerprint,
+        }
+
 
 def checkpoint(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamCheckpoint:
     """Create a checkpoint that can only be resumed by the same stream plan."""

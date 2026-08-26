@@ -49,6 +49,7 @@ def test_checkpoint_resume_is_plan_bound_and_duplicate_safe() -> None:
     current = plan()
     prefix = generate_bounded_events(current, start_offset=0)[:2]
     saved = checkpoint(current, prefix)
+    assert saved.to_dict()["query_id"] == current.query_id
     assert resume_from_checkpoint(current, saved) == generate_bounded_events(current)[2:]
     assert len(deduplicate_events(prefix + prefix)) == len(prefix)
     with pytest.raises(StreamError, match="incompatible"):
