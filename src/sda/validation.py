@@ -115,6 +115,7 @@ def validate_tables(
     distribution_tolerance: float = 0.0,
     conditional_null_rates: dict[str, dict[tuple[str, str], dict[Any, float]]] | None = None,
     format_patterns: dict[str, dict[str, str]] | None = None,
+    validation_vector: dict[str, CheckStatus] | None = None,
     intended_use: str = "unspecified",
 ) -> ValidationReport:
     checks: list[ValidationCheck] = []
@@ -125,6 +126,7 @@ def validate_tables(
     conditional_null_rates = conditional_null_rates or {}
     fanout_bounds = fanout_bounds or {}
     format_patterns = format_patterns or {}
+    validation_vector = validation_vector or {}
     if distribution_tolerance < 0:
         raise ValueError("distribution_tolerance must not be negative")
     for table, columns in required_columns.items():
@@ -445,4 +447,4 @@ def validate_tables(
     disposition = (
         CheckStatus.FAIL if any(c.status is CheckStatus.FAIL for c in checks) else CheckStatus.PASS
     )
-    return ValidationReport(tuple(checks), intended_use, disposition)
+    return ValidationReport(tuple(checks), intended_use, disposition, validation_vector)

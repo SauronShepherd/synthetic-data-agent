@@ -236,3 +236,15 @@ def test_validation_checks_parent_fanout_including_zero_child_parents() -> None:
     )
     assert report.technical_disposition is CheckStatus.PASS
     assert report.checks[-1].evidence["zero_child_parents"] == 1
+
+
+def test_validate_tables_preserves_intended_use_validation_vector() -> None:
+    report = validate_tables(
+        {"users": (({"id": 1}),)},
+        intended_use="qa",
+        validation_vector={"schema": CheckStatus.PASS, "privacy": CheckStatus.WARN},
+    )
+    assert report.intended_use == "qa"
+    assert report.validation_vector["privacy"] is CheckStatus.WARN
+    with pytest.raises(TypeError, match="immutable"):
+        report.validation_vector["schema"] = CheckStatus.FAIL  # type: ignore[index]
