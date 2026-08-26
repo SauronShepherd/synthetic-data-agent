@@ -40,6 +40,7 @@ class PatternFamily(StrEnum):
     CONDITIONAL_MISSINGNESS = "conditional_missingness"
     FANOUT_BY_SEGMENT = "fanout_by_segment"
     TEMPORAL_ORDER = "temporal_order"
+    TEMPORAL_LAG = "temporal_lag"
     STATE_TRANSITION = "state_transition"
     BUSINESS_RULE = "business_rule"
 

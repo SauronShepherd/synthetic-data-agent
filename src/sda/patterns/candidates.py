@@ -112,6 +112,7 @@ def generate_candidates(
     temporal = tuple(name for name in outcomes if name.endswith(("_at", "_date", "_time", "_ts")))
     for earlier, later in combinations(temporal, 2):
         result.append(PatternCandidate(PatternFamily.TEMPORAL_ORDER, table, (earlier,), (later,)))
+        result.append(PatternCandidate(PatternFamily.TEMPORAL_LAG, table, (earlier,), (later,)))
     entity_columns = tuple(
         name for name in outcomes if name.lower().endswith("_id") or name.lower() == "id"
     )

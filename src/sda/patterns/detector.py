@@ -26,6 +26,7 @@ from sda.patterns.models import (
 from sda.patterns.precedence import RulePrecedencePolicy
 from sda.patterns.rules import evaluate_rule
 from sda.patterns.scoring import EvidenceQuality, PatternScoringPolicy
+from sda.patterns.temporal import temporal_order
 from sda.patterns.temporal_lags import lag_distribution
 from sda.patterns.transitions import state_transitions
 
@@ -274,13 +275,29 @@ class PatternDetector:
                                 return tuple(result)
         if len(temporal_columns) >= 2:
             earlier, later = temporal_columns[:2]
-            metric = lag_distribution(rows, earlier=earlier, later=later)
-            if metric.get("count", 0) >= self.config.min_support_rows:
+            order_metric = temporal_order(rows, earlier, later)
+            lag_metric = lag_distribution(rows, earlier=earlier, later=later)
+            if order_metric.get("eligible_rows", 0) >= self.config.min_support_rows:
                 result.append(
                     self._pattern(
                         analysis_id,
                         table,
                         PatternFamily.TEMPORAL_ORDER,
+                        (earlier, later),
+                        {},
+                        {"later": later},
+                        int(order_metric["eligible_rows"]),
+                        {**order_metric, **lag_metric},
+                        support_rate=order_metric["eligible_rows"] / len(rows) if rows else 0.0,
+                    )
+                )
+            metric = lag_metric
+            if metric.get("count", 0) >= self.config.min_support_rows:
+                result.append(
+                    self._pattern(
+                        analysis_id,
+                        table,
+                        PatternFamily.TEMPORAL_LAG,
                         (earlier, later),
                         {},
                         {"later": later},
@@ -496,7 +513,7 @@ class PatternDetector:
                     self._pattern(
                         run_id,
                         table,
-                        PatternFamily.TEMPORAL_ORDER,
+                        PatternFamily.TEMPORAL_LAG,
                         (earlier, later),
                         {},
                         {"later": later},
@@ -660,6 +677,7 @@ class PatternDetector:
                     PatternFamily.CONDITIONAL_MISSINGNESS: "apply_conditional_missingness",
                     PatternFamily.FANOUT_BY_SEGMENT: "sample_child_count_by_parent_segment",
                     PatternFamily.TEMPORAL_ORDER: "sample_temporal_lag",
+                    PatternFamily.TEMPORAL_LAG: "sample_temporal_lag",
                     PatternFamily.STATE_TRANSITION: "sample_next_state",
                 }.get(family, "review_pattern"),
                 "evidence_pattern_id": pid,
@@ -670,6 +688,7 @@ class PatternDetector:
                     PatternFamily.CONDITIONAL_DISTRIBUTION: "compare_conditional_distribution",
                     PatternFamily.CONDITIONAL_MISSINGNESS: "compare_null_probability",
                     PatternFamily.TEMPORAL_ORDER: "compare_lag_distribution",
+                    PatternFamily.TEMPORAL_LAG: "compare_lag_distribution",
                     PatternFamily.STATE_TRANSITION: "compare_transition_probabilities",
                 }.get(family, "review_pattern")
             },
