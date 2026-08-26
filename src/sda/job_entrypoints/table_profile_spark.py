@@ -76,6 +76,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
+    if not args.run_id:
+        from datetime import UTC, datetime
+
+        args.run_id = f"table-profile-{datetime.now(UTC).strftime('%Y%m%d%H%M%S')}"
     source_name = QualifiedName.parse(args.source_table)
     request = TableProfileRequest(
         source_table=source_name.full_name,
