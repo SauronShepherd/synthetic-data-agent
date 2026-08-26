@@ -28,6 +28,8 @@ jobs:
         run: mypy src
       - name: Tests and coverage
         run: python -m pytest -q -m "not spark" --tb=short --junitxml=test-results.xml --cov=src/sda --cov-report=term-missing
+      - name: Local release smoke scenarios
+        run: python scripts/smoke_local.py
       - name: Upload test diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
