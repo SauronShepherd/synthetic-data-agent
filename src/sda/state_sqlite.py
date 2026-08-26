@@ -68,7 +68,7 @@ class SQLiteStateRepository(StateRepository):
             return self.get_run(existing[0])
         try:
             self._connection.execute(
-                "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO runs (run_id, request_id, idempotency_key, status, plan_id, plan_fingerprint, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     run.run_id,
                     run.request_id,
