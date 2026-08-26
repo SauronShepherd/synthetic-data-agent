@@ -261,21 +261,25 @@ class PatternDetector:
                     )
         # Emit conditional-missingness findings for every bounded driver/outcome pair.
         for driver in categorical[: self.config.max_candidates]:
-            for outcome in names:
-                metric = conditional_missingness(rows, {driver: rows[0].get(driver)}, outcome)
-                if metric.get("support_rows", 0) >= self.config.min_support_rows:
-                    patterns += (
-                        self._pattern(
-                            run_id,
-                            table,
-                            PatternFamily.CONDITIONAL_MISSINGNESS,
-                            (driver, outcome),
-                            {driver: rows[0].get(driver)},
-                            {"outcome": outcome},
-                            int(metric["support_rows"]),
-                            metric,
-                        ),
-                    )
+            driver_values = sorted({row.get(driver) for row in rows}, key=lambda value: str(value))[
+                : self.config.max_segment_cardinality
+            ]
+            for driver_value in driver_values:
+                for outcome in names:
+                    metric = conditional_missingness(rows, {driver: driver_value}, outcome)
+                    if metric.get("support_rows", 0) >= self.config.min_support_rows:
+                        patterns += (
+                            self._pattern(
+                                run_id,
+                                table,
+                                PatternFamily.CONDITIONAL_MISSINGNESS,
+                                (driver, outcome),
+                                {driver: driver_value},
+                                {"outcome": outcome},
+                                int(metric["support_rows"]),
+                                metric,
+                            ),
+                        )
         # State transitions are entity/lifecycle evidence, not hard business rules.
         entity = next((name for name in names if name.lower().endswith(("_id", "id"))), None)
         state = next(

@@ -74,6 +74,30 @@ def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> No
     assert result.receipt.source_tables_scanned == 1
 
 
+def test_coordinator_emits_conditional_missingness_for_each_segment() -> None:
+    refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [
+            {"segment": "A", "value": None},
+            {"segment": "A", "value": None},
+            {"segment": "B", "value": 1},
+            {"segment": "B", "value": 2},
+        ],
+        table="main.s.t",
+        input_refs=refs,
+        run_id="run-segments",
+        environment="dev",
+        selected_tables=("main.s.t",),
+    )
+    findings = [
+        pattern
+        for pattern in result.patterns
+        if pattern.family.value == "conditional_missingness"
+        and pattern.outcome.get("outcome") == "value"
+    ]
+    assert {pattern.condition["segment"] for pattern in findings} == {"A", "B"}
+
+
 def test_candidates_are_bounded_and_deterministic() -> None:
     columns = {f"c{i}": "double" for i in range(20)}
     config = PatternConfig(max_candidates=7)
