@@ -22,3 +22,10 @@ targets:
       sda_metadata_inventory_table: sda_dev.profiles.metadata_inventory
       sda_manifest_table: sda_dev.profiles.run_manifests
       sda_artifact_registry_table: sda_dev.profiles.artifact_registry
+      sda_pattern_registry_table: sda_dev.profiles.pattern_registry
+      sda_pattern_evidence_table: sda_dev.profiles.pattern_evidence
+      sda_pattern_mode: quick
+      sda_pattern_min_support_rows: "100"
+      sda_pattern_min_support_rate: "0.001"
+      sda_pattern_sample_fraction: "0.1"
+      sda_pattern_sample_seed: "1729"

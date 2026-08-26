@@ -58,7 +58,7 @@ design evidence; the repository is the source of truth for what is currently pre
   artifacts; reject incompatible upstream versions instead of accepting best effort.
 - [x] Make `sda_pattern_mode`, sample fraction, seed, support thresholds, budgets, and
   detector/scoring versions part of one validated configuration object and fingerprint.
-- [ ] Add bundle resources and task dependencies for pattern detection to
+- [x] Add bundle resources and task dependencies for pattern detection to
   `bundle/resources.yml`; validate dev/staging/prod variable wiring and output tables.
 - [ ] Add a documented migration/retention policy for `pattern_registry` and
   `pattern_evidence`, including run scope, source snapshot, evidence freshness, and
