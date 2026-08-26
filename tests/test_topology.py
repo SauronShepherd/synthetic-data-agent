@@ -66,6 +66,14 @@ def test_topology_result_validator_rejects_unknown_endpoints() -> None:
         validate_topology(plan, corrupted)
 
 
+def test_topology_validator_rejects_inconsistent_metrics() -> None:
+    plan = TopologyPlan("g", "fp", node_count=2, edge_count=1)
+    result = generate_topology(plan)
+    corrupted = type(result)(result.nodes, result.edges, {**result.metrics, "edge_count": 0})
+    with pytest.raises(TopologyError, match="metrics"):
+        validate_topology(plan, corrupted)
+
+
 def test_topology_validator_accepts_acyclic_undirected_tree() -> None:
     plan = TopologyPlan(
         "tree", "fp", node_count=3, edge_count=2, kind=GraphKind.UNDIRECTED, acyclic=True

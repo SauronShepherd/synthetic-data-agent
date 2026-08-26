@@ -163,6 +163,10 @@ def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
     """Validate a topology result before it crosses a persistence boundary."""
     if len(result.nodes) != plan.node_count or len(result.edges) != plan.edge_count:
         raise TopologyError("topology result counts do not match the plan")
+    if result.metrics.get("node_count") != len(result.nodes) or result.metrics.get(
+        "edge_count"
+    ) != len(result.edges):
+        raise TopologyError("topology result metrics do not match the payload")
     node_ids = [str(node.get("node_id", "")) for node in result.nodes]
     if (
         not node_ids
