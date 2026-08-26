@@ -58,6 +58,7 @@ class GenerationManifest:
     input_artifact_ids: tuple[str, ...]
     receipt: GenerationReceipt
     schema_version: str = "generation-manifest-v1"
+    output_columns: tuple[tuple[str, str, bool], ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("run_id", "output_table", "plan_id", "plan_fingerprint"):
@@ -65,6 +66,10 @@ class GenerationManifest:
                 raise ValueError(f"{name} must not be empty")
         if not self.schema_version.strip():
             raise ValueError("schema_version must not be empty")
+        if any(
+            not name.strip() or not data_type.strip() for name, data_type, _ in self.output_columns
+        ):
+            raise ValueError("output_columns must contain non-empty names and types")
         if self.receipt.plan_id != self.plan_id:
             raise ValueError("receipt plan_id does not match manifest plan_id")
         if self.receipt.plan_fingerprint != self.plan_fingerprint:
@@ -99,6 +104,11 @@ def manifest_for(
         source_snapshot_ids=plan.source_snapshot_ids,
         input_artifact_ids=plan.input_artifact_ids,
         receipt=receipt,
+        output_columns=tuple(
+            (spec.column, spec.data_type, spec.nullable)
+            for spec in plan.columns
+            if spec.table == plan.tables[0]
+        ),
     )
 
 
