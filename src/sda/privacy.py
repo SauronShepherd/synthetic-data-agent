@@ -48,6 +48,10 @@ class PrivacyFinding:
     evidence: dict[str, Any]
 
     def __post_init__(self) -> None:
+        if any(not value.strip() for value in (self.code, self.severity, self.message)):
+            raise ValueError("privacy finding code, severity, and message are required")
+        if self.severity not in {"low", "medium", "high", "critical"}:
+            raise ValueError("privacy finding severity is unsupported")
         object.__setattr__(self, "evidence", _freeze(self.evidence))
 
     def to_dict(self) -> dict[str, Any]:

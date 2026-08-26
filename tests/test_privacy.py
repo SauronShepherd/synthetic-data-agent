@@ -83,6 +83,13 @@ def test_privacy_report_findings_are_immutable() -> None:
     assert len(report.findings) == 1
 
 
+def test_privacy_findings_require_auditable_fields() -> None:
+    with pytest.raises(ValueError, match="code, severity, and message"):
+        PrivacyFinding("", "high", "risk", {})
+    with pytest.raises(ValueError, match="severity is unsupported"):
+        PrivacyFinding("risk", "unknown", "risk", {})
+
+
 def test_privacy_finding_evidence_is_deeply_immutable() -> None:
     report = assess_privacy(
         {"users": (({"email": "a@example.test"}),)},
