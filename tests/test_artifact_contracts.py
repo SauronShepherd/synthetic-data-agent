@@ -63,7 +63,7 @@ def test_snapshot_compatibility_rejects_wrong_source() -> None:
 def test_artifact_related_locations_are_immutable() -> None:
     ref = make_ref()
     with pytest.raises(TypeError, match="immutable"):
-        ref.related_locations["details"] = "other"  # type: ignore[index]
+    ref.related_locations["details"] = "other"  # type: ignore[index]
 
 
 def test_compatibility_failure_is_structured_and_value_error_compatible() -> None:
@@ -76,3 +76,32 @@ def test_compatibility_failure_is_structured_and_value_error_compatible() -> Non
         "message": "unsupported artifact schema: 1.0",
         "details": {"artifact_id": "id", "schema_version": "1.0"},
     }
+
+
+def test_artifact_lineage_sequences_are_frozen() -> None:
+    source = SourceReference(
+        "main.sales.orders", "TABLE", "metadata_only", None, None, None, ["id"]
+    )
+    ref = ArtifactRef(
+        "id",
+        ArtifactType.TABLE_PROFILE,
+        "1.0",
+        ArtifactStatus.COMPLETE,
+        "tool",
+        "0.6.0",
+        "run",
+        "dev",
+        "now",
+        "hash",
+        "db.schema.table",
+        {},
+        [source],
+        "checksum",
+        "summary",
+        warnings=["w"],
+        input_artifact_ids=["input"],
+    )
+    assert source.selected_columns == ("id",)
+    assert ref.source_references == (source,)
+    assert ref.warnings == ("w",)
+    assert ref.input_artifact_ids == ("input",)

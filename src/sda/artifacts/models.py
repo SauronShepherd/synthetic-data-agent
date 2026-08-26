@@ -47,6 +47,7 @@ class SourceReference:
     metadata_inventory_id: str | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "selected_columns", tuple(self.selected_columns))
         if not self.full_name.strip():
             raise ValueError("source full_name must not be empty")
         if self.snapshot_kind not in {
@@ -122,6 +123,9 @@ class ArtifactRef:
         )
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "source_references", tuple(self.source_references))
+        object.__setattr__(self, "warnings", tuple(self.warnings))
+        object.__setattr__(self, "input_artifact_ids", tuple(self.input_artifact_ids))
         for name in (
             "artifact_id",
             "artifact_schema_version",
