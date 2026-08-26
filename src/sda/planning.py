@@ -65,6 +65,20 @@ class ColumnGenerationSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class CrossColumnRule:
+    """Approved deterministic assignment conditional on another column."""
+
+    if_column: str
+    if_value: str | int | float | bool | None
+    then_column: str
+    then_value: str | int | float | bool | None
+
+    def __post_init__(self) -> None:
+        if not self.if_column.strip() or not self.then_column.strip():
+            raise ValueError("cross-column rule columns must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class GenerationPlan:
     """Versioned immutable execution contract."""
 
@@ -77,6 +91,7 @@ class GenerationPlan:
     target_schema: str
     tables: tuple[str, ...]
     columns: tuple[ColumnGenerationSpec, ...]
+    cross_column_rules: tuple[CrossColumnRule, ...] = ()
     mode: GenerationMode = GenerationMode.CLEAN
     scale_factor: float = 1.0
     seed: int = 1729

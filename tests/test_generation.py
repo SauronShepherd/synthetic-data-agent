@@ -6,7 +6,13 @@ from dataclasses import replace
 import pytest
 
 from sda.generation import GenerationError, generate_rows, receipt_for, resolve_row_count
-from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus, RowCountMode
+from sda.planning import (
+    ColumnGenerationSpec,
+    CrossColumnRule,
+    GenerationPlan,
+    PlanStatus,
+    RowCountMode,
+)
 
 
 def plan() -> GenerationPlan:
@@ -155,3 +161,15 @@ def test_standalone_generation_rejects_multi_table_plans() -> None:
     multi_table = replace(plan(), tables=("t", "u"), plan_fingerprint="")
     with pytest.raises(GenerationError, match="relational generator"):
         generate_rows(multi_table, row_count=1, vocabularies={"segment": ("a",)})
+
+
+def test_approved_cross_column_rules_are_deterministic_and_plan_bound() -> None:
+    ruled = replace(
+        plan(),
+        cross_column_rules=(CrossColumnRule("segment", "a", "amount", 99),),
+        plan_fingerprint="",
+    )
+    rows = generate_rows(ruled, row_count=3, vocabularies={"segment": ("a", "b")})
+    assert rows[0]["amount"] == 99
+    assert rows[1]["amount"] != 99
+    assert rows == generate_rows(ruled, row_count=3, vocabularies={"segment": ("a", "b")})

@@ -74,6 +74,10 @@ def generate_rows(
         raise GenerationError("row_count exceeds plan max_rows budget")
     enforce_budget(ResourceBudget(max_rows=max_rows), rows=row_count)
     specs = _unique_specs(plan.columns)
+    declared_columns = {spec.column for spec in specs}
+    for rule in plan.cross_column_rules:
+        if rule.if_column not in declared_columns or rule.then_column not in declared_columns:
+            raise GenerationError("cross-column rule references an undeclared column")
     vocabularies = vocabularies or {}
     weighted_vocabularies = weighted_vocabularies or {}
     empirical_samples = empirical_samples or {}
@@ -89,6 +93,9 @@ def generate_rows(
                 weighted_vocabularies.get(spec.column, ()),
                 empirical_samples.get(spec.column, ()),
             )
+        for rule in plan.cross_column_rules:
+            if row[rule.if_column] == rule.if_value:
+                row[rule.then_column] = rule.then_value
         result.append(row)
     return tuple(result)
 
