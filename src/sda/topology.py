@@ -19,6 +19,13 @@ class TopologyError(ValueError):
     """Raised when topology targets cannot be realized safely."""
 
 
+class _FrozenDict(dict[str, Any]):
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("topology result is immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
 @dataclass(frozen=True, slots=True)
 class TopologyPlan:
     topology_id: str
@@ -62,6 +69,11 @@ class TopologyResult:
     nodes: tuple[dict[str, Any], ...]
     edges: tuple[dict[str, Any], ...]
     metrics: dict[str, int | float]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "nodes", tuple(_FrozenDict(node) for node in self.nodes))
+        object.__setattr__(self, "edges", tuple(_FrozenDict(edge) for edge in self.edges))
+        object.__setattr__(self, "metrics", _FrozenDict(self.metrics))
 
 
 def generate_topology(plan: TopologyPlan) -> TopologyResult:

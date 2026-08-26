@@ -16,7 +16,10 @@ def test_topology_preserves_nodes_and_isolates() -> None:
 
 def test_topology_is_reproducible() -> None:
     plan = TopologyPlan("g", "fp", node_count=5, edge_count=4)
-    assert generate_topology(plan) == generate_topology(plan)
+    result = generate_topology(plan)
+    assert result == generate_topology(plan)
+    with pytest.raises(TypeError, match="immutable"):
+        result.nodes[0]["node_id"] = "changed"  # type: ignore[index]
 
 
 def test_topology_rejects_impossible_simple_graph() -> None:
