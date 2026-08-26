@@ -40,7 +40,10 @@ defaults, logs, artifacts, or generated manifests.
 
 1. Validate the bundle against the target workspace.
 2. Deploy the wheel and resources to staging.
-3. Apply the Lakebase migration and verify the service account can read/write state.
+3. Install the `postgres` extra, apply the checked-in migration, and verify the
+   service account can read/write state:
+   `python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN"`. Record the
+   resulting migration ID from `sda_schema_migrations`.
 4. Run metadata discovery on a one-table allowlisted scope.
 5. Reuse the resulting evidence to run profiling, relationship detection, and SDA 07
    pattern detection.
