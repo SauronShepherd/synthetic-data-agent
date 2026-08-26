@@ -79,3 +79,13 @@ def test_plan_resolves_exact_and_probabilistic_row_counts() -> None:
         plan_fingerprint="",
     )
     assert resolve_row_count(probabilistic, source_row_count=3) == 5
+
+
+def test_generation_rejects_invalid_null_probabilities() -> None:
+    invalid = replace(
+        plan(),
+        columns=(ColumnGenerationSpec("t", "value", "string", parameters={"null_rate": 1.1}),),
+        plan_fingerprint="",
+    )
+    with pytest.raises(GenerationError, match="null_rate"):
+        generate_rows(invalid, row_count=1)

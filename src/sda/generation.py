@@ -93,6 +93,8 @@ def _value(
     model = spec.model.lower()
     rng = random.Random(_coordinate_seed(plan, spec, index))
     null_rate = float(spec.parameters.get("null_rate", 0.0))
+    if not 0.0 <= null_rate <= 1.0:
+        raise GenerationError(f"null_rate must be between 0 and 1 for {spec.column}")
     if spec.nullable and null_rate and rng.random() < null_rate:
         return None
     if model in {"identifier", "id"}:
