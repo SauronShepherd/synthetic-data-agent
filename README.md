@@ -91,6 +91,12 @@ starting the service; generated rows and analytical evidence remain in Delta.
 python -m pip install -e ".[postgres]"
 ```
 
+Apply the state migration with the checked-in runner:
+
+```bash
+python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN"
+```
+
 Or use:
 
 ```bash
