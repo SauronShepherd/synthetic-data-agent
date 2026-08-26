@@ -109,12 +109,17 @@ def validate_tables(
     required_columns: dict[str, tuple[str, ...]] | None = None,
     unique_keys: dict[str, str] | None = None,
     foreign_keys: tuple[tuple[str, str, str, str], ...] = (),
+    expected_distributions: dict[str, dict[str, dict[Any, float]]] | None = None,
+    distribution_tolerance: float = 0.0,
     intended_use: str = "unspecified",
 ) -> ValidationReport:
     checks: list[ValidationCheck] = []
     expected_counts = expected_counts or {}
     required_columns = required_columns or {}
     unique_keys = unique_keys or {}
+    expected_distributions = expected_distributions or {}
+    if distribution_tolerance < 0:
+        raise ValueError("distribution_tolerance must not be negative")
     for table, columns in required_columns.items():
         if table not in tables:
             checks.append(
@@ -209,6 +214,69 @@ def validate_tables(
                 {"orphans": orphans, "child_rows": len(child_values)},
             )
         )
+    for table, columns in expected_distributions.items():
+        if table not in tables:
+            checks.append(
+                ValidationCheck(
+                    f"distribution:{table}",
+                    CheckStatus.FAIL,
+                    f"{table} is unavailable; cannot validate distributions",
+                    {"supported": False, "reason": "table_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
+        rows = tables[table]
+        for column, expected in columns.items():
+            check_id = f"distribution:{table}.{column}"
+            if not expected or any(probability < 0 for probability in expected.values()):
+                raise ValueError(
+                    f"expected distribution must contain non-negative probabilities: {check_id}"
+                )
+            if abs(sum(expected.values()) - 1.0) > 1e-9:
+                raise ValueError(f"expected distribution must sum to one: {check_id}")
+            if any(column not in row for row in rows):
+                checks.append(
+                    ValidationCheck(
+                        check_id,
+                        CheckStatus.FAIL,
+                        f"{table}.{column} is unavailable; cannot validate distribution",
+                        {"supported": False, "reason": "column_missing"},
+                        method="availability_check",
+                    )
+                )
+                continue
+            counts: dict[Any, int] = {}
+            for row in rows:
+                value = row[column]
+                counts[value] = counts.get(value, 0) + 1
+            total = len(rows)
+            observed = {value: count / total for value, count in counts.items()} if total else {}
+            errors = {
+                str(value): abs(observed.get(value, 0.0) - probability)
+                for value, probability in expected.items()
+            }
+            errors.update(
+                {
+                    str(value): probability
+                    for value, probability in observed.items()
+                    if value not in expected
+                }
+            )
+            maximum_error = max(errors.values(), default=0.0)
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.PASS
+                    if maximum_error <= distribution_tolerance
+                    else CheckStatus.FAIL,
+                    f"{table}.{column} distribution maximum error is {maximum_error:.6f}",
+                    {"expected": expected, "observed": observed, "maximum_error": maximum_error},
+                    distribution_tolerance,
+                    method="categorical_distribution",
+                    population="full_table",
+                )
+            )
     disposition = (
         CheckStatus.FAIL if any(c.status is CheckStatus.FAIL for c in checks) else CheckStatus.PASS
     )

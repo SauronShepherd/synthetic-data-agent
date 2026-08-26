@@ -171,3 +171,29 @@ def test_validation_vector_is_immutable_and_dimensioned() -> None:
     assert report.validation_vector["privacy"] is CheckStatus.WARN
     with pytest.raises(TypeError, match="immutable"):
         report.validation_vector["schema"] = CheckStatus.FAIL  # type: ignore[index]
+
+
+def test_validation_checks_categorical_distributions_with_tolerance() -> None:
+    tables = {"orders": (({"status": "new"}), ({"status": "new"}), ({"status": "closed"}))}
+    report = validate_tables(
+        tables,
+        expected_distributions={"orders": {"status": {"new": 2 / 3, "closed": 1 / 3}}},
+    )
+    assert report.technical_disposition is CheckStatus.PASS
+    assert report.checks[-1].population == "full_table"
+    failed = validate_tables(
+        tables,
+        expected_distributions={"orders": {"status": {"new": 0.5, "closed": 0.5}}},
+        distribution_tolerance=0.01,
+    )
+    assert failed.technical_disposition is CheckStatus.FAIL
+
+
+def test_distribution_validation_fails_closed_for_missing_inputs() -> None:
+    report = validate_tables({}, expected_distributions={"orders": {"status": {"new": 1.0}}})
+    assert report.checks[0].status is CheckStatus.FAIL
+    with pytest.raises(ValueError, match="sum to one"):
+        validate_tables(
+            {"orders": (({"status": "new"}),)},
+            expected_distributions={"orders": {"status": {"new": 0.5}}},
+        )
