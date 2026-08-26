@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from sda.generation import GenerationError, generate_rows
@@ -91,7 +91,13 @@ def generate_relational(
     all_relationships: tuple[Any, ...] = (*foreign_keys, *composite_foreign_keys)
     for table in _order_tables(plan.tables, all_relationships):
         count = row_counts.get(table, 0)
-        table_rows = list(generate_rows(plan, row_count=count, vocabularies=vocabularies))
+        table_plan = replace(
+            plan,
+            tables=(table,),
+            columns=tuple(spec for spec in plan.columns if spec.table == table),
+            plan_fingerprint="",
+        )
+        table_rows = list(generate_rows(table_plan, row_count=count, vocabularies=vocabularies))
         for simple_fk in [item for item in foreign_keys if item.child_table == table]:
             parent_rows = by_table[simple_fk.parent_table]
             parent_keys = [row.get(simple_fk.parent_column) for row in parent_rows]
