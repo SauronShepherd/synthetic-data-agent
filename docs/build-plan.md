@@ -155,7 +155,7 @@ design evidence; the repository is the source of truth for what is currently pre
   identity. Persist mapping only when explicitly approved and protected.
 - [x] Implement exact-count and probabilistic row modes with deterministic rounding.
 - [x] Apply only approved conditional null and cross-column rules.
-- [ ] Write staging output, schema, manifest, seed/fingerprint, receipt, and audit row;
+- [x] Write staging output, schema, manifest, seed/fingerprint, receipt, and audit row;
   publish only after validation and approvals.
 - [ ] Add tests for exact counts, replay, partition independence, null rates, formats,
   tails, identifier uniqueness, safe strings, schema evolution, interrupted writes,
