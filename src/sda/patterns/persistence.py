@@ -8,6 +8,10 @@ from sda.artifacts.delta import persist_artifact_lifecycle, persist_distributed_
 from sda.patterns.models import Pattern
 
 
+PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v1"
+PATTERN_EVIDENCE_SCHEMA_VERSION = "sda07-pattern-evidence-v1"
+
+
 class PatternPersistence:
     """Adapter that keeps compact registry rows and large evidence separate."""
 
@@ -55,6 +59,7 @@ def registry_rows(
 ) -> list[dict[str, Any]]:
     return [
         {
+            "schema_version": PATTERN_REGISTRY_SCHEMA_VERSION,
             "analysis_id": p.analysis_id,
             "pattern_id": p.pattern_id,
             "pattern_version": 1,
@@ -106,6 +111,7 @@ def evidence_rows(patterns: tuple[Pattern, ...]) -> list[dict[str, Any]]:
         for key, value in sorted(pattern.metric.items()):
             rows.append(
                 {
+                    "schema_version": PATTERN_EVIDENCE_SCHEMA_VERSION,
                     "analysis_id": pattern.analysis_id,
                     "pattern_id": pattern.pattern_id,
                     "evidence_id": f"{pattern.pattern_id}:{key}",

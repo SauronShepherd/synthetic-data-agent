@@ -3,7 +3,12 @@ from sda.patterns.candidates import generate_candidates
 from sda.patterns.conflicts import detect_rule_conflicts
 from sda.patterns.fanout import fanout_by_segment
 from sda.patterns.models import PatternOrigin
-from sda.patterns.persistence import evidence_rows, registry_rows
+from sda.patterns.persistence import (
+    PATTERN_EVIDENCE_SCHEMA_VERSION,
+    PATTERN_REGISTRY_SCHEMA_VERSION,
+    evidence_rows,
+    registry_rows,
+)
 from sda.patterns.rules import BusinessRule, RuleStrength, evaluate_rule
 from sda.patterns.safety import SafeValueKind, safe_pattern_value
 from sda.patterns.stability import stability
@@ -91,8 +96,12 @@ def test_registry_and_evidence_are_compact_and_json_safe() -> None:
         table="main.s.t",
         columns={"x": "double", "y": "double"},
     )[0]
-    assert registry_rows((pattern,))[0]["pattern_id"] == pattern.pattern_id
-    assert evidence_rows((pattern,))[0]["evidence_id"].startswith(pattern.pattern_id)
+    registry = registry_rows((pattern,))[0]
+    evidence = evidence_rows((pattern,))[0]
+    assert registry["pattern_id"] == pattern.pattern_id
+    assert registry["schema_version"] == PATTERN_REGISTRY_SCHEMA_VERSION
+    assert evidence["evidence_id"].startswith(pattern.pattern_id)
+    assert evidence["schema_version"] == PATTERN_EVIDENCE_SCHEMA_VERSION
 
 
 def test_rule_evaluator_separates_condition_support_from_violations() -> None:
