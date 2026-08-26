@@ -85,6 +85,11 @@ class NoisePlan:
         }
 
     def __post_init__(self) -> None:
+        if not isinstance(self.profile, NoiseProfile):
+            try:
+                object.__setattr__(self, "profile", NoiseProfile(self.profile))
+            except ValueError as exc:
+                raise ValueError(f"unsupported noise profile: {self.profile}") from exc
         if not self.noise_id.strip() or not self.baseline_fingerprint.strip():
             raise ValueError("noise identity and baseline fingerprint are required")
         if self.budget < 0 or self.seed < 0:

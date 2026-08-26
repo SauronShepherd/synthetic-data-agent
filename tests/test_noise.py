@@ -192,6 +192,12 @@ def test_historical_noise_profile_is_a_supported_plan_contract() -> None:
     assert plan.profile.value == "historical"
 
 
+def test_noise_plan_normalizes_profile_strings_and_rejects_unknown_profiles() -> None:
+    assert NoisePlan("n", "baseline", profile="qa").profile is NoiseProfile.QA
+    with pytest.raises(ValueError, match="unsupported noise profile"):
+        NoisePlan("n", "baseline", profile="unknown")
+
+
 def test_noise_profiles_have_deterministic_default_budgets() -> None:
     baseline = tuple({"value": str(index)} for index in range(20))
     results = {
