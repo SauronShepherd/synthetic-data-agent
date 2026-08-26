@@ -12,6 +12,7 @@ from sda.patterns.spark_metrics import (
     spark_metric,
     spark_pearson,
     spark_state_transitions,
+    spark_temporal_lag,
     spark_temporal_order,
     unsupported_metric_result,
 )
@@ -57,6 +58,13 @@ def test_unsupported_spark_metric_result_is_actionable_and_raw_value_free() -> N
     )
 
 
+def test_temporal_lag_dispatch_is_registered() -> None:
+    result = spark_metric(object(), "temporal_lag")
+    assert result.metric == "temporal_lag"
+    assert not result.supported
+    assert "required" in result.reason.lower()
+
+
 @pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
     frame = spark.createDataFrame(
@@ -76,6 +84,9 @@ def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
     assert {row["support_rows"] for row in missing} == {2}
     order = spark_temporal_order(frame, "event_time", "event_time").first()
     assert order["violation_rows"] == 0
+    lag = spark_temporal_lag(frame, "event_time", "event_time").first()
+    assert lag["count"] == 4
+    assert lag["positive_duration_count"] == 0
     transitions = spark_state_transitions(
         frame.where("status is not null"),
         entity_keys=("entity",),

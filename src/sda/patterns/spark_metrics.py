@@ -47,6 +47,7 @@ def spark_metric(frame: Any, metric: str, **kwargs: Any) -> Any:
         "conditional_distribution": spark_conditional_distribution,
         "conditional_missingness": spark_conditional_missingness,
         "temporal_order": spark_temporal_order,
+        "temporal_lag": spark_temporal_lag,
         "state_transitions": spark_state_transitions,
         "fanout_by_segment": spark_fanout_by_segment,
     }
@@ -180,6 +181,35 @@ def spark_temporal_order(frame: Any, earlier: str, later: str) -> Any:
         F.sum(F.when(F.col(earlier) > F.col(later), 1).otherwise(0)).alias("violation_rows"),
         F.sum(F.when(F.col(earlier) == F.col(later), 1).otherwise(0)).alias("equal_rows"),
     ).withColumn("violation_rate", F.col("violation_rows") / F.col("eligible_rows"))
+
+
+def spark_temporal_lag(frame: Any, earlier: str, later: str) -> Any:
+    """Return bounded lag distribution aggregates without collecting timestamps."""
+    F = _functions()
+    earlier_ts = F.col(earlier).cast("timestamp")
+    later_ts = F.col(later).cast("timestamp")
+    eligible = frame.where(earlier_ts.isNotNull() & later_ts.isNotNull())
+    lag_seconds = F.col("__sda_later_ts").cast("long") - F.col("__sda_earlier_ts").cast("long")
+    return (
+        eligible.select(earlier_ts.alias("__sda_earlier_ts"), later_ts.alias("__sda_later_ts"))
+        .withColumn("__sda_lag_seconds", lag_seconds)
+        .agg(
+            F.count(F.lit(1)).alias("count"),
+            F.sum(F.when(F.col("__sda_lag_seconds") == 0, 1).otherwise(0)).alias(
+                "zero_duration_count"
+            ),
+            F.sum(F.when(F.col("__sda_lag_seconds") > 0, 1).otherwise(0)).alias(
+                "positive_duration_count"
+            ),
+            F.sum(F.when(F.col("__sda_lag_seconds") < 0, 1).otherwise(0)).alias(
+                "negative_duration_count"
+            ),
+            F.expr(
+                "percentile_approx(__sda_lag_seconds, array(0.25, 0.5, 0.75, 0.95, 0.99), 10000)"
+            ).alias("duration_percentiles_seconds"),
+            F.max("__sda_lag_seconds").alias("max_duration_seconds"),
+        )
+    )
 
 
 def spark_state_transitions(
