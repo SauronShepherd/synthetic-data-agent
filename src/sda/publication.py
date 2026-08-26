@@ -89,6 +89,10 @@ class PublicationRegistry:
             if current.status is PublicationStatus.VALIDATED:
                 raise PublicationError("human approval is required")
             if current.status is PublicationStatus.APPROVED:
+                if current.validation_fingerprint != validation.fingerprint:
+                    raise PublicationError(
+                        "validation evidence fingerprint does not match approved artifact"
+                    )
                 if current.privacy_fingerprint != privacy.fingerprint:
                     raise PublicationError(
                         "privacy evidence fingerprint does not match approved artifact"

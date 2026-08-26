@@ -146,6 +146,16 @@ def test_approved_publication_binds_privacy_evidence() -> None:
         registry.publish("dataset", "v1", validation=validation, privacy=changed, actor="reviewer")
 
 
+def test_approved_publication_binds_validation_evidence() -> None:
+    registry, _ = staged()
+    validation, privacy = reports()
+    registry.validate("dataset", "v1", validation=validation)
+    registry.approve("dataset", "v1", privacy=privacy, actor="reviewer")
+    changed = ValidationReport((), "qa", CheckStatus.PASS)
+    with pytest.raises(PublicationError, match="validation evidence fingerprint"):
+        registry.publish("dataset", "v1", validation=changed, privacy=privacy, actor="reviewer")
+
+
 def test_publication_serializes_lifecycle_and_evidence_bindings() -> None:
     registry, item = staged()
     validation, privacy = reports()
