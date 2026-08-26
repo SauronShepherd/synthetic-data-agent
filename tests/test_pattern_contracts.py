@@ -63,6 +63,22 @@ def test_pattern_detector_rejects_inputs_over_scan_budget() -> None:
         detector.detect([{"x": 1}, {"x": 2}], table="main.s.t", columns={"x": "int"})
 
 
+def test_detector_emits_temporal_lag_metrics() -> None:
+    detector = PatternDetector(PatternConfig(min_support_rows=2))
+    patterns = detector.detect(
+        [
+            {"id": 1, "a_started_at": 1, "b_finished_at": 3},
+            {"id": 2, "a_started_at": 2, "b_finished_at": 6},
+        ],
+        table="main.s.events",
+        columns={"id": "int", "a_started_at": "int", "b_finished_at": "int"},
+    )
+    temporal = [pattern for pattern in patterns if pattern.family.value == "temporal_order"]
+    assert len(temporal) == 1
+    assert temporal[0].metric["count"] == 2
+    assert temporal[0].metric["p50"] == 3.0
+
+
 def test_fanout_includes_zero_child_parents() -> None:
     parents = [{"id": 1, "segment": "A"}, {"id": 2, "segment": "A"}]
     children = [{"parent_id": 1}]
