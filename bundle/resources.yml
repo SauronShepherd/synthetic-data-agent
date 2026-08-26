@@ -26,7 +26,18 @@ resources:
           default: ${var.sda_artifact_registry_table}
 
       tasks:
+        - task_key: bootstrap_artifact_tables
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/bootstrap_artifacts_spark.py
+            parameters:
+              - --metadata-table
+              - "{{job.parameters.output_table}}"
+              - --registry-table
+              - "{{job.parameters.artifact_registry_table}}"
+          environment_key: uc_metadata_reader_environment
         - task_key: read_uc_metadata
+          depends_on:
+            - task_key: bootstrap_artifact_tables
           spark_python_task:
             python_file: ../src/sda/job_entrypoints/metadata_read_spark.py
             parameters:
