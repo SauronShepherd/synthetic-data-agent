@@ -139,6 +139,8 @@ class PatternExecutionReceipt:
         ):
             if any(not str(key).strip() or value < 0 for key, value in counts.items()):
                 raise ValueError(f"pattern receipt {name} contains invalid accounting")
+        if self.source_tables_reused > self.source_tables_scanned:
+            raise ValueError("pattern receipt reused tables cannot exceed scanned tables")
         if self.sample_fraction is not None and not 0 < self.sample_fraction <= 1:
             raise ValueError("pattern receipt sample_fraction must be between 0 and 1")
         if self.sample_seed is not None and self.sample_seed < 0:

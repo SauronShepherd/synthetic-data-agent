@@ -263,6 +263,8 @@ def test_pattern_receipt_counts_are_immutable() -> None:
         PatternExecutionReceipt(candidate_count_total=2, candidate_count_by_family={"numeric": 1})
     with pytest.raises(ValueError, match="invalid accounting"):
         PatternExecutionReceipt(candidate_skipped_by_reason={"unsupported": -1})
+    with pytest.raises(ValueError, match="reused tables"):
+        PatternExecutionReceipt(source_tables_scanned=1, source_tables_reused=2)
 
 
 def test_pattern_receipt_serializes_all_execution_accounting() -> None:
