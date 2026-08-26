@@ -80,6 +80,8 @@ class PublicationRegistry:
             return current
         if validation.technical_disposition is not CheckStatus.PASS:
             raise PublicationError("technical validation did not pass")
+        if current.validation_fingerprint != validation.fingerprint:
+            raise PublicationError("validation evidence fingerprint does not match staged artifact")
         if validation.intended_use.strip() == "":
             raise PublicationError("validation intended use is required")
         if privacy.decision is not PrivacyDecision.APPROVED:

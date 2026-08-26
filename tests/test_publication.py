@@ -21,7 +21,10 @@ def reports(*, valid: bool = True, private: bool = True) -> tuple[ValidationRepo
 
 def staged() -> tuple[PublicationRegistry, Publication]:
     registry = PublicationRegistry()
-    item = registry.stage(Publication("dataset", "v1", "uc.schema.table", "vf", "strict"))
+    validation, _ = reports()
+    item = registry.stage(
+        Publication("dataset", "v1", "uc.schema.table", validation.fingerprint, "strict")
+    )
     return registry, item
 
 
@@ -55,3 +58,17 @@ def test_revoke_removes_alias() -> None:
     )
     revoked = registry.revoke("dataset", "v1", reason="policy change")
     assert revoked.status is PublicationStatus.REVOKED
+
+
+def test_publication_rejects_mismatched_validation_evidence() -> None:
+    registry, _ = staged()
+    validation, privacy = reports()
+    changed = ValidationReport((), "qa", CheckStatus.PASS)
+    with pytest.raises(PublicationError, match="fingerprint"):
+        registry.publish("dataset", "v1", validation=changed, privacy=privacy, actor="reviewer")
+    assert (
+        registry.publish(
+            "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer"
+        ).status
+        is PublicationStatus.PUBLISHED
+    )

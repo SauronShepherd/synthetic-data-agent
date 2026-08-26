@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from sda.artifacts.fingerprint import fingerprint
+
 
 class CheckStatus(StrEnum):
     PASS = "PASS"
@@ -29,6 +31,10 @@ class ValidationReport:
     checks: tuple[ValidationCheck, ...]
     intended_use: str
     technical_disposition: CheckStatus
+
+    @property
+    def fingerprint(self) -> str:
+        return fingerprint(self)
 
 
 def not_applicable_check(check_id: str, reason: str) -> ValidationCheck:
