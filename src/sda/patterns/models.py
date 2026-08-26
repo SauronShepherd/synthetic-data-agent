@@ -105,6 +105,12 @@ class ColumnRoleAssignment:
     role: str
     confidence: float | None = None
 
+    def __post_init__(self) -> None:
+        if not self.table.strip() or not self.column.strip() or not self.role.strip():
+            raise ValueError("column role assignment identity fields must not be empty")
+        if self.confidence is not None and not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("column role assignment confidence must be between zero and one")
+
 
 @dataclass(frozen=True, slots=True)
 class PatternExecutionReceipt:

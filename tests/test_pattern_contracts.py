@@ -143,6 +143,14 @@ def test_pattern_input_refs_reject_duplicate_artifacts_across_roles() -> None:
         PatternInputRefs("metadata", ("profile",), "profile", "graph")
 
 
+def test_column_role_assignment_validates_identity_and_confidence() -> None:
+    from sda.patterns.models import ColumnRoleAssignment
+
+    assert ColumnRoleAssignment("main.t", "amount", "outcome", 0.5).confidence == 0.5
+    with pytest.raises(ValueError, match="between zero and one"):
+        ColumnRoleAssignment("main.t", "amount", "outcome", 1.1)
+
+
 def test_pattern_input_and_output_sequences_are_frozen() -> None:
     profiles = ["profile"]
     refs = PatternInputRefs("metadata", profiles, "relationship", "graph")
