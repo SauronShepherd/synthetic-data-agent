@@ -24,6 +24,16 @@ def _freeze(value: Any) -> Any:
     return value
 
 
+def _safe_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _safe_payload(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return tuple(_safe_payload(item) for item in value)
+    if isinstance(value, int | float | bool) or value is None:
+        return value
+    return {"fingerprint": fingerprint(value)}
+
+
 class PatternFamily(StrEnum):
     CORRELATION = "correlation"
     CONDITIONAL_DISTRIBUTION = "conditional_distribution"
@@ -143,7 +153,15 @@ class PatternDetectionResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "patterns": tuple(pattern.to_dict() for pattern in self.patterns),
+            "patterns": tuple(
+                {
+                    **pattern.to_dict(),
+                    "condition": _safe_payload(pattern.condition),
+                    "outcome": _safe_payload(pattern.outcome),
+                    "metric": _safe_payload(pattern.metric),
+                }
+                for pattern in self.patterns
+            ),
             "artifact_ref": self.artifact_ref,
             "receipt": self.receipt.to_dict(),
             "warnings": self.warnings,

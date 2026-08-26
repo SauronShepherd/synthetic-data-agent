@@ -255,6 +255,28 @@ def test_pattern_detection_review_questions_are_immutable_and_serializable() -> 
     assert result.to_dict()["review_questions"] == result.review_questions
 
 
+def test_pattern_detection_serialization_redacts_raw_pattern_values() -> None:
+    pattern = Pattern(
+        "pattern-secret",
+        "analysis-1",
+        PatternFamily.BUSINESS_RULE,
+        PatternOrigin.OBSERVED,
+        "main.s.t",
+        ("status",),
+        {"status": "secret-status"},
+        {"result": "secret-result"},
+        2,
+        1.0,
+        {"label": "secret-metric"},
+        {"validation_mode": "exact"},
+    )
+    result = PatternDetectionResult((pattern,), None, PatternExecutionReceipt())
+    payload = result.to_dict()
+    assert "secret-status" not in str(payload)
+    assert "secret-result" not in str(payload)
+    assert "secret-metric" not in str(payload)
+
+
 def test_pattern_rejects_invalid_support_metrics() -> None:
     pattern = PatternDetector(PatternConfig(min_support_rows=2)).detect(
         [{"x": 1, "y": 2}, {"x": 2, "y": 4}],
