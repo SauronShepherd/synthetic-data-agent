@@ -22,6 +22,14 @@ def test_validation_evidence_is_immutable_and_check_ids_are_unique() -> None:
         ValidationReport((check, check), "qa", CheckStatus.PASS)
 
 
+def test_schema_validation_fails_closed_for_missing_required_columns() -> None:
+    report = validate_tables(
+        {"orders": ({"id": 1},)}, required_columns={"orders": ("id", "amount")}
+    )
+    assert report.technical_disposition is CheckStatus.FAIL
+    assert report.checks[0].evidence["missing"] == ("amount",)
+
+
 def plan() -> GenerationPlan:
     return (
         GenerationPlan(

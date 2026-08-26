@@ -81,13 +81,40 @@ def validate_tables(
     tables: dict[str, tuple[dict[str, Any], ...]],
     *,
     expected_counts: dict[str, int] | None = None,
+    required_columns: dict[str, tuple[str, ...]] | None = None,
     unique_keys: dict[str, str] | None = None,
     foreign_keys: tuple[tuple[str, str, str, str], ...] = (),
     intended_use: str = "unspecified",
 ) -> ValidationReport:
     checks: list[ValidationCheck] = []
     expected_counts = expected_counts or {}
+    required_columns = required_columns or {}
     unique_keys = unique_keys or {}
+    for table, columns in required_columns.items():
+        if table not in tables:
+            checks.append(
+                ValidationCheck(
+                    f"schema:{table}",
+                    CheckStatus.FAIL,
+                    f"{table} is unavailable; cannot validate schema",
+                    {"supported": False, "reason": "table_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
+        actual_columns = set().union(*(row.keys() for row in tables[table]))
+        schema_missing = sorted(set(columns) - actual_columns)
+        checks.append(
+            ValidationCheck(
+                f"schema:{table}",
+                CheckStatus.PASS if not schema_missing else CheckStatus.FAIL,
+                f"{table} schema contains all required columns"
+                if not schema_missing
+                else f"{table} schema is missing columns: {schema_missing}",
+                {"required": list(columns), "missing": schema_missing},
+                method="schema_contract",
+            )
+        )
     for table, expected in expected_counts.items():
         if table not in tables:
             checks.append(
