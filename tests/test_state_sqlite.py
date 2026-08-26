@@ -56,6 +56,7 @@ def test_sqlite_state_persists_approvals_and_attempts() -> None:
     assert repo.list_attempts("run-1") == (attempt,)
     completed = repo.complete_attempt("attempt-1", success=True)
     assert completed.status is AttemptStatus.SUCCEEDED
+    assert completed.started_at and completed.completed_at
     with pytest.raises(StateError, match="already complete"):
         repo.complete_attempt("attempt-1", success=True)
     repo.close()

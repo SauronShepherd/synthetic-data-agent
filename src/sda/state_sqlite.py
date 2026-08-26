@@ -32,6 +32,15 @@ class SQLiteStateRepository:
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS attempts (attempt_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), stage TEXT NOT NULL, status TEXT NOT NULL, worker_id TEXT, lease_expires_at TEXT, retry_number INTEGER NOT NULL, error_code TEXT)"
         )
+        attempt_columns = {
+            str(row[1]) for row in self._connection.execute("PRAGMA table_info(attempts)")
+        }
+        if "started_at" not in attempt_columns:
+            self._connection.execute(
+                "ALTER TABLE attempts ADD COLUMN started_at TEXT NOT NULL DEFAULT ''"
+            )
+        if "completed_at" not in attempt_columns:
+            self._connection.execute("ALTER TABLE attempts ADD COLUMN completed_at TEXT")
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS approvals (run_id TEXT NOT NULL REFERENCES runs(run_id), approval_type TEXT NOT NULL, decision TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY (run_id, approval_type))"
         )
@@ -191,7 +200,7 @@ class SQLiteStateRepository:
         if lease_seconds < 1:
             raise ValueError("lease_seconds must be positive")
         existing = self._connection.execute(
-            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code FROM attempts WHERE attempt_id = ?",
+            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code, started_at, completed_at FROM attempts WHERE attempt_id = ?",
             (attempt.attempt_id,),
         ).fetchone()
         if existing is not None:
@@ -201,7 +210,7 @@ class SQLiteStateRepository:
         claimed = replace(attempt, lease_expires_at=lease)
         try:
             self._connection.execute(
-                "INSERT INTO attempts VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO attempts (attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code, started_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     claimed.attempt_id,
                     claimed.run_id,
@@ -211,6 +220,8 @@ class SQLiteStateRepository:
                     claimed.lease_expires_at,
                     claimed.retry_number,
                     claimed.error_code,
+                    claimed.started_at,
+                    claimed.completed_at,
                 ),
             )
             self._connection.commit()
@@ -222,7 +233,7 @@ class SQLiteStateRepository:
     def list_attempts(self, run_id: str) -> tuple[ExecutionAttempt, ...]:
         self.get_run(run_id)
         rows = self._connection.execute(
-            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code FROM attempts WHERE run_id = ? ORDER BY retry_number, attempt_id",
+            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code, started_at, completed_at FROM attempts WHERE run_id = ? ORDER BY retry_number, attempt_id",
             (run_id,),
         ).fetchall()
         return tuple(self._attempt_from_row(row) for row in rows)
@@ -231,7 +242,7 @@ class SQLiteStateRepository:
         self, attempt_id: str, *, success: bool, error_code: str | None = None
     ) -> ExecutionAttempt:
         row = self._connection.execute(
-            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code FROM attempts WHERE attempt_id = ?",
+            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code, started_at, completed_at FROM attempts WHERE attempt_id = ?",
             (attempt_id,),
         ).fetchone()
         if row is None:
@@ -240,12 +251,19 @@ class SQLiteStateRepository:
         if current.status is not AttemptStatus.RUNNING:
             raise StateError("attempt is already complete")
         status = AttemptStatus.SUCCEEDED if success else AttemptStatus.FAILED
+        completed_at = datetime.now(UTC).isoformat()
         self._connection.execute(
-            "UPDATE attempts SET status = ?, error_code = ?, lease_expires_at = NULL WHERE attempt_id = ? AND status = ?",
-            (status.value, error_code, attempt_id, AttemptStatus.RUNNING.value),
+            "UPDATE attempts SET status = ?, error_code = ?, completed_at = ?, lease_expires_at = NULL WHERE attempt_id = ? AND status = ?",
+            (status.value, error_code, completed_at, attempt_id, AttemptStatus.RUNNING.value),
         )
         self._connection.commit()
-        return replace(current, status=status, error_code=error_code, lease_expires_at=None)
+        return replace(
+            current,
+            status=status,
+            error_code=error_code,
+            completed_at=completed_at,
+            lease_expires_at=None,
+        )
 
     def renew_attempt_lease(
         self, attempt_id: str, *, worker_id: str, lease_seconds: int = 300
@@ -253,7 +271,7 @@ class SQLiteStateRepository:
         if not worker_id.strip() or lease_seconds < 1:
             raise ValueError("worker_id must not be empty and lease_seconds must be positive")
         row = self._connection.execute(
-            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code FROM attempts WHERE attempt_id = ?",
+            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code, started_at, completed_at FROM attempts WHERE attempt_id = ?",
             (attempt_id,),
         ).fetchone()
         if row is None:
@@ -278,7 +296,7 @@ class SQLiteStateRepository:
     ) -> tuple[ExecutionAttempt, ...]:
         current_time = now or datetime.now(UTC)
         rows = self._connection.execute(
-            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code FROM attempts WHERE status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?",
+            "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code, started_at, completed_at FROM attempts WHERE status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?",
             (AttemptStatus.RUNNING.value, current_time.isoformat()),
         ).fetchall()
         recovered: list[ExecutionAttempt] = []
@@ -315,6 +333,8 @@ class SQLiteStateRepository:
             str(row[5]) if row[5] is not None else None,
             int(str(row[6])),
             str(row[7]) if row[7] is not None else None,
+            str(row[8]) if row[8] is not None else "",
+            str(row[9]) if row[9] is not None else None,
         )
 
 

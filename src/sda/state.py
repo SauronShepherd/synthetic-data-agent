@@ -68,12 +68,16 @@ class ExecutionAttempt:
     lease_expires_at: str | None = None
     retry_number: int = 0
     error_code: str | None = None
+    started_at: str = ""
+    completed_at: str | None = None
 
     def __post_init__(self) -> None:
         if not self.run_id.strip() or not self.attempt_id.strip() or not self.stage.strip():
             raise ValueError("attempt identity and stage must not be empty")
         if self.retry_number < 0:
             raise ValueError("retry_number must not be negative")
+        if not self.started_at:
+            object.__setattr__(self, "started_at", datetime.now(UTC).isoformat())
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,6 +262,7 @@ class InMemoryStateRepository:
                 current,
                 status=AttemptStatus.SUCCEEDED if success else AttemptStatus.FAILED,
                 error_code=error_code,
+                completed_at=datetime.now(UTC).isoformat(),
             )
             self._attempts[attempt_id] = updated
             return updated
