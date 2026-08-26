@@ -16,6 +16,16 @@ class _FrozenDict(dict[str, Any]):
     __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
 
 
+def _freeze(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _FrozenDict({str(key): _freeze(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze(item) for item in value)
+    if isinstance(value, tuple):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
 class CheckStatus(StrEnum):
     PASS = "PASS"
     WARN = "WARN"
@@ -35,7 +45,7 @@ class ValidationCheck:
     def __post_init__(self) -> None:
         if not self.check_id.strip() or not self.message.strip() or not self.method.strip():
             raise ValueError("validation check identity, message, and method are required")
-        object.__setattr__(self, "evidence", _FrozenDict(self.evidence))
+        object.__setattr__(self, "evidence", _freeze(self.evidence))
 
 
 @dataclass(frozen=True, slots=True)
