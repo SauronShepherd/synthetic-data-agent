@@ -6,6 +6,14 @@ from typing import Any
 from sda.artifacts.fingerprint import fingerprint
 
 
+def _evidence_key(value: Any) -> Any:
+    try:
+        hash(value)
+    except TypeError:
+        return fingerprint(value)
+    return value
+
+
 def state_transitions(
     rows: list[dict[str, Any]],
     *,
@@ -50,6 +58,8 @@ def state_transitions(
             }
             for (a, b), n in sorted(counts.items(), key=lambda x: str(x[0]))
         ),
-        "right_censored": {state_values[key]: count for key, count in censored.items()},
+        "right_censored": {
+            _evidence_key(state_values[key]): count for key, count in censored.items()
+        },
         "warnings": ("unseen_transition_not_assumed_invalid",),
     }
