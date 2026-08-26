@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+
 import pytest
 
-from sda.state import Approval, AttemptStatus, ExecutionAttempt, RunRecord, StateError, WorkflowStatus
+from sda.state import (
+    Approval,
+    AttemptStatus,
+    ExecutionAttempt,
+    RunRecord,
+    StateError,
+    WorkflowStatus,
+)
 from sda.state_sqlite import SQLiteStateRepository
 
 

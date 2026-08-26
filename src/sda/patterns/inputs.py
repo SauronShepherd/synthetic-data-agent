@@ -7,7 +7,6 @@ from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType
 from sda.patterns.models import PatternInputRefs
 from sda.runtime.errors import ArtifactCompatibilityError, ArtifactNotFoundError
 
-
 PATTERN_INPUT_SCHEMA_VERSIONS: dict[ArtifactType, frozenset[str]] = {
     ArtifactType.METADATA_INVENTORY: frozenset({"1.0"}),
     ArtifactType.TABLE_PROFILE: frozenset({"1.0"}),

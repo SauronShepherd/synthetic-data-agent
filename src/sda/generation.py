@@ -88,7 +88,7 @@ def _value(
             raise GenerationError(f"model {model} requires empirical samples for {spec.column}")
         position = rng.randrange(len(empirical_sample))
         value = empirical_sample[position]
-        if model == "empirical_numeric" and not isinstance(value, (int, float)):
+        if model == "empirical_numeric" and not isinstance(value, int | float):
             raise GenerationError(f"empirical sample for {spec.column} must be numeric")
         if model == "empirical_categorical" and not isinstance(value, str):
             raise GenerationError(f"empirical sample for {spec.column} must be strings")

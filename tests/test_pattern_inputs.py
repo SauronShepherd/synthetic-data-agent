@@ -41,7 +41,11 @@ def artifacts() -> tuple[ArtifactRef, ...]:
 
 def test_pattern_inputs_require_exact_types_and_versions() -> None:
     assert len(require_pattern_inputs(artifacts(), inputs(), environment="dev")) == 4
-    wrong_type = (*artifacts()[:1], ref("profile", ArtifactType.TABLE_PROFILE, "2.0"), *artifacts()[2:])
+    wrong_type = (
+        *artifacts()[:1],
+        ref("profile", ArtifactType.TABLE_PROFILE, "2.0"),
+        *artifacts()[2:],
+    )
     with pytest.raises(ArtifactCompatibilityError, match="schema version"):
         require_pattern_inputs(wrong_type, inputs(), environment="dev")
 

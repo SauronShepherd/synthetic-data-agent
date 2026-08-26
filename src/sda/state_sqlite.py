@@ -11,7 +11,14 @@ import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from sda.state import Approval, AttemptStatus, ExecutionAttempt, RunRecord, StateError, WorkflowStatus
+from sda.state import (
+    Approval,
+    AttemptStatus,
+    ExecutionAttempt,
+    RunRecord,
+    StateError,
+    WorkflowStatus,
+)
 
 
 class SQLiteStateRepository:
@@ -106,7 +113,13 @@ class SQLiteStateRepository:
         try:
             self._connection.execute(
                 "INSERT INTO approvals VALUES (?, ?, ?, ?, ?)",
-                (approval.run_id, approval.approval_type, approval.decision, approval.actor, approval.reason),
+                (
+                    approval.run_id,
+                    approval.approval_type,
+                    approval.decision,
+                    approval.actor,
+                    approval.reason,
+                ),
             )
             self._connection.commit()
         except sqlite3.IntegrityError as exc:
@@ -131,8 +144,16 @@ class SQLiteStateRepository:
         try:
             self._connection.execute(
                 "INSERT INTO attempts VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (claimed.attempt_id, claimed.run_id, claimed.stage, claimed.status.value,
-                 claimed.worker_id, claimed.lease_expires_at, claimed.retry_number, claimed.error_code),
+                (
+                    claimed.attempt_id,
+                    claimed.run_id,
+                    claimed.stage,
+                    claimed.status.value,
+                    claimed.worker_id,
+                    claimed.lease_expires_at,
+                    claimed.retry_number,
+                    claimed.error_code,
+                ),
             )
             self._connection.commit()
         except sqlite3.IntegrityError as exc:
@@ -174,7 +195,9 @@ class SQLiteStateRepository:
         current = self._attempt_from_row(row)
         if current.status is not AttemptStatus.RUNNING or current.worker_id != worker_id:
             raise StateError("attempt lease is not owned by worker")
-        if current.lease_expires_at is None or _parse_time(current.lease_expires_at) <= datetime.now(UTC):
+        if current.lease_expires_at is None or _parse_time(
+            current.lease_expires_at
+        ) <= datetime.now(UTC):
             raise StateError("attempt lease has expired")
         lease = (datetime.now(UTC) + timedelta(seconds=lease_seconds)).isoformat()
         self._connection.execute(
@@ -184,7 +207,9 @@ class SQLiteStateRepository:
         self._connection.commit()
         return replace(current, lease_expires_at=lease)
 
-    def recover_stale_attempts(self, *, now: datetime | None = None) -> tuple[ExecutionAttempt, ...]:
+    def recover_stale_attempts(
+        self, *, now: datetime | None = None
+    ) -> tuple[ExecutionAttempt, ...]:
         current_time = now or datetime.now(UTC)
         rows = self._connection.execute(
             "SELECT attempt_id, run_id, stage, status, worker_id, lease_expires_at, retry_number, error_code FROM attempts WHERE status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?",
@@ -195,18 +220,34 @@ class SQLiteStateRepository:
             attempt = self._attempt_from_row(row)
             self._connection.execute(
                 "UPDATE attempts SET status = ?, error_code = ?, lease_expires_at = NULL WHERE attempt_id = ? AND status = ?",
-                (AttemptStatus.ABANDONED.value, "stale_lease", attempt.attempt_id, AttemptStatus.RUNNING.value),
+                (
+                    AttemptStatus.ABANDONED.value,
+                    "stale_lease",
+                    attempt.attempt_id,
+                    AttemptStatus.RUNNING.value,
+                ),
             )
-            recovered.append(replace(attempt, status=AttemptStatus.ABANDONED, error_code="stale_lease", lease_expires_at=None))
+            recovered.append(
+                replace(
+                    attempt,
+                    status=AttemptStatus.ABANDONED,
+                    error_code="stale_lease",
+                    lease_expires_at=None,
+                )
+            )
         self._connection.commit()
         return tuple(recovered)
 
     @staticmethod
     def _attempt_from_row(row: tuple[object, ...]) -> ExecutionAttempt:
         return ExecutionAttempt(
-            str(row[1]), str(row[0]), str(row[2]), AttemptStatus(str(row[3])),
+            str(row[1]),
+            str(row[0]),
+            str(row[2]),
+            AttemptStatus(str(row[3])),
             str(row[4]) if row[4] is not None else None,
-            str(row[5]) if row[5] is not None else None, int(str(row[6])),
+            str(row[5]) if row[5] is not None else None,
+            int(str(row[6])),
             str(row[7]) if row[7] is not None else None,
         )
 

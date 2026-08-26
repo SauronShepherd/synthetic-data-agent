@@ -14,12 +14,14 @@ class NoiseProfile(StrEnum):
     STRESS = "stress"
 
 
-SUPPORTED_DEFECTS = frozenset({
-    "null_injection",
-    "casing",
-    "malformed_value",
-    "out_of_range",
-})
+SUPPORTED_DEFECTS = frozenset(
+    {
+        "null_injection",
+        "casing",
+        "malformed_value",
+        "out_of_range",
+    }
+)
 
 
 class NoiseError(ValueError):
@@ -112,7 +114,7 @@ def apply_noise(
         elif plan.defect_type == "malformed_value":
             after = f"{before}__MALFORMED"
         else:
-            if not isinstance(before, (int, float)) or isinstance(before, bool):
+            if not isinstance(before, int | float) or isinstance(before, bool):
                 raise NoiseError("out_of_range defects require a numeric column")
             after = before * 10 + 1
         rows[index][column] = after

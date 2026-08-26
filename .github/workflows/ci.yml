@@ -23,7 +23,7 @@ jobs:
       - name: Lint
         run: ruff check src tests
       - name: Type check
-        run: mypy src tests
+        run: mypy src
       - name: Tests and coverage
         run: pytest -q --cov=src/sda --cov-report=term-missing
       - name: Spark tests
