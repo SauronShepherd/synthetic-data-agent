@@ -62,6 +62,15 @@ def test_checkpoint_rejects_gaps_and_cross_stream_events() -> None:
         checkpoint(current, ({**events[0], "stream_id": "other"},))
 
 
+def test_manifest_rejects_schema_mismatch_and_offset_gaps() -> None:
+    current = plan()
+    events = generate_bounded_events(current)
+    with pytest.raises(StreamError, match="stream plan"):
+        manifest(current, ({**events[0], "schema_version": "2"},))
+    with pytest.raises(StreamError, match="contiguous"):
+        manifest(current, (events[0], events[2]))
+
+
 def test_bounded_events_have_deterministic_inter_arrival_times() -> None:
     current = plan(inter_arrival_seconds=2.5)
     events = generate_bounded_events(current)

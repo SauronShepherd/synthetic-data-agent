@@ -128,6 +128,15 @@ def generate_bounded_events(
 
 
 def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamManifest:
+    if any(
+        event.get("stream_id") != plan.stream_id
+        or event.get("schema_version") != plan.schema_version
+        for event in events
+    ):
+        raise StreamError("manifest events do not belong to the stream plan")
+    offsets = [int(event["offset"]) for event in events]
+    if offsets and offsets != list(range(offsets[0], offsets[-1] + 1)):
+        raise StreamError("manifest events must contain contiguous offsets")
     ids = [str(event["event_id"]) for event in events]
     replay = hashlib.sha256("|".join(ids).encode()).hexdigest()
     return StreamManifest(
