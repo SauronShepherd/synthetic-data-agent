@@ -50,9 +50,9 @@ design evidence; the repository is the source of truth for what is currently pre
 
 ### 2.1 Resolve repository inconsistencies
 
-- [ ] Update `pyproject.toml` description from SDA 06 to SDA 07 and add the actual
+- [x] Update `pyproject.toml` description from SDA 06 to SDA 07 and add the actual
   pattern-detection capability.
-- [ ] Reconcile `README.md`, `docs/architecture.md`, and bundle descriptions so they
+- [x] Reconcile `README.md`, `docs/architecture.md`, and bundle descriptions so they
   say consistently that patterns are implemented while generation is not.
 - [ ] Add a formal SDA 07 schema/version compatibility policy for registry and evidence
   artifacts; reject incompatible upstream versions instead of accepting best effort.

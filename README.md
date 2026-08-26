@@ -20,8 +20,8 @@ This branch now supports three execution modes:
 - **Local demo mode** with deterministic sample metadata.
 - **Local Databricks SQL Warehouse mode** through the Databricks SQL Connector.
 - **Databricks Bundle serverless mode** for Databricks Free/serverless workspaces.
-- **SDA 06 relationship evidence workflow** through the Databricks bundle, including
-  persisted scope relationship and dependency-graph artifacts.
+- **SDA 07 pattern evidence workflow** through the Databricks bundle, including
+  persisted pattern registry/evidence artifacts and its SDA 04–06 upstream inputs.
 
 Bundle validation and deployment are environment-dependent; local checks cover compilation and deterministic reader contracts. A successful run may still return an empty inventory when the configured catalog/schema scope does not contain visible matching tables.
 
@@ -191,11 +191,11 @@ databricks bundle deploy -t dev --profile <profile-name>
 databricks bundle run uc_metadata_reader -t dev --profile <profile-name>
 ```
 
-Run the SDA 06 relationship detector in serverless dry-run mode:
+Run the SDA 07 pattern detector in serverless dry-run mode:
 
 ```bash
-databricks bundle run relationship_detector -t dev --profile <profile-name> \
-  --params="dry_run=true,parent_columns=customer_id,child_columns=customer_id"
+databricks bundle run pattern_detector -t dev --profile <profile-name> \
+  --params="dry_run=true,selected_tables=sda_dev.sample_source.sample_customers"
 ```
 
 The checked-in dev sample relation is `sda_dev.sample_source.sample_customers`.
