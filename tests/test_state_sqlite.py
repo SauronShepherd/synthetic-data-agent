@@ -25,7 +25,7 @@ def test_sqlite_state_survives_repository_reopen(tmp_path: object) -> None:
     repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     repo.close()
     reopened = SQLiteStateRepository(path)
-    assert reopened.get_run("run-1").status is WorkflowStatus.PLANNED
+    assert reopened.get_run("run-1").status is WorkflowStatus.AWAITING_APPROVAL
     reopened.close()
 
 
@@ -34,6 +34,7 @@ def test_sqlite_state_enforces_idempotency_and_version() -> None:
     run = RunRecord("run-1", "req-1", "idem-1")
     assert repo.create_run(run) == repo.create_run(run)
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
+    repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     with pytest.raises(StateError, match="concurrency"):
         repo.transition_run("run-1", WorkflowStatus.APPROVED, expected_version=0)
     repo.close()
