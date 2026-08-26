@@ -239,6 +239,18 @@ def test_candidates_include_structural_pattern_families() -> None:
     assert PatternFamily.CONDITIONAL_MISSINGNESS in families
 
 
+def test_detector_is_independent_of_input_row_order() -> None:
+    detector = PatternDetector(PatternConfig(min_support_rows=1, max_candidates=50))
+    rows = [
+        {"segment": "b", "x": 2, "started_at": 2, "finished_at": 4},
+        {"segment": "a", "x": 1, "started_at": 1, "finished_at": 3},
+        {"segment": "b", "x": 4, "started_at": 4, "finished_at": 8},
+    ]
+    forward = detector.detect(rows, table="main.s.events")
+    reverse = detector.detect(list(reversed(rows)), table="main.s.events")
+    assert forward == reverse
+
+
 def test_pattern_detector_rejects_inputs_over_scan_budget() -> None:
     detector = PatternDetector(PatternConfig(min_support_rows=1, max_rows_scanned=1))
     with pytest.raises(ValueError, match="max_rows_scanned"):

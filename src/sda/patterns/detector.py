@@ -114,6 +114,11 @@ class PatternDetector:
             raise ValueError(
                 f"input rows exceed max_rows_scanned budget ({self.config.max_rows_scanned})"
             )
+        # Input partition/order is not evidence.  Canonical row fingerprints make
+        # the in-memory reference implementation match the partition-independent
+        # contract expected from distributed aggregations without retaining raw
+        # values in any artifact.
+        rows = sorted(rows, key=fingerprint)
         analysis_id = analysis_id or fingerprint(
             {"table": table, "config": self.config.configuration_hash}
         )
