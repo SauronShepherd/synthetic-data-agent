@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import random
+import tempfile
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -15,6 +19,32 @@ from sda.planning import ColumnGenerationSpec, GenerationPlan, RowCountMode
 
 class GenerationError(ValueError):
     """Raised when a plan cannot be executed safely."""
+
+
+def write_staging_rows(path: str, rows: Sequence[Mapping[str, Any]]) -> None:
+    """Atomically write generated rows as schema-stable JSON Lines."""
+    destination = os.path.abspath(path)
+    parent = os.path.dirname(destination)
+    os.makedirs(parent, exist_ok=True)
+    expected: tuple[str, ...] | None = None
+    handle, temporary = tempfile.mkstemp(prefix=".sda-staging-", suffix=".tmp", dir=parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+            for row in rows:
+                columns = tuple(sorted(str(column) for column in row))
+                if expected is None:
+                    expected = columns
+                elif columns != expected:
+                    raise GenerationError("staging rows must have an identical column schema")
+                stream.write(json.dumps(dict(row), sort_keys=True, separators=(",", ":")))
+                stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, destination)
+    except Exception:
+        with suppress(FileNotFoundError):
+            os.unlink(temporary)
+        raise
 
 
 @dataclass(frozen=True, slots=True)

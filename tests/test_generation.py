@@ -12,6 +12,7 @@ from sda.generation import (
     manifest_for,
     receipt_for,
     resolve_row_count,
+    write_staging_rows,
 )
 from sda.job_entrypoints.generate_spark import write_manifest
 from sda.planning import (
@@ -206,6 +207,18 @@ def test_generation_manifest_writer_replaces_partial_output_atomically(tmp_path)
         "status": "complete",
     }
     assert not list(destination.parent.glob("*.tmp"))
+
+
+def test_staging_writer_is_atomic_and_schema_checked(tmp_path) -> None:
+    destination = tmp_path / "nested" / "rows.jsonl"
+    write_staging_rows(str(destination), ({"id": 1, "value": "a"}, {"id": 2, "value": "b"}))
+    assert destination.read_text(encoding="utf-8").splitlines() == [
+        '{"id":1,"value":"a"}',
+        '{"id":2,"value":"b"}',
+    ]
+    with pytest.raises(GenerationError, match="identical column schema"):
+        write_staging_rows(str(destination), ({"id": 1}, {"value": 2}))
+    assert not list(destination.parent.glob(".sda-staging-*.tmp"))
 
 
 def test_approved_cross_column_rules_are_deterministic_and_plan_bound() -> None:
