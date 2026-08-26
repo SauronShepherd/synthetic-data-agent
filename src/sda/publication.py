@@ -179,6 +179,10 @@ class PublicationRegistry:
             current = self._items[key]
         except KeyError as exc:
             raise PublicationError("unknown dataset version") from exc
+        if current.status is PublicationStatus.REVOKED:
+            if current.revocation_reason == reason:
+                return current
+            raise PublicationError("dataset version is already revoked")
         revoked = replace(current, status=PublicationStatus.REVOKED, revocation_reason=reason)
         self._items[key] = revoked
         for alias, target in tuple(self._aliases.items()):

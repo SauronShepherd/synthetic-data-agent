@@ -58,6 +58,9 @@ def test_revoke_removes_alias() -> None:
     )
     revoked = registry.revoke("dataset", "v1", reason="policy change")
     assert revoked.status is PublicationStatus.REVOKED
+    assert registry.revoke("dataset", "v1", reason="policy change") is revoked
+    with pytest.raises(PublicationError, match="already revoked"):
+        registry.revoke("dataset", "v1", reason="different reason")
 
 
 def test_publication_exposes_validated_and_approved_lifecycle_states() -> None:
