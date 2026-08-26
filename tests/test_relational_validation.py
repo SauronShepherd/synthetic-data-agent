@@ -264,6 +264,8 @@ def test_validation_report_serializes_check_contract_and_disposition() -> None:
     )
     payload = report.to_dict()
     assert payload["technical_disposition"] == "PASS"
+    assert payload["schema_version"] == "validation-report-v1"
+    assert payload["checks"][0]["schema_version"] == "validation-check-v1"
     assert payload["validation_vector"] == {"schema": "PASS"}
     assert payload["checks"][0]["check_id"] == "row_count:customers"
     assert payload["fingerprint"] == report.fingerprint

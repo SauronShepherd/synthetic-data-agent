@@ -47,6 +47,7 @@ class ValidationCheck:
     population: str | None = None
     severity: str = "error"
     unsupported_reason: str | None = None
+    schema_version: str = "validation-check-v1"
 
     def __post_init__(self) -> None:
         if not self.check_id.strip() or not self.message.strip() or not self.method.strip():
@@ -55,6 +56,8 @@ class ValidationCheck:
             raise ValueError("validation severity must be info, warning, or error")
         if self.status is CheckStatus.NOT_APPLICABLE and not self.unsupported_reason:
             raise ValueError("NOT_APPLICABLE checks require unsupported_reason")
+        if not self.schema_version.strip():
+            raise ValueError("validation check schema_version must not be empty")
         object.__setattr__(self, "evidence", _freeze(self.evidence))
 
     def to_dict(self) -> dict[str, Any]:
@@ -70,6 +73,7 @@ class ValidationCheck:
             "population": self.population,
             "severity": self.severity,
             "unsupported_reason": self.unsupported_reason,
+            "schema_version": self.schema_version,
         }
 
 
@@ -79,10 +83,13 @@ class ValidationReport:
     intended_use: str
     technical_disposition: CheckStatus
     validation_vector: dict[str, CheckStatus] = field(default_factory=dict)
+    schema_version: str = "validation-report-v1"
 
     def __post_init__(self) -> None:
         if not self.intended_use.strip():
             raise ValueError("validation intended use is required")
+        if not self.schema_version.strip():
+            raise ValueError("validation report schema_version must not be empty")
         ids = [check.check_id for check in self.checks]
         if len(ids) != len(set(ids)):
             raise ValueError("validation check IDs must be unique")
@@ -115,6 +122,7 @@ class ValidationReport:
                 dimension: status.value for dimension, status in self.validation_vector.items()
             },
             "fingerprint": self.fingerprint,
+            "schema_version": self.schema_version,
         }
 
 
