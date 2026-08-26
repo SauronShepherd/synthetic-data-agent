@@ -83,12 +83,15 @@ class Approval:
     decision: str
     actor: str
     reason: str = ""
+    decided_at: str = ""
 
     def __post_init__(self) -> None:
         if any(not value.strip() for value in (self.run_id, self.approval_type, self.actor)):
             raise ValueError("approval identity fields must not be empty")
         if self.decision not in {"approved", "rejected"}:
             raise ValueError("decision must be approved or rejected")
+        if not self.decided_at:
+            object.__setattr__(self, "decided_at", datetime.now(UTC).isoformat())
 
 
 @dataclass(frozen=True, slots=True)

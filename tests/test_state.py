@@ -63,6 +63,7 @@ def test_approval_is_unique_per_type() -> None:
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
     approval = Approval("run-1", "privacy", "approved", "reviewer")
     repo.record_approval(approval)
+    assert approval.decided_at
     with pytest.raises(StateError, match="already recorded"):
         repo.record_approval(approval)
 
