@@ -102,8 +102,10 @@ design evidence; the repository is the source of truth for what is currently pre
 
 ### 3.1 Contracts and state model
 
-- [ ] Replace design-only tool placeholders in `src/sda/tools/design_stubs.py` with
-  real stage contracts or clearly isolate them as documentation fixtures.
+- [x] Replace design-only tool placeholders in `src/sda/tools/design_stubs.py` with
+  real stage contracts or clearly isolate them as documentation fixtures. The module
+  is explicitly documented as a legacy Article 02 fixture and is separate from the
+  executable SDA 07 pipeline.
 - [ ] Define request, scope, evidence snapshot, generation plan, approval, execution
   attempt, artifact, validation report, publication, and feedback models.
 - [ ] Define the state machine: `REQUESTED -> PLANNED -> AWAITING_APPROVAL ->
