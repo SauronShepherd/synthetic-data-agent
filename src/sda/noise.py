@@ -24,6 +24,7 @@ SUPPORTED_DEFECTS = frozenset(
         "out_of_range",
         "omission",
         "duplicate",
+        "near_duplicate",
     }
 )
 
@@ -142,6 +143,10 @@ def apply_noise(
             del rows[index][column]
         elif plan.defect_type == "duplicate":
             after = rows[(index - 1) % len(rows)][column]
+        elif plan.defect_type == "near_duplicate":
+            if not isinstance(before, str):
+                raise NoiseError("near_duplicate defects require a string column")
+            after = before[:-1] + ("_" if before[-1:] != "_" else "-")
         else:
             if not isinstance(before, int | float) or isinstance(before, bool):
                 raise NoiseError("out_of_range defects require a numeric column")
