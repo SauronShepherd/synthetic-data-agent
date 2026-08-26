@@ -307,6 +307,16 @@ class Pattern:
             PatternOrigin.DESTINATION_CONSTRAINT,
         }:
             raise ValueError("approved_rule lifecycle requires an approval origin")
+        lifecycle_decisions = {
+            PatternLifecycle.REJECTED: PatternDecision.REJECTED.value,
+            PatternLifecycle.REVIEW_REQUIRED: PatternDecision.REVIEW_REQUIRED.value,
+            PatternLifecycle.INSUFFICIENT_EVIDENCE: PatternDecision.INSUFFICIENT_EVIDENCE.value,
+        }
+        expected_decision = lifecycle_decisions.get(self.lifecycle)
+        if expected_decision is not None and self.decision != expected_decision:
+            raise ValueError(
+                f"{self.lifecycle.value} lifecycle requires {expected_decision} decision"
+            )
         if self.origin is PatternOrigin.OBSERVED and self.rule_strength == "hard_constraint":
             raise ValueError("observed patterns must not become hard constraints")
         for name in (

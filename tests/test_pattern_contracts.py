@@ -398,6 +398,22 @@ def test_pattern_lifecycle_is_explicit_and_origin_compatible() -> None:
         columns={"x": "int", "y": "int"},
     )
     assert rejected[0].lifecycle is PatternLifecycle.REJECTED
+    with pytest.raises(ValueError, match="rejected lifecycle"):
+        Pattern(
+            "p2",
+            "a",
+            PatternFamily.CORRELATION,
+            PatternOrigin.OBSERVED,
+            "t",
+            ("x",),
+            {},
+            {},
+            2,
+            1.0,
+            {},
+            {},
+            lifecycle=PatternLifecycle.REJECTED,
+        )
     insufficient = PatternDetector(
         PatternConfig(min_support_rows=2),
         scoring_policy=PatternScoringPolicy(min_support_rows=3),
