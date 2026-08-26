@@ -20,6 +20,7 @@ def test_topology_is_reproducible() -> None:
     assert result == generate_topology(plan)
     with pytest.raises(TypeError, match="immutable"):
         result.nodes[0]["node_id"] = "changed"  # type: ignore[index]
+    assert result.output_fingerprint == generate_topology(plan).output_fingerprint
 
 
 def test_topology_rejects_impossible_simple_graph() -> None:

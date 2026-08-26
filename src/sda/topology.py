@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from sda.artifacts.fingerprint import fingerprint
 from sda.operations import ResourceBudget, enforce_budget
 
 
@@ -74,6 +75,11 @@ class TopologyResult:
         object.__setattr__(self, "nodes", tuple(_FrozenDict(node) for node in self.nodes))
         object.__setattr__(self, "edges", tuple(_FrozenDict(edge) for edge in self.edges))
         object.__setattr__(self, "metrics", _FrozenDict(self.metrics))
+
+    @property
+    def output_fingerprint(self) -> str:
+        """Stable identity for the generated structure, excluding mutable wrappers."""
+        return fingerprint({"nodes": self.nodes, "edges": self.edges, "metrics": self.metrics})
 
 
 def generate_topology(plan: TopologyPlan) -> TopologyResult:
