@@ -112,27 +112,31 @@ class PatternDetector:
             {"table": table, "config": self.config.configuration_hash}
         )
         names = sorted(columns or ({k: "numeric" for k in rows[0]} if rows else {}))
-        numeric = [
-            name
-            for name in names
-            if "int" in str((columns or {}).get(name, ""))
-            or "double" in str((columns or {}).get(name, ""))
-            or "float" in str((columns or {}).get(name, ""))
-        ]
+        numeric = []
+        for name in names:
+            declared_type = str((columns or {}).get(name, ""))
+            inferred_numeric = bool(rows) and all(
+                value is None or (isinstance(value, int | float) and not isinstance(value, bool))
+                for value in (row.get(name) for row in rows)
+            )
+            if (
+                "int" in declared_type
+                or "double" in declared_type
+                or "float" in declared_type
+                or inferred_numeric
+            ):
+                numeric.append(name)
         result: list[Pattern] = []
         for index, left in enumerate(numeric):
             for right in numeric[index + 1 :]:
+                pairs = [
+                    (float(row[left]), float(row[right]))
+                    for row in rows
+                    if row.get(left) is not None and row.get(right) is not None
+                ]
                 metric = pearson(
-                    [
-                        float(r[left])
-                        for r in rows
-                        if r.get(left) is not None and r.get(right) is not None
-                    ],
-                    [
-                        float(r[right])
-                        for r in rows
-                        if r.get(left) is not None and r.get(right) is not None
-                    ],
+                    [pair[0] for pair in pairs],
+                    [pair[1] for pair in pairs],
                 )
                 if (
                     metric["valid_pair_count"] < self.config.min_support_rows

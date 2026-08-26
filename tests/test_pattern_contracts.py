@@ -33,6 +33,28 @@ def test_correlation_is_evidence_and_observed_is_not_auto_approved() -> None:
     assert result[0].metric["valid_pair_count"] == 40
 
 
+def test_correlation_pairs_remain_aligned_when_values_are_null() -> None:
+    rows = [
+        {"x": 1, "y": None},
+        {"x": None, "y": 2},
+        {"x": 3, "y": 6},
+        {"x": 4, "y": 8},
+    ]
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        rows, table="main.s.t", columns={"x": "double", "y": "double"}
+    )
+    assert len(result) == 1
+    assert result[0].metric["valid_pair_count"] == 2
+    assert result[0].metric["value"] == pytest.approx(1.0)
+
+
+def test_correlation_infers_numeric_columns_when_types_are_omitted() -> None:
+    rows = [{"x": index, "y": index * 2} for index in range(3)]
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(rows, table="main.s.t")
+    assert len(result) == 1
+    assert result[0].metric["valid_pair_count"] == 3
+
+
 def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> None:
     refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
