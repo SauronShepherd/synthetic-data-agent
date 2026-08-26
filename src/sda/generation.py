@@ -60,6 +60,11 @@ def generate_rows(
     """
     if plan.status.value != "approved":
         raise GenerationError("only approved plans may be executed")
+    if len(plan.tables) != 1:
+        raise GenerationError(
+            "standalone generation requires exactly one target table; "
+            "use the relational generator for multi-table plans"
+        )
     if row_count is None:
         row_count = resolve_row_count(plan)
     if row_count < 0:
