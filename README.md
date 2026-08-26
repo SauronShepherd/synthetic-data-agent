@@ -26,6 +26,9 @@ This branch now supports three execution modes:
   duplicate-row risk, with schema-versioned, raw-value-free findings.
 - Standalone Spark generation manifests containing the approved seed, output schema,
   fingerprints, receipt, and lineage; `--manifest-path` writes them atomically.
+- Controlled local noise profiles use deterministic default mutation rates of 1% (historical),
+  5% (mild), 10% (QA), and 25% (stress). An explicit `budget` or `budget_rate` overrides the
+  profile default; every result is immutable and carries a raw-value-free truth ledger.
 
 Bundle validation and deployment are environment-dependent; local checks cover compilation and deterministic reader contracts. A successful run may still return an empty inventory when the configured catalog/schema scope does not contain visible matching tables.
 
