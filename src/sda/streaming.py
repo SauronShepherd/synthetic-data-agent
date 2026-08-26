@@ -84,6 +84,12 @@ class StreamManifest:
             raise ValueError("stream manifest identity must not be empty")
         if self.event_count < 0:
             raise ValueError("stream manifest event_count must not be negative")
+        if not self.replay_fingerprint.strip():
+            raise ValueError("stream manifest replay_fingerprint must not be empty")
+        if self.events_per_second <= 0 or self.inter_arrival_seconds <= 0:
+            raise ValueError("stream manifest rate and inter-arrival must be positive")
+        if self.seed < 0:
+            raise ValueError("stream manifest seed must not be negative")
         if (self.event_count == 0) != (self.first_event_id is None and self.last_event_id is None):
             raise ValueError("empty stream manifests must not contain event IDs")
         if self.watermark_delay_seconds < 0:

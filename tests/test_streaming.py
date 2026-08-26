@@ -91,6 +91,13 @@ def test_checkpoint_rejects_invalid_direct_construction() -> None:
         StreamCheckpoint("stream", "plan", "1", "query", -1, "replay")
 
 
+def test_stream_manifest_rejects_invalid_replay_contract() -> None:
+    with pytest.raises(ValueError, match="replay_fingerprint"):
+        from sda.streaming import StreamManifest
+
+        StreamManifest("s", "p", 0, None, None, None, "", 1.0, 1.0, 1, None, 0.0)
+
+
 def test_manifest_rejects_schema_mismatch_and_offset_gaps() -> None:
     current = plan()
     events = generate_bounded_events(current)
