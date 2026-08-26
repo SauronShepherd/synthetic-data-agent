@@ -71,9 +71,9 @@ design evidence; the repository is the source of truth for what is currently pre
 - [ ] Complete the pattern taxonomy: numeric association, conditional categorical,
   segment behavior, conditional null, lifecycle/state transition, event ordering,
   temporal lag, probabilistic rule, and declared/approved rule.
-- [ ] For every candidate, persist support count/rate, confidence, stability,
+- [x] For every candidate, persist support count/rate, confidence, stability,
   violation count/rate, method, population, sampling, warnings, and limitation text.
-- [ ] Separate `OBSERVED_PATTERN`, `DECLARED_RULE`, `APPROVED_RULE`, `REJECTED`, and
+- [x] Separate `OBSERVED_PATTERN`, `DECLARED_RULE`, `APPROVED_RULE`, `REJECTED`, and
   `REVIEW_REQUIRED`; never allow an observed correlation to become a hard constraint.
 - [ ] Implement deterministic tie-breaking and conflict resolution across patterns,
   including contradictory conditionals, overlapping null rules, and precedence cycles.
@@ -244,7 +244,7 @@ design evidence; the repository is the source of truth for what is currently pre
   publication authorization; implement deny-by-default behavior.
 - [ ] Implement privacy checks for direct identifiers, quasi-identifiers, rare records,
   memorization/nearest-neighbor risk, approved vocabularies, and sensitive outputs.
-- [ ] Implement publication transaction: staged -> validated -> approved -> published,
+- [x] Implement publication transaction: staged -> validated -> approved -> published,
   with UC permissions, views, manifests, version aliases, rollback, and revocation.
 - [ ] Add adversarial tests proving fail-closed behavior, stale evidence rejection,
   unauthorized publication denial, privacy failures, and partial-write recovery.
