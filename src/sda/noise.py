@@ -22,6 +22,7 @@ SUPPORTED_DEFECTS = frozenset(
         "casing",
         "malformed_value",
         "out_of_range",
+        "omission",
     }
 )
 
@@ -135,11 +136,15 @@ def apply_noise(
             after = before.swapcase()
         elif plan.defect_type == "malformed_value":
             after = f"{before}__MALFORMED"
+        elif plan.defect_type == "omission":
+            after = None
+            del rows[index][column]
         else:
             if not isinstance(before, int | float) or isinstance(before, bool):
                 raise NoiseError("out_of_range defects require a numeric column")
             after = before * 10 + 1
-        rows[index][column] = after
+        if plan.defect_type != "omission":
+            rows[index][column] = after
         mutations.append(Mutation(plan.noise_id, index, column, plan.defect_type, before, after))
     output = tuple(rows)
     frozen = _freeze_rows(output)

@@ -56,3 +56,15 @@ def test_noise_rejects_unsupported_defect_and_wrong_type() -> None:
             NoisePlan("n", fingerprint(baseline), defect_type="casing", budget=1),
             column="value",
         )
+
+
+def test_omission_removes_only_deterministically_selected_columns() -> None:
+    baseline = (({"id": 1, "value": "a"}), ({"id": 2, "value": "b"}))
+    result = apply_noise(
+        baseline,
+        NoisePlan("n", fingerprint(baseline), defect_type="omission", budget=1),
+        column="value",
+    )
+    assert len(result.mutations) == 1
+    assert sum("value" not in row for row in result.rows) == 1
+    assert all("value" in row for row in baseline)
