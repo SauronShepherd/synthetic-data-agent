@@ -5,14 +5,44 @@ from __future__ import annotations
 import hashlib
 import random
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
+from sda.artifacts.fingerprint import fingerprint
 from sda.operations import ResourceBudget, enforce_budget
 from sda.planning import ColumnGenerationSpec, GenerationPlan, RowCountMode
 
 
 class GenerationError(ValueError):
     """Raised when a plan cannot be executed safely."""
+
+
+@dataclass(frozen=True, slots=True)
+class GenerationReceipt:
+    """Content-addressed, raw-value-free receipt for a generated batch."""
+
+    plan_id: str
+    plan_fingerprint: str
+    row_count: int
+    output_fingerprint: str
+    generator_version: str = "generation-v1"
+
+    def __post_init__(self) -> None:
+        if not self.plan_id.strip() or not self.plan_fingerprint.strip():
+            raise ValueError("receipt plan identity must not be empty")
+        if self.row_count < 0:
+            raise ValueError("receipt row_count must not be negative")
+        if not self.output_fingerprint.strip():
+            raise ValueError("receipt output_fingerprint must not be empty")
+
+    def to_dict(self) -> dict[str, str | int]:
+        return {
+            "plan_id": self.plan_id,
+            "plan_fingerprint": self.plan_fingerprint,
+            "row_count": self.row_count,
+            "output_fingerprint": self.output_fingerprint,
+            "generator_version": self.generator_version,
+        }
 
 
 def generate_rows(
@@ -56,6 +86,17 @@ def generate_rows(
             )
         result.append(row)
     return tuple(result)
+
+
+def receipt_for(plan: GenerationPlan, rows: Sequence[Mapping[str, Any]]) -> GenerationReceipt:
+    """Create a deterministic receipt without including generated values."""
+    normalized = tuple(dict(row) for row in rows)
+    return GenerationReceipt(
+        plan_id=plan.plan_id,
+        plan_fingerprint=plan.plan_fingerprint,
+        row_count=len(normalized),
+        output_fingerprint=fingerprint(normalized),
+    )
 
 
 def resolve_row_count(plan: GenerationPlan, *, source_row_count: int | None = None) -> int:

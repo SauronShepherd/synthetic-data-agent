@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from sda.generation import GenerationError, generate_rows, resolve_row_count
+from sda.generation import GenerationError, generate_rows, receipt_for, resolve_row_count
 from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus, RowCountMode
 
 
@@ -131,3 +131,13 @@ def test_date_and_timestamp_models_have_distinct_iso_semantics() -> None:
     row = generate_rows(temporal, row_count=1)[0]
     assert re.fullmatch(r"2020-01-01", row["day"])
     assert re.fullmatch(r"2020-01-01T00:00:00Z", row["created_at"])
+
+
+def test_generation_receipt_is_deterministic_and_contains_no_rows() -> None:
+    rows = generate_rows(plan(), row_count=3, vocabularies={"segment": ("a", "b")})
+    receipt = receipt_for(plan(), rows)
+    assert receipt == receipt_for(plan(), rows)
+    assert receipt.row_count == 3
+    assert "id" not in receipt.to_dict()
+    assert "segment" not in receipt.to_dict()
+    assert receipt.output_fingerprint
