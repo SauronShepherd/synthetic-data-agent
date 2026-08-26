@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -268,3 +268,30 @@ def test_noise_plan_serialization_is_complete_and_raw_value_free() -> None:
         "scenario": "incident",
     }
     assert "secret" not in str(plan.to_dict())
+
+
+@pytest.mark.parametrize("defect_type", ["missing_stream_event", "duplicate_stream_event"])
+def test_stream_event_row_defects_are_bounded_and_baseline_safe(defect_type: str) -> None:
+    baseline = tuple({"event_id": str(index), "payload": index} for index in range(3))
+    result = apply_noise(
+        baseline,
+        NoisePlan("stream-noise", fingerprint(baseline), defect_type=defect_type, budget=1),
+        column="payload",
+    )
+    assert len(result.mutations) == 1
+    assert len(result.rows) == (2 if defect_type == "missing_stream_event" else 4)
+    assert baseline == tuple({"event_id": str(index), "payload": index} for index in range(3))
+
+
+def test_late_stream_event_defect_moves_event_time_backwards() -> None:
+    baseline = tuple(
+        {"event_id": str(index), "event_time": datetime(2020, 1, index + 1)} for index in range(2)
+    )
+    result = apply_noise(
+        baseline,
+        NoisePlan("stream-noise", fingerprint(baseline), defect_type="late_stream_event", budget=1),
+        column="event_time",
+    )
+    mutation = result.mutations[0]
+    assert mutation.column == "event_time"
+    assert mutation.after == mutation.before - timedelta(days=1)

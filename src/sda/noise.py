@@ -32,6 +32,9 @@ SUPPORTED_DEFECTS = frozenset(
         "future_timestamp",
         "invalid_state",
         "out_of_order_timestamp",
+        "late_stream_event",
+        "missing_stream_event",
+        "duplicate_stream_event",
         "broken_foreign_key",
         "drift",
     }
@@ -214,6 +217,12 @@ def apply_noise(
         raise NoiseError("baseline fingerprint does not match the noise plan")
     if plan.defect_type == "null_injection":
         return inject_nulls(baseline, plan, column=column)
+    if plan.defect_type in {
+        "late_stream_event",
+        "missing_stream_event",
+        "duplicate_stream_event",
+    }:
+        return _apply_stream_event_noise(baseline, plan)
     if any(column not in row for row in baseline):
         raise NoiseError(f"column not present in baseline: {column}")
     if plan.defect_type == "duplicate" and len(baseline) < 2:
@@ -278,4 +287,46 @@ def apply_noise(
         mutations.append(Mutation(plan.noise_id, index, column, plan.defect_type, before, after))
     output = tuple(rows)
     frozen = _freeze_rows(output)
+    return NoiseResult(frozen, tuple(mutations), plan.baseline_fingerprint, fingerprint(frozen))
+
+
+def _apply_stream_event_noise(baseline: tuple[dict[str, Any], ...], plan: NoisePlan) -> NoiseResult:
+    """Apply bounded stream defects while preserving event-row provenance."""
+    budget = _resolved_budget(plan, len(baseline))
+    if not baseline or budget == 0:
+        frozen = _freeze_rows(tuple(dict(row) for row in baseline))
+        return NoiseResult(frozen, (), plan.baseline_fingerprint, fingerprint(frozen))
+    selected = sorted(
+        sorted(range(len(baseline)), key=lambda index: _selection_key(plan, index))[:budget]
+    )
+    rows = [dict(row) for row in baseline]
+    mutations: list[Mutation] = []
+    if plan.defect_type == "duplicate_stream_event":
+        for index in selected:
+            copied = dict(baseline[index])
+            rows.append(copied)
+            mutations.append(
+                Mutation(plan.noise_id, len(rows) - 1, "*", plan.defect_type, None, copied)
+            )
+    elif plan.defect_type == "missing_stream_event":
+        for index in reversed(selected):
+            before = rows.pop(index)
+            output_index = min(index, len(rows) - 1) if rows else 0
+            mutations.append(
+                Mutation(plan.noise_id, output_index, "*", plan.defect_type, before, None)
+            )
+        mutations.reverse()
+    else:
+        for index in selected:
+            if "event_time" not in rows[index]:
+                raise NoiseError("late_stream_event defects require an event_time field")
+            before = rows[index]["event_time"]
+            if not isinstance(before, date | datetime):
+                raise NoiseError("late_stream_event defects require date or datetime event_time")
+            after = before - timedelta(days=1)
+            rows[index]["event_time"] = after
+            mutations.append(
+                Mutation(plan.noise_id, index, "event_time", plan.defect_type, before, after)
+            )
+    frozen = _freeze_rows(tuple(rows))
     return NoiseResult(frozen, tuple(mutations), plan.baseline_fingerprint, fingerprint(frozen))
