@@ -172,6 +172,26 @@ def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_spark_dispatcher_handles_partitions_skew_and_nulls(spark) -> None:
+    rows = [("hot", float(index), None if index % 7 == 0 else "open") for index in range(240)]
+    rows.extend([("cold", 1.0, "closed"), ("cold", None, None)])
+    frame = spark.createDataFrame(rows, "segment string, value double, status string").repartition(
+        4
+    )
+
+    correlation = spark_metric(frame, "pearson", left="value", right="value")
+    assert correlation.first()["valid_pair_count"] == 206
+    distribution = spark_metric(
+        frame, "conditional_distribution", drivers=("segment",), outcome="status"
+    )
+    assert distribution.where("segment = 'hot'").count() >= 1
+    missing = spark_metric(frame, "conditional_missingness", drivers=("segment",), outcome="status")
+    assert {row["support_rows"] for row in missing.collect()} == {2, 240}
+    unsupported = spark_metric(frame, "pearson", left="status", right="value")
+    assert not unsupported.supported
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_spark_fanout_includes_zero_child_parents(spark) -> None:
     parents = spark.createDataFrame(
         [("p1", "premium"), ("p2", "standard")], "id string, segment string"
