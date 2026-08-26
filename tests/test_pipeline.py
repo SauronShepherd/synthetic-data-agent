@@ -37,6 +37,8 @@ def test_pipeline_runs_all_gates_and_publishes() -> None:
         unique_key="id",
     )
     assert len(result.rows) == 2
+    assert result.receipt.row_count == 2
+    assert result.receipt.plan_fingerprint == approved_plan().plan_fingerprint
     assert result.validation.technical_disposition.value == "PASS"
     assert result.privacy.decision.value == "approved"
     assert result.publication is not None

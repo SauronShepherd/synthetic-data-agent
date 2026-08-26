@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sda.artifacts.manifest import RunManifest
-from sda.generation import generate_rows
+from sda.generation import GenerationReceipt, generate_rows, receipt_for
 from sda.operations import AuditEvent, AuditLevel, AuditLog, ResourceBudget, enforce_budget
 from sda.planning import GenerationPlan, PlanStatus
 from sda.privacy import PrivacyReport, assess_privacy
@@ -17,6 +17,7 @@ from sda.validation import ValidationReport, validate_tables
 @dataclass(frozen=True, slots=True)
 class PipelineResult:
     rows: tuple[dict[str, object], ...]
+    receipt: GenerationReceipt
     validation: ValidationReport
     privacy: PrivacyReport
     publication: Publication | None
@@ -55,6 +56,7 @@ def run_standalone(
         )
     )
     rows = generate_rows(plan, row_count=row_count)
+    receipt = receipt_for(plan, rows)
     table_name = plan.tables[0]
     validation = validate_tables(
         {table_name: rows},
@@ -113,4 +115,4 @@ def run_standalone(
         ),
         locations={"output": location},
     )
-    return PipelineResult(rows, validation, privacy, publication, run_manifest)
+    return PipelineResult(rows, receipt, validation, privacy, publication, run_manifest)
