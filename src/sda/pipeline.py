@@ -45,6 +45,7 @@ def run_standalone(
     quasi_identifier_columns: tuple[tuple[str, str], ...] = (),
     min_quasi_group_size: int = 2,
     approved_vocabularies: dict[tuple[str, str], tuple[object, ...]] | None = None,
+    rules: tuple[object, ...] = (),
     staging_path: str | None = None,
     audit_log: AuditLog | None = None,
 ) -> PipelineResult:
@@ -76,6 +77,7 @@ def run_standalone(
         {table_name: rows},
         expected_counts={table_name: row_count},
         unique_keys={table_name: unique_key} if unique_key else {},
+        rules=rules,
         intended_use=plan.intended_use,
     )
     privacy = assess_privacy(

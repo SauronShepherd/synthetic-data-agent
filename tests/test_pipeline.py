@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from sda.patterns.rules import BusinessRule
 from sda.pipeline import run_standalone
 from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus
 
@@ -93,3 +94,21 @@ def test_pipeline_applies_approved_vocabulary_policy() -> None:
     )
     assert result.privacy.decision.value == "rejected"
     assert result.privacy.findings[0].code == "unapproved_vocabulary_value"
+
+
+def test_pipeline_includes_business_rule_validation() -> None:
+    rule = BusinessRule(
+        "id_must_be_expected",
+        "t",
+        ({"column": "id", "operator": "eq", "value": "not-generated", "role": "assertion"},),
+    )
+    result = run_standalone(
+        approved_plan(),
+        row_count=2,
+        dataset_id="d",
+        dataset_version="v1",
+        location="uc.t",
+        rules=(rule,),
+    )
+    assert result.validation.technical_disposition.value == "FAIL"
+    assert any(check.check_id == "rule:id_must_be_expected" for check in result.validation.checks)
