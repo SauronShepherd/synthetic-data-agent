@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from sda.topology import GraphKind, TopologyError, TopologyPlan, generate_topology
+from sda.topology import (
+    GraphKind,
+    TopologyError,
+    TopologyPlan,
+    generate_topology,
+    validate_topology,
+)
 
 
 def test_topology_preserves_nodes_and_isolates() -> None:
@@ -48,6 +54,16 @@ def test_directed_degree_limits_and_dag_constraint_are_enforced() -> None:
 def test_topology_rejects_acyclic_self_loops() -> None:
     with pytest.raises(ValueError, match="self-loops"):
         TopologyPlan("g", "fp", node_count=2, edge_count=1, acyclic=True, allow_self_loops=True)
+
+
+def test_topology_result_validator_rejects_unknown_endpoints() -> None:
+    plan = TopologyPlan("g", "fp", node_count=2, edge_count=1)
+    result = generate_topology(plan)
+    corrupted = type(result)(
+        result.nodes, ({**result.edges[0], "target": "unknown"},), result.metrics
+    )
+    with pytest.raises(TopologyError, match="unknown endpoint"):
+        validate_topology(plan, corrupted)
 
 
 def test_directed_max_degree_counts_both_endpoints() -> None:

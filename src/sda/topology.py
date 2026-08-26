@@ -148,6 +148,44 @@ def generate_topology(plan: TopologyPlan) -> TopologyResult:
     )
 
 
+def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
+    """Validate a topology result before it crosses a persistence boundary."""
+    if len(result.nodes) != plan.node_count or len(result.edges) != plan.edge_count:
+        raise TopologyError("topology result counts do not match the plan")
+    node_ids = [str(node.get("node_id", "")) for node in result.nodes]
+    if (
+        not node_ids
+        or any(not node_id for node_id in node_ids)
+        or len(node_ids) != len(set(node_ids))
+    ):
+        raise TopologyError("topology result contains invalid or duplicate node IDs")
+    node_set = set(node_ids)
+    pairs: set[tuple[str, str]] = set()
+    adjacency: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
+    degree = {node_id: 0 for node_id in node_ids}
+    for edge in result.edges:
+        source, target = str(edge.get("source", "")), str(edge.get("target", ""))
+        if source not in node_set or target not in node_set:
+            raise TopologyError("topology result contains an unknown endpoint")
+        if not plan.allow_self_loops and source == target:
+            raise TopologyError("topology result contains a forbidden self-loop")
+        pair = (
+            (source, target) if plan.kind is GraphKind.DIRECTED else tuple(sorted((source, target)))
+        )
+        if not plan.allow_parallel_edges and pair in pairs:
+            raise TopologyError("topology result contains a duplicate edge")
+        pairs.add(pair)
+        degree[source] += 1
+        degree[target] += 1
+        adjacency[source].add(target)
+        if plan.kind is GraphKind.UNDIRECTED:
+            adjacency[target].add(source)
+    if plan.max_degree is not None and any(value > plan.max_degree for value in degree.values()):
+        raise TopologyError("topology result exceeds max_degree")
+    if plan.acyclic and any(_reaches(adjacency, target, source) for source, target in pairs):
+        raise TopologyError("topology result contains a cycle")
+
+
 def _reaches(adjacency: list[set[int]], start: int, target: int) -> bool:
     pending = [start]
     visited: set[int] = set()
