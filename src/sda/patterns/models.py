@@ -61,6 +61,16 @@ class PatternDecision(StrEnum):
     CONFLICTED = "conflicted"
 
 
+class PatternLifecycle(StrEnum):
+    """Explicit evidence lifecycle; observation never implies approval."""
+
+    OBSERVED_PATTERN = "observed_pattern"
+    DECLARED_RULE = "declared_rule"
+    APPROVED_RULE = "approved_rule"
+    REJECTED = "rejected"
+    REVIEW_REQUIRED = "review_required"
+
+
 @dataclass(frozen=True, slots=True)
 class PatternInputRefs:
     metadata_artifact_id: str
@@ -258,6 +268,7 @@ class Pattern:
     generation_action: dict[str, Any] = field(default_factory=dict)
     validation_action: dict[str, Any] = field(default_factory=dict)
     review_status: str = "not_required"
+    lifecycle: PatternLifecycle = PatternLifecycle.OBSERVED_PATTERN
 
     def __post_init__(self) -> None:
         if self.support_rows < 0:
@@ -273,6 +284,26 @@ class Pattern:
         allowed_decisions = {decision.value for decision in PatternDecision} | {"review_required"}
         if self.decision not in allowed_decisions:
             raise ValueError(f"unsupported pattern decision: {self.decision}")
+        if not isinstance(self.lifecycle, PatternLifecycle):
+            try:
+                object.__setattr__(self, "lifecycle", PatternLifecycle(self.lifecycle))
+            except ValueError as exc:
+                raise ValueError(f"unsupported pattern lifecycle: {self.lifecycle}") from exc
+        if (
+            self.lifecycle is PatternLifecycle.OBSERVED_PATTERN
+            and self.origin is not PatternOrigin.OBSERVED
+        ):
+            raise ValueError("only observed evidence may use observed_pattern lifecycle")
+        if self.lifecycle is PatternLifecycle.DECLARED_RULE and self.origin not in {
+            PatternOrigin.DECLARED,
+            PatternOrigin.USER_PROVIDED,
+        }:
+            raise ValueError("declared_rule lifecycle requires a declared rule origin")
+        if self.lifecycle is PatternLifecycle.APPROVED_RULE and self.origin not in {
+            PatternOrigin.DOMAIN_APPROVED,
+            PatternOrigin.DESTINATION_CONSTRAINT,
+        }:
+            raise ValueError("approved_rule lifecycle requires an approval origin")
         if self.origin is PatternOrigin.OBSERVED and self.rule_strength == "hard_constraint":
             raise ValueError("observed patterns must not become hard constraints")
         for name in (

@@ -9,6 +9,7 @@ from sda.patterns.models import (
     PatternDetectionResult,
     PatternExecutionReceipt,
     PatternFamily,
+    PatternLifecycle,
     PatternOrigin,
 )
 from sda.patterns.persistence import (
@@ -356,6 +357,29 @@ def test_observed_patterns_cannot_be_promoted_to_hard_constraints() -> None:
             {},
             {},
             rule_strength="hard_constraint",
+        )
+
+
+def test_pattern_lifecycle_is_explicit_and_origin_compatible() -> None:
+    pattern = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [{"x": 1, "y": 2}, {"x": 2, "y": 4}], table="main.s.t", columns={"x": "int", "y": "int"}
+    )[0]
+    assert pattern.lifecycle is PatternLifecycle.OBSERVED_PATTERN
+    with pytest.raises(ValueError, match="declared_rule lifecycle"):
+        Pattern(
+            "p",
+            "a",
+            PatternFamily.BUSINESS_RULE,
+            PatternOrigin.OBSERVED,
+            "t",
+            ("x",),
+            {},
+            {},
+            2,
+            1.0,
+            {},
+            {},
+            lifecycle=PatternLifecycle.DECLARED_RULE,
         )
 
 

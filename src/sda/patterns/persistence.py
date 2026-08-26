@@ -104,6 +104,7 @@ def registry_rows(
             "validation_action_json": json.dumps(p.validation_action, sort_keys=True),
             "decision": p.decision,
             "review_status": p.review_status,
+            "lifecycle": p.lifecycle.value,
             "detector_version": detector_version,
             "scoring_policy_version": scoring_policy_version,
             "rule_precedence_policy_version": precedence_policy_version,

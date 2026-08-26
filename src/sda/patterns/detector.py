@@ -19,6 +19,7 @@ from sda.patterns.models import (
     PatternExecutionReceipt,
     PatternFamily,
     PatternInputRefs,
+    PatternLifecycle,
     PatternOrigin,
 )
 from sda.patterns.precedence import RulePrecedencePolicy
@@ -563,6 +564,13 @@ class PatternDetector:
                 }.get(family, "review_pattern")
             },
             review_status="required" if family is PatternFamily.BUSINESS_RULE else "not_required",
+            lifecycle=(
+                PatternLifecycle.DECLARED_RULE
+                if origin in {PatternOrigin.DECLARED, PatternOrigin.USER_PROVIDED}
+                else PatternLifecycle.APPROVED_RULE
+                if origin in {PatternOrigin.DOMAIN_APPROVED, PatternOrigin.DESTINATION_CONSTRAINT}
+                else PatternLifecycle.OBSERVED_PATTERN
+            ),
         )
 
 
