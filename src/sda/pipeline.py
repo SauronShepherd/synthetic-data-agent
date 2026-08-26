@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
+from sda.artifacts.fingerprint import fingerprint
 from sda.artifacts.manifest import RunManifest
 from sda.generation import generate_rows
 from sda.operations import AuditEvent, AuditLevel, AuditLog, ResourceBudget, enforce_budget
@@ -70,7 +71,13 @@ def run_standalone(
                 dataset_id,
                 dataset_version,
                 location,
-                plan.plan_fingerprint,
+                fingerprint(
+                    {
+                        "intended_use": validation.intended_use,
+                        "technical_disposition": validation.technical_disposition.value,
+                        "checks": [asdict(check) for check in validation.checks],
+                    }
+                ),
                 plan.privacy_policy_ref,
             )
         )
