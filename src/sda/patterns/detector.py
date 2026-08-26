@@ -191,6 +191,10 @@ class PatternDetector:
         rules: tuple[Any, ...] = (),
     ) -> PatternDetectionResult:
         """Execute a bounded local coordinator; Spark callers provide pre-aggregated rows."""
+        if not rows:
+            raise ValueError(
+                "coordinated pattern detection requires available input rows; received none"
+            )
         table = selected_tables[0] if selected_tables else "unknown.unknown.unknown"
         input_ids = (
             input_refs.metadata_artifact_id,

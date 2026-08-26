@@ -74,6 +74,18 @@ def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> No
     assert result.receipt.source_tables_scanned == 1
 
 
+def test_coordinator_fails_closed_when_input_rows_are_unavailable() -> None:
+    refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
+    with pytest.raises(ValueError, match="requires available input rows"):
+        PatternDetector().detect(
+            [],
+            input_refs=refs,
+            run_id="run-empty",
+            environment="dev",
+            selected_tables=("main.s.t",),
+        )
+
+
 def test_coordinator_emits_conditional_missingness_for_each_segment() -> None:
     refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
