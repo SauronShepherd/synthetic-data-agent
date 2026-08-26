@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from sda.generation import generate_rows, receipt_for
+from sda.generation import generate_rows, manifest_for, receipt_for
 from sda.planning import ColumnGenerationSpec, GenerationMode, GenerationPlan, PlanStatus
 from sda.runtime.identifiers import QualifiedName
 
@@ -70,8 +70,20 @@ def main() -> None:
     frame.write.mode("overwrite").option(
         "userMetadata", f"sda-run-id={args.run_id};plan={plan.plan_fingerprint}"
     ).saveAsTable(output.quoted)
+    receipt = receipt_for(plan, rows)
+    generation_manifest = manifest_for(
+        plan,
+        receipt,
+        run_id=args.run_id,
+        output_table=args.output_table,
+    )
     print(
         json.dumps(
-            {"status": "complete", "receipt": receipt_for(plan, rows).to_dict()}, sort_keys=True
+            {
+                "status": "complete",
+                "receipt": receipt.to_dict(),
+                "manifest": generation_manifest.to_dict(),
+            },
+            sort_keys=True,
         )
     )
