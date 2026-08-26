@@ -277,6 +277,13 @@ def test_validation_report_serializes_check_contract_and_disposition() -> None:
     assert payload["fingerprint"] == report.fingerprint
 
 
+def test_validation_report_serialization_redacts_raw_string_evidence() -> None:
+    check = ValidationCheck("distribution", CheckStatus.PASS, "ok", {"value": "secret"})
+    report = ValidationReport((check,), "qa", CheckStatus.PASS)
+    assert "secret" not in str(report.to_dict())
+    assert report.checks[0].evidence["value"] == "secret"
+
+
 def test_validation_checks_time_ordering() -> None:
     report = validate_tables(
         {"events": (({"started": 1, "ended": 2}), ({"started": 4, "ended": 3}))},
