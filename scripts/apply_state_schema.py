@@ -18,14 +18,13 @@ def apply_schema(dsn: str, schema_path: Path) -> str:
         raise RuntimeError("install the 'postgres' extra to apply the state schema") from exc
     sql = schema_path.read_text(encoding="utf-8")
     identifier = migration_id(sql)
-    with psycopg.connect(dsn) as connection:
-        with connection.cursor() as cursor:
-            cursor.execute(sql)
-            cursor.execute(
-                "INSERT INTO sda_schema_migrations (migration_id) VALUES (%s) "
-                "ON CONFLICT (migration_id) DO NOTHING",
-                (identifier,),
-            )
+    with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(sql)
+        cursor.execute(
+            "INSERT INTO sda_schema_migrations (migration_id) VALUES (%s) "
+            "ON CONFLICT (migration_id) DO NOTHING",
+            (identifier,),
+        )
     return identifier
 
 
