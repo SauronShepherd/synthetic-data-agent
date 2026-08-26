@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import re
 
 import pytest
 
@@ -115,6 +116,18 @@ def test_format_signature_is_deterministic_and_uses_safe_tokens() -> None:
     )
     rows = generate_rows(formatted, row_count=3)
     assert rows == generate_rows(formatted, row_count=3)
-    import re
-
     assert all(re.fullmatch(r"[A-Z]{2}-\d{4}", row["code"]) for row in rows)
+
+
+def test_date_and_timestamp_models_have_distinct_iso_semantics() -> None:
+    temporal = replace(
+        plan(),
+        columns=(
+            ColumnGenerationSpec("t", "day", "date", model="date"),
+            ColumnGenerationSpec("t", "created_at", "timestamp", model="timestamp"),
+        ),
+        plan_fingerprint="",
+    )
+    row = generate_rows(temporal, row_count=1)[0]
+    assert re.fullmatch(r"2020-01-01", row["day"])
+    assert re.fullmatch(r"2020-01-01T00:00:00Z", row["created_at"])

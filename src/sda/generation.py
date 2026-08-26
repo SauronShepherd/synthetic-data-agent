@@ -141,7 +141,12 @@ def _value(
     if model in {"boolean", "bool"}:
         return bool(index % 2)
     if model in {"date", "timestamp"}:
-        return f"2020-01-{(index % 28) + 1:02d}"
+        day = (index % 28) + 1
+        if model == "timestamp":
+            hour = index % 24
+            minute = (index * 7) % 60
+            return f"2020-01-{day:02d}T{hour:02d}:{minute:02d}:00Z"
+        return f"2020-01-{day:02d}"
     if model in {"string", "format"}:
         signature = spec.parameters.get("format_signature")
         if signature is not None:
