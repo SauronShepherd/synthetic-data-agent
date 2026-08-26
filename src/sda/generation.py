@@ -143,6 +143,13 @@ def _value(
     if model in {"date", "timestamp"}:
         return f"2020-01-{(index % 28) + 1:02d}"
     if model in {"string", "format"}:
+        signature = spec.parameters.get("format_signature")
+        if signature is not None:
+            if not isinstance(signature, str) or not signature:
+                raise GenerationError(
+                    f"format_signature must be a non-empty string for {spec.column}"
+                )
+            return _render_signature(signature, rng)
         prefix = str(spec.parameters.get("prefix", spec.column))
         return f"{prefix}-{index:08d}"
     raise GenerationError(f"unsupported generation model: {spec.model}")
@@ -151,6 +158,24 @@ def _value(
 def _coordinate_seed(plan: GenerationPlan, spec: ColumnGenerationSpec, index: int) -> int:
     raw = f"{plan.plan_fingerprint}|{spec.table}|{spec.column}|{index}".encode()
     return int.from_bytes(hashlib.sha256(raw).digest()[:8], "big") ^ plan.seed
+
+
+def _render_signature(signature: str, rng: random.Random) -> str:
+    """Render a safe format signature: ``A`` letter, ``#`` digit, ``X`` alphanumeric."""
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    digits = "0123456789"
+    alphanumeric = alphabet + digits
+    output: list[str] = []
+    for token in signature:
+        if token == "A":
+            output.append(rng.choice(alphabet))
+        elif token == "#":
+            output.append(rng.choice(digits))
+        elif token == "X":
+            output.append(rng.choice(alphanumeric))
+        else:
+            output.append(token)
+    return "".join(output)
 
 
 def _stable_id(plan: GenerationPlan, spec: ColumnGenerationSpec, index: int) -> str:

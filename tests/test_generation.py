@@ -101,3 +101,20 @@ def test_weighted_categorical_sampling_is_replayable_and_validated() -> None:
     assert {row["segment"] for row in first} <= {"rare", "common"}
     with pytest.raises(GenerationError, match="weights"):
         generate_rows(plan(), row_count=1, weighted_vocabularies={"segment": (("x", -1.0),)})
+
+
+def test_format_signature_is_deterministic_and_uses_safe_tokens() -> None:
+    formatted = replace(
+        plan(),
+        columns=(
+            ColumnGenerationSpec(
+                "t", "code", "string", model="format", parameters={"format_signature": "AA-####"}
+            ),
+        ),
+        plan_fingerprint="",
+    )
+    rows = generate_rows(formatted, row_count=3)
+    assert rows == generate_rows(formatted, row_count=3)
+    import re
+
+    assert all(re.fullmatch(r"[A-Z]{2}-\d{4}", row["code"]) for row in rows)
