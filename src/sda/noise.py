@@ -60,12 +60,17 @@ class NoisePlan:
     budget: int = 0
     seed: int = 1729
     scenario: str = ""
+    budget_rate: float | None = None
 
     def __post_init__(self) -> None:
         if not self.noise_id.strip() or not self.baseline_fingerprint.strip():
             raise ValueError("noise identity and baseline fingerprint are required")
         if self.budget < 0 or self.seed < 0:
             raise ValueError("noise budget and seed must not be negative")
+        if self.budget_rate is not None and not 0.0 <= self.budget_rate <= 1.0:
+            raise ValueError("noise budget_rate must be between zero and one")
+        if self.budget and self.budget_rate is not None:
+            raise ValueError("noise budget and budget_rate are mutually exclusive")
         if not self.defect_type.strip():
             raise ValueError("defect_type must not be empty")
         if self.scenario and not self.scenario.strip():
@@ -120,6 +125,12 @@ def _selection_key(plan: NoisePlan, index: int) -> bytes:
     return hashlib.sha256(f"{plan.noise_id}|{plan.seed}|{plan.scenario}|{index}".encode()).digest()
 
 
+def _resolved_budget(plan: NoisePlan, row_count: int) -> int:
+    if plan.budget_rate is None:
+        return min(plan.budget, row_count)
+    return min(int(plan.budget_rate * row_count + 0.5), row_count)
+
+
 def inject_nulls(
     baseline: tuple[dict[str, Any], ...],
     plan: NoisePlan,
@@ -129,7 +140,7 @@ def inject_nulls(
     """Inject up to ``budget`` nulls without mutating the clean baseline."""
     if fingerprint(baseline) != plan.baseline_fingerprint:
         raise NoiseError("baseline fingerprint does not match the noise plan")
-    if not baseline or plan.budget == 0:
+    if not baseline or _resolved_budget(plan, len(baseline)) == 0:
         copied = tuple(dict(row) for row in baseline)
         frozen = _freeze_rows(copied)
         return NoiseResult(frozen, (), plan.baseline_fingerprint, fingerprint(frozen))
@@ -139,7 +150,7 @@ def inject_nulls(
         range(len(baseline)),
         key=lambda index: _selection_key(plan, index),
     )
-    selected = set(candidates[: min(plan.budget, len(candidates))])
+    selected = set(candidates[: _resolved_budget(plan, len(baseline))])
     rows = [dict(row) for row in baseline]
     mutations: list[Mutation] = []
     for index in sorted(selected):
@@ -164,7 +175,7 @@ def apply_noise(
     candidates = sorted(
         range(len(baseline)),
         key=lambda index: _selection_key(plan, index),
-    )[: min(plan.budget, len(baseline))]
+    )[: _resolved_budget(plan, len(baseline))]
     rows = [dict(row) for row in baseline]
     mutations: list[Mutation] = []
     for index in sorted(candidates):

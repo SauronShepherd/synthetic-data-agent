@@ -176,3 +176,15 @@ def test_noise_scenarios_are_deterministic_but_independently_selected() -> None:
     )
     assert first == second
     assert first.mutations[0].row_index != other.mutations[0].row_index
+
+
+def test_rate_based_noise_budget_is_deterministic_and_bounded() -> None:
+    baseline = tuple({"value": str(index)} for index in range(5))
+    result = apply_noise(
+        baseline,
+        NoisePlan("n", fingerprint(baseline), defect_type="casing", budget_rate=0.4),
+        column="value",
+    )
+    assert len(result.mutations) == 2
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        NoisePlan("n", "fp", budget=1, budget_rate=0.5)
