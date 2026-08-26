@@ -413,6 +413,38 @@ def validate_tables(
                     method="availability_check",
                 )
             )
+        rows = tables[table]
+        for column, pattern in format_columns.items():
+            check_id = f"format:{table}.{column}"
+            try:
+                matcher = re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(f"invalid format pattern for {check_id}") from exc
+            if any(column not in row for row in rows):
+                checks.append(
+                    ValidationCheck(
+                        check_id,
+                        CheckStatus.FAIL,
+                        f"{table}.{column} is unavailable; cannot validate format",
+                        {"supported": False, "reason": "column_missing"},
+                        method="availability_check",
+                    )
+                )
+                continue
+            invalid = sum(
+                not isinstance(row[column], str) or matcher.fullmatch(row[column]) is None
+                for row in rows
+            )
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.PASS if invalid == 0 else CheckStatus.FAIL,
+                    f"{table}.{column} has {invalid} values violating its format",
+                    {"rows": len(rows), "invalid": invalid},
+                    method="regex_fullmatch",
+                    population="full_table",
+                )
+            )
     for table, earlier_column, later_column in time_orderings:
         check_id = f"time_order:{table}.{earlier_column}<={later_column}"
         if table not in tables:
@@ -460,39 +492,6 @@ def validate_tables(
                 population="full_table",
             )
         )
-            continue
-        rows = tables[table]
-        for column, pattern in format_columns.items():
-            check_id = f"format:{table}.{column}"
-            try:
-                matcher = re.compile(pattern)
-            except re.error as exc:
-                raise ValueError(f"invalid format pattern for {check_id}") from exc
-            if any(column not in row for row in rows):
-                checks.append(
-                    ValidationCheck(
-                        check_id,
-                        CheckStatus.FAIL,
-                        f"{table}.{column} is unavailable; cannot validate format",
-                        {"supported": False, "reason": "column_missing"},
-                        method="availability_check",
-                    )
-                )
-                continue
-            invalid = sum(
-                not isinstance(row[column], str) or matcher.fullmatch(row[column]) is None
-                for row in rows
-            )
-            checks.append(
-                ValidationCheck(
-                    check_id,
-                    CheckStatus.PASS if invalid == 0 else CheckStatus.FAIL,
-                    f"{table}.{column} has {invalid} values violating its format",
-                    {"rows": len(rows), "invalid": invalid},
-                    method="regex_fullmatch",
-                    population="full_table",
-                )
-            )
     disposition = (
         CheckStatus.FAIL if any(c.status is CheckStatus.FAIL for c in checks) else CheckStatus.PASS
     )
