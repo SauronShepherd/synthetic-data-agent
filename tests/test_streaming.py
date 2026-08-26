@@ -93,9 +93,18 @@ def test_manifest_records_the_declared_event_rate_contract() -> None:
     assert result.inter_arrival_seconds == 0.25
     assert result.seed == 42
     assert result.query_id == "query-1"
+    assert result.watermark_delay_seconds == 0.0
 
 
 def test_stream_seed_is_part_of_deterministic_event_identity() -> None:
     first = generate_bounded_events(plan(seed=1))
     second = generate_bounded_events(plan(seed=2))
     assert first[0]["event_id"] != second[0]["event_id"]
+
+
+def test_stream_events_record_processing_and_watermark_times() -> None:
+    current = plan(watermark_delay_seconds=5.0)
+    event = generate_bounded_events(current)[1]
+    assert event["arrival_time"] == event["event_time"]
+    assert event["processing_time"] == "2020-01-01T00:00:06+00:00"
+    assert event["watermark_time"] == event["processing_time"]

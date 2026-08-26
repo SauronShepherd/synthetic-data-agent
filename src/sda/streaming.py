@@ -40,6 +40,7 @@ class StreamingPlan:
     inter_arrival_seconds: float = 1.0
     seed: int = 1729
     query_id: str = ""
+    watermark_delay_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.stream_id.strip() or not self.plan_fingerprint.strip():
@@ -54,6 +55,8 @@ class StreamingPlan:
             raise ValueError("seed must not be negative")
         if self.query_id and not self.query_id.strip():
             raise ValueError("query_id must not be whitespace")
+        if self.watermark_delay_seconds < 0:
+            raise ValueError("watermark_delay_seconds must not be negative")
         if self.event_count > self.max_events:
             raise ValueError("event_count exceeds max_events")
         if self.mode is StreamMode.CONTINUOUS and not self.checkpoint_id.strip():
@@ -73,6 +76,7 @@ class StreamManifest:
     inter_arrival_seconds: float
     seed: int
     query_id: str | None
+    watermark_delay_seconds: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,6 +178,7 @@ def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamM
         plan.inter_arrival_seconds,
         plan.seed,
         plan.query_id or None,
+        plan.watermark_delay_seconds,
     )
 
 
@@ -183,10 +188,18 @@ def _event(plan: StreamingPlan, offset: int) -> dict[str, Any]:
     ).hexdigest()[:32]
     start = datetime.fromisoformat(plan.start_time.replace("Z", "+00:00"))
     event_time = (start + timedelta(seconds=offset * plan.inter_arrival_seconds)).isoformat()
+    arrival_time = event_time
+    processing_time = (
+        start
+        + timedelta(seconds=offset * plan.inter_arrival_seconds + plan.watermark_delay_seconds)
+    ).isoformat()
     return {
         "event_id": event_id,
         "stream_id": plan.stream_id,
         "offset": offset,
         "event_time": event_time,
+        "arrival_time": arrival_time,
+        "processing_time": processing_time,
+        "watermark_time": processing_time,
         "schema_version": plan.schema_version,
     }
