@@ -33,7 +33,7 @@ def test_state_rejects_illegal_transition_and_stale_version() -> None:
         repo.transition_run("run-1", WorkflowStatus.PUBLISHED)
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
     with pytest.raises(StateError, match="concurrency"):
-    repo.transition_run("run-1", WorkflowStatus.APPROVED, expected_version=0)
+        repo.transition_run("run-1", WorkflowStatus.APPROVED, expected_version=0)
 
 
 def test_failed_run_can_be_explicitly_retried() -> None:
