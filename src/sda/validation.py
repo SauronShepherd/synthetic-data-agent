@@ -624,6 +624,16 @@ def validate_tables(
                     population="non_null_values",
                 )
             )
+    if not checks:
+        checks.append(
+            ValidationCheck(
+                "validation_scope",
+                CheckStatus.FAIL,
+                "no validation checks were requested",
+                {"supported": False, "reason": "no_checks_requested"},
+                method="scope_check",
+            )
+        )
     disposition = (
         CheckStatus.FAIL if any(c.status is CheckStatus.FAIL for c in checks) else CheckStatus.PASS
     )

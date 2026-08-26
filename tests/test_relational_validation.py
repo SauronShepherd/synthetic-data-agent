@@ -30,6 +30,12 @@ def test_schema_validation_fails_closed_for_missing_required_columns() -> None:
     assert report.checks[0].evidence["missing"] == ("amount",)
 
 
+def test_validation_fails_closed_when_no_checks_are_requested() -> None:
+    report = validate_tables({"users": (({"id": 1}),)})
+    assert report.technical_disposition is CheckStatus.FAIL
+    assert report.checks[0].check_id == "validation_scope"
+
+
 def plan() -> GenerationPlan:
     return (
         GenerationPlan(
