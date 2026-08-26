@@ -39,6 +39,7 @@ class StreamingPlan:
     max_events: int = 100_000
     inter_arrival_seconds: float = 1.0
     seed: int = 1729
+    query_id: str = ""
 
     def __post_init__(self) -> None:
         if not self.stream_id.strip() or not self.plan_fingerprint.strip():
@@ -51,6 +52,8 @@ class StreamingPlan:
             raise ValueError("inter_arrival_seconds must be positive")
         if self.seed < 0:
             raise ValueError("seed must not be negative")
+        if self.query_id and not self.query_id.strip():
+            raise ValueError("query_id must not be whitespace")
         if self.event_count > self.max_events:
             raise ValueError("event_count exceeds max_events")
         if self.mode is StreamMode.CONTINUOUS and not self.checkpoint_id.strip():
@@ -69,6 +72,7 @@ class StreamManifest:
     events_per_second: float
     inter_arrival_seconds: float
     seed: int
+    query_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +173,7 @@ def manifest(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> StreamM
         plan.events_per_second,
         plan.inter_arrival_seconds,
         plan.seed,
+        plan.query_id or None,
     )
 
 
