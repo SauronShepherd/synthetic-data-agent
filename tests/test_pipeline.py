@@ -80,3 +80,16 @@ def test_pipeline_blocks_publication_for_unapproved_direct_identifier() -> None:
     )
     assert result.privacy.decision.value == "rejected"
     assert result.privacy.findings[0].code == "direct_identifier_not_approved"
+
+
+def test_pipeline_applies_approved_vocabulary_policy() -> None:
+    result = run_standalone(
+        approved_plan(),
+        row_count=2,
+        dataset_id="d",
+        dataset_version="v1",
+        location="uc.t",
+        approved_vocabularies={("t", "id"): ("not-generated",)},
+    )
+    assert result.privacy.decision.value == "rejected"
+    assert result.privacy.findings[0].code == "unapproved_vocabulary_value"

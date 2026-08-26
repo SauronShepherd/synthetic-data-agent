@@ -44,6 +44,7 @@ def run_standalone(
     direct_identifier_columns: tuple[tuple[str, str], ...] = (),
     quasi_identifier_columns: tuple[tuple[str, str], ...] = (),
     min_quasi_group_size: int = 2,
+    approved_vocabularies: dict[tuple[str, str], tuple[object, ...]] | None = None,
     staging_path: str | None = None,
     audit_log: AuditLog | None = None,
 ) -> PipelineResult:
@@ -83,6 +84,7 @@ def run_standalone(
         direct_identifier_columns=direct_identifier_columns,
         quasi_identifier_columns=quasi_identifier_columns,
         min_quasi_group_size=min_quasi_group_size,
+        approved_vocabularies=approved_vocabularies,
         policy_ref=plan.privacy_policy_ref,
     )
     publication = None
