@@ -9,8 +9,8 @@ from sda.patterns.persistence import (
     PATTERN_EVIDENCE_SCHEMA_VERSION,
     PATTERN_REGISTRY_SCHEMA_VERSION,
     evidence_rows,
-    require_pattern_schema_version,
     registry_rows,
+    require_pattern_schema_version,
 )
 from sda.patterns.rules import BusinessRule, RuleStrength, evaluate_rule
 from sda.patterns.safety import SafeValueKind, safe_pattern_value
