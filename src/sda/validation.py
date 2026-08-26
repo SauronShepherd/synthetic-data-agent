@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, cast
 
 from sda.artifacts.fingerprint import fingerprint
 
@@ -481,7 +481,7 @@ def validate_tables(
                 invalid += 1
             else:
                 try:
-                    invalid += bool(earlier > later)
+                    invalid += bool(cast(Any, earlier) > cast(Any, later))
                 except TypeError:
                     invalid += 1
         checks.append(
