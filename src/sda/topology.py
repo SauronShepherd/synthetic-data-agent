@@ -47,14 +47,17 @@ class TopologyPlan:
             raise ValueError("topology identity and plan fingerprint are required")
         if self.node_count < 0 or self.edge_count < 0:
             raise ValueError("node_count and edge_count must not be negative")
-        capacity = (
-            self.node_count * self.node_count
-            if self.allow_self_loops
-            else self.node_count * max(self.node_count - 1, 0)
-        )
-        if not self.allow_parallel_edges and self.edge_count > (
-            capacity if self.kind is GraphKind.DIRECTED else capacity // 2
-        ):
+        if self.kind is GraphKind.DIRECTED:
+            capacity = (
+                self.node_count * self.node_count
+                if self.allow_self_loops
+                else self.node_count * max(self.node_count - 1, 0)
+            )
+        elif self.allow_self_loops:
+            capacity = self.node_count * (self.node_count + 1) // 2
+        else:
+            capacity = self.node_count * max(self.node_count - 1, 0) // 2
+        if not self.allow_parallel_edges and self.edge_count > capacity:
             raise ValueError("edge_count exceeds simple graph capacity")
         if self.max_degree is not None and self.max_degree < 0:
             raise ValueError("max_degree must not be negative")

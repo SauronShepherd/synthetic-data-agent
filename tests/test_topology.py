@@ -48,6 +48,14 @@ def test_empty_topology_is_valid() -> None:
     validate_topology(plan, result)
 
 
+def test_undirected_self_loop_capacity_uses_unique_pairs() -> None:
+    plan = TopologyPlan(
+        "loops", "fp", node_count=2, edge_count=3, kind=GraphKind.UNDIRECTED, allow_self_loops=True
+    )
+    result = generate_topology(plan)
+    assert len(result.edges) == 3
+
+
 def test_directed_degree_limits_and_dag_constraint_are_enforced() -> None:
     dag = TopologyPlan("dag", "fp", node_count=5, edge_count=4, acyclic=True, max_in_degree=1)
     result = generate_topology(dag)
