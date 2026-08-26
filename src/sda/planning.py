@@ -12,6 +12,7 @@ from enum import StrEnum
 from typing import Any
 
 from sda.artifacts.fingerprint import fingerprint
+from sda.runtime.identifiers import quote_identifier
 
 
 class _FrozenDict(dict[str, Any]):
@@ -108,6 +109,11 @@ class GenerationPlan:
         for name in ("plan_id", "request_id", "target_catalog", "target_schema", "intended_use"):
             if not getattr(self, name).strip():
                 raise ValueError(f"{name} must not be empty")
+        for name in ("target_catalog", "target_schema"):
+            try:
+                quote_identifier(getattr(self, name))
+            except Exception as exc:
+                raise ValueError(f"unsafe {name} identifier") from exc
         if self.plan_version < 1:
             raise ValueError("plan_version must be positive")
         if not self.source_snapshot_ids or not self.input_artifact_ids:
@@ -119,6 +125,16 @@ class GenerationPlan:
             raise ValueError("plans require unique table columns")
         if any(column.table not in self.tables for column in self.columns):
             raise ValueError("plan columns must belong to declared target tables")
+        for table in self.tables:
+            try:
+                quote_identifier(table)
+            except Exception as exc:
+                raise ValueError("unsafe target table identifier") from exc
+        for column in self.columns:
+            try:
+                quote_identifier(column.column)
+            except Exception as exc:
+                raise ValueError("unsafe target column identifier") from exc
         if self.scale_factor <= 0:
             raise ValueError("scale_factor must be greater than zero")
         if self.seed < 0:

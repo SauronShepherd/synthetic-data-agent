@@ -84,3 +84,21 @@ def test_plan_rejects_ambiguous_or_undeclared_columns() -> None:
         GenerationPlan(**base, columns=(ColumnGenerationSpec("t", "id", "string"),) * 2)
     with pytest.raises(ValueError, match="declared target"):
         GenerationPlan(**base, columns=(ColumnGenerationSpec("other", "id", "string"),))
+
+
+@pytest.mark.parametrize("field", ["target_catalog", "target_schema"])
+def test_plan_rejects_unsafe_target_identifiers(field: str) -> None:
+    values = {
+        "plan_id": "p",
+        "plan_version": 1,
+        "request_id": "r",
+        "source_snapshot_ids": ("s",),
+        "input_artifact_ids": ("a",),
+        "target_catalog": "c",
+        "target_schema": "s",
+        "tables": ("t",),
+        "columns": (ColumnGenerationSpec("t", "id", "string"),),
+    }
+    values[field] = "bad;drop"
+    with pytest.raises(ValueError, match="unsafe"):
+        GenerationPlan(**values)
