@@ -65,6 +65,19 @@ class TopologyPlan:
             raise ValueError("max_in_degree must not be negative")
         if self.max_out_degree is not None and self.max_out_degree < 0:
             raise ValueError("max_out_degree must not be negative")
+        if self.max_degree is not None and 2 * self.edge_count > self.node_count * self.max_degree:
+            raise ValueError("edge_count exceeds max_degree capacity")
+        if self.kind is GraphKind.DIRECTED:
+            if (
+                self.max_in_degree is not None
+                and self.edge_count > self.node_count * self.max_in_degree
+            ):
+                raise ValueError("edge_count exceeds max_in_degree capacity")
+            if (
+                self.max_out_degree is not None
+                and self.edge_count > self.node_count * self.max_out_degree
+            ):
+                raise ValueError("edge_count exceeds max_out_degree capacity")
         if self.acyclic and self.allow_self_loops:
             raise ValueError("acyclic graphs cannot allow self-loops")
 

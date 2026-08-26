@@ -41,7 +41,7 @@ def test_topology_manifest_binds_plan_and_result() -> None:
 def test_topology_rejects_impossible_simple_graph() -> None:
     with pytest.raises(ValueError, match="capacity"):
         TopologyPlan("g", "fp", node_count=2, edge_count=3, kind=GraphKind.UNDIRECTED)
-    with pytest.raises(TopologyError, match="realize"):
+    with pytest.raises(ValueError, match="max_degree capacity"):
         generate_topology(
             TopologyPlan(
                 "g", "fp", node_count=3, edge_count=2, kind=GraphKind.UNDIRECTED, max_degree=1
@@ -142,3 +142,10 @@ def test_topology_validator_checks_directed_in_and_out_degree_limits() -> None:
 def test_directed_max_degree_counts_both_endpoints() -> None:
     with pytest.raises(TopologyError, match="realize"):
         generate_topology(TopologyPlan("g", "fp", node_count=3, edge_count=2, max_degree=1))
+
+
+def test_topology_plan_rejects_degree_capacity_before_generation() -> None:
+    with pytest.raises(ValueError, match="max_in_degree capacity"):
+        TopologyPlan("g", "fp", node_count=2, edge_count=3, max_in_degree=1)
+    with pytest.raises(ValueError, match="max_degree capacity"):
+        TopologyPlan("g", "fp", node_count=3, edge_count=2, max_degree=1)
