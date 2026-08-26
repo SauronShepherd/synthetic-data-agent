@@ -20,6 +20,11 @@ targets:
       sda_artifact_registry_table: sda_prod.profiles.artifact_registry
       sda_pattern_registry_table: sda_prod.profiles.pattern_registry
       sda_pattern_evidence_table: sda_prod.profiles.pattern_evidence
+      sda_pattern_mode: full
+      sda_pattern_min_support_rows: "100"
+      sda_pattern_min_support_rate: "0.001"
+      sda_pattern_sample_fraction: "0.1"
+      sda_pattern_sample_seed: "1729"
       sda_scope_catalog: sda_prod
       sda_scope_schema: sample_source
       sda_relationship_parent_table: __REQUIRED_CONTROLLED_PARENT_TABLE__

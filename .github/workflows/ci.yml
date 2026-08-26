@@ -52,12 +52,7 @@ jobs:
       - uses: databricks/setup-cli@main
       - name: Validate bundle syntax
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          for path in (Path("databricks.yml"), Path("bundle/resources.yml"), *Path("bundle/targets").glob("*.yml")):
-              assert path.is_file(), f"missing bundle file: {path}"
-          print("Bundle files are present; live validation runs in databricks-integration.yml.")
-          PY
+          python scripts/check_bundle_contract.py
       - name: Verify controlled-target preflight rejects missing identities
         run: |
           if python scripts/preflight_bundle.py --target staging; then exit 1; fi
