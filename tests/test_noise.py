@@ -72,6 +72,16 @@ def test_future_timestamp_noise_preserves_datetime_type() -> None:
     assert result.rows[0]["created_at"] == datetime(2020, 12, 31, tzinfo=UTC)
 
 
+def test_out_of_order_timestamp_noise_moves_datetime_backwards() -> None:
+    baseline = (({"created_at": datetime(2020, 1, 1, tzinfo=UTC)}),)
+    result = apply_noise(
+        baseline,
+        NoisePlan("n", fingerprint(baseline), defect_type="out_of_order_timestamp", budget=1),
+        column="created_at",
+    )
+    assert result.rows[0]["created_at"] == datetime(2019, 1, 1, tzinfo=UTC)
+
+
 def test_omission_removes_only_deterministically_selected_columns() -> None:
     baseline = (({"id": 1, "value": "a"}), ({"id": 2, "value": "b"}))
     result = apply_noise(

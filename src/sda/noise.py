@@ -30,6 +30,7 @@ SUPPORTED_DEFECTS = frozenset(
         "near_duplicate",
         "future_timestamp",
         "invalid_state",
+        "out_of_order_timestamp",
     }
 )
 
@@ -193,6 +194,12 @@ def apply_noise(
             if not isinstance(before, date | datetime):
                 raise NoiseError("future_timestamp defects require a date or datetime column")
             after = before + timedelta(days=365)
+        elif plan.defect_type == "out_of_order_timestamp":
+            if not isinstance(before, date | datetime):
+                raise NoiseError(
+                    "out_of_order_timestamp defects require a date or datetime column"
+                )
+            after = before - timedelta(days=365)
         else:
             if not isinstance(before, int | float) or isinstance(before, bool):
                 raise NoiseError("out_of_range defects require a numeric column")
