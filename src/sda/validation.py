@@ -111,6 +111,7 @@ def validate_tables(
     foreign_keys: tuple[tuple[str, str, str, str], ...] = (),
     expected_distributions: dict[str, dict[str, dict[Any, float]]] | None = None,
     distribution_tolerance: float = 0.0,
+    conditional_null_rates: dict[str, dict[tuple[str, str], dict[Any, float]]] | None = None,
     intended_use: str = "unspecified",
 ) -> ValidationReport:
     checks: list[ValidationCheck] = []
@@ -118,6 +119,7 @@ def validate_tables(
     required_columns = required_columns or {}
     unique_keys = unique_keys or {}
     expected_distributions = expected_distributions or {}
+    conditional_null_rates = conditional_null_rates or {}
     if distribution_tolerance < 0:
         raise ValueError("distribution_tolerance must not be negative")
     for table, columns in required_columns.items():
@@ -225,7 +227,6 @@ def validate_tables(
                     method="availability_check",
                 )
             )
-            continue
         rows = tables[table]
         for column, expected_distribution in distribution_columns.items():
             check_id = f"distribution:{table}.{column}"
@@ -281,6 +282,61 @@ def validate_tables(
                     distribution_tolerance,
                     method="categorical_distribution",
                     population="full_table",
+                )
+            )
+    for table, conditions in conditional_null_rates.items():
+        if table not in tables:
+            checks.append(
+                ValidationCheck(
+                    f"conditional_null:{table}",
+                    CheckStatus.FAIL,
+                    f"{table} is unavailable; cannot validate conditional null rates",
+                    {"supported": False, "reason": "table_missing"},
+                    method="availability_check",
+                )
+            )
+            continue
+        rows = tables[table]
+        for (driver, target), expected_rates in conditions.items():
+            check_id = f"conditional_null:{table}.{driver}->{target}"
+            if not expected_rates or any(rate < 0 or rate > 1 for rate in expected_rates.values()):
+                raise ValueError(f"conditional null rates must be between zero and one: {check_id}")
+            if any(driver not in row or target not in row for row in rows):
+                checks.append(
+                    ValidationCheck(
+                        check_id,
+                        CheckStatus.FAIL,
+                        f"{table}.{driver} or {target} is unavailable; cannot validate conditional null rates",
+                        {"supported": False, "reason": "column_missing"},
+                        method="availability_check",
+                    )
+                )
+                continue
+            observed: dict[Any, float] = {}
+            for value in expected_rates:
+                subset = [row for row in rows if row[driver] == value]
+                observed[value] = (
+                    sum(row[target] is None for row in subset) / len(subset) if subset else 0.0
+                )
+            errors = {
+                str(value): abs(observed[value] - rate) for value, rate in expected_rates.items()
+            }
+            maximum_error = max(errors.values(), default=0.0)
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.PASS
+                    if maximum_error <= distribution_tolerance
+                    else CheckStatus.FAIL,
+                    f"{check_id} maximum error is {maximum_error:.6f}",
+                    {
+                        "expected": expected_rates,
+                        "observed": observed,
+                        "maximum_error": maximum_error,
+                    },
+                    distribution_tolerance,
+                    method="conditional_null_rate",
+                    population="full_table_by_driver",
                 )
             )
     disposition = (

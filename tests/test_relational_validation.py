@@ -197,3 +197,21 @@ def test_distribution_validation_fails_closed_for_missing_inputs() -> None:
             {"orders": (({"status": "new"}),)},
             expected_distributions={"orders": {"status": {"new": 0.5}}},
         )
+
+
+def test_validation_checks_conditional_null_rates() -> None:
+    tables = {
+        "orders": (
+            {"segment": "retail", "note": None},
+            {"segment": "retail", "note": "ok"},
+            {"segment": "enterprise", "note": "ok"},
+        )
+    }
+    report = validate_tables(
+        tables,
+        conditional_null_rates={
+            "orders": {("segment", "note"): {"retail": 0.5, "enterprise": 0.0}}
+        },
+    )
+    assert report.technical_disposition is CheckStatus.PASS
+    assert report.checks[-1].population == "full_table_by_driver"
