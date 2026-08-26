@@ -288,7 +288,7 @@ design evidence; the repository is the source of truth for what is currently pre
   inference, pattern detection, generation, validation, and publication.
 - [ ] Run `ruff check .`, `mypy src tests`, `pytest`, package build, bundle validation,
   and the governed integration suite in CI; record skipped tests with reasons.
-- [ ] Add an acceptance matrix mapping each SDA article deliverable and honest caveat
+- [x] Add an acceptance matrix mapping each SDA article deliverable and honest caveat
   to implementation, test evidence, documentation, and release status.
 
 ## 12. Recommended execution order
