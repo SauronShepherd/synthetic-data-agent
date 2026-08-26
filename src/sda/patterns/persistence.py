@@ -11,6 +11,17 @@ from sda.patterns.models import Pattern
 PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v1"
 PATTERN_EVIDENCE_SCHEMA_VERSION = "sda07-pattern-evidence-v1"
 
+_ASSOCIATION_NAMES = {
+    "correlation": "pearson",
+    "conditional_distribution": "conditional_probability",
+    "conditional_missingness": "null_probability",
+    "fanout_by_segment": "child_count_distribution",
+    "temporal_order": "temporal_order",
+    "temporal_lag": "temporal_lag_distribution",
+    "state_transition": "transition_probability",
+    "business_rule": "rule_satisfaction",
+}
+
 
 def require_pattern_schema_version(row: dict[str, Any], *, expected: str) -> None:
     """Reject pattern rows from an incompatible persistence schema."""
@@ -95,7 +106,7 @@ def registry_rows(
             ),
             "support_rows": p.support_rows,
             "support_rate": p.support_rate,
-            "association_name": next(iter(p.metric), None),
+            "association_name": _ASSOCIATION_NAMES.get(p.family.value, "pattern_metric"),
             "association_value": p.metric.get("value"),
             "baseline_json": json.dumps(p.evidence_quality.get("baseline", {}), sort_keys=True),
             "validation_mode": p.evidence_quality.get("validation_mode", "unknown"),

@@ -24,6 +24,7 @@ def test_pattern_registry_rows_preserve_population_baseline_and_stability():
     )
     row = registry_rows((pattern,))[0]
     assert row["lifecycle"] == "observed_pattern"
+    assert row["association_name"] == "pearson"
     assert json.loads(row["population_json"]) == {"support_rate": 0.25, "support_rows": 10}
     assert json.loads(row["baseline_json"]) == {"mean": 4}
     assert json.loads(row["stability_json"]) == {"quality": "stable"}

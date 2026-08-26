@@ -640,6 +640,8 @@ class PatternDetector:
             origin=origin,
         ).value
         population_rows = int(metric.get("population_rows", support))
+        if support_rate is None and population_rows > 0:
+            support_rate = support / population_rows
         violation_rows = int(metric.get("violation_rows", 0))
         violation_rate = metric.get("violation_rate")
         if violation_rate is None and population_rows:
