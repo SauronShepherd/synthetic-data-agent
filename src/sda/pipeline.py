@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
+from sda.artifacts.manifest import RunManifest
 from sda.generation import generate_rows
 from sda.operations import AuditEvent, AuditLevel, AuditLog, ResourceBudget, enforce_budget
 from sda.planning import GenerationPlan, PlanStatus
@@ -18,6 +20,7 @@ class PipelineResult:
     validation: ValidationReport
     privacy: PrivacyReport
     publication: Publication | None
+    manifest: RunManifest
 
 
 def run_standalone(
@@ -84,4 +87,20 @@ def run_standalone(
             metadata={"rows": row_count, "published": publication is not None},
         )
     )
-    return PipelineResult(rows, validation, privacy, publication)
+    run_manifest = RunManifest(
+        run_id=plan.request_id,
+        tool_name="standalone_generator",
+        tool_version="sda10-local-v1",
+        artifact_schema_version="1.0",
+        environment="local",
+        configuration_hash=plan.plan_fingerprint,
+        input_artifact_ids=plan.input_artifact_ids,
+        status="complete",
+        started_at=datetime.now(UTC).isoformat(),
+        completed_at=datetime.now(UTC).isoformat(),
+        warning_count=sum(
+            1 for check in validation.checks if check.status.value in {"WARN", "NOT_APPLICABLE"}
+        ),
+        locations={"output": location},
+    )
+    return PipelineResult(rows, validation, privacy, publication, run_manifest)

@@ -41,3 +41,6 @@ def test_pipeline_runs_all_gates_and_publishes() -> None:
     assert result.privacy.decision.value == "approved"
     assert result.publication is not None
     assert result.publication.status.value == "published"
+    assert result.manifest.status == "complete"
+    assert result.manifest.input_artifact_ids == ("a",)
+    assert result.manifest.locations == {"output": "uc.t"}
