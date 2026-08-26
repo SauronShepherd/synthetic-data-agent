@@ -58,6 +58,19 @@ def test_plan_normalizes_enum_strings_and_rejects_unknown_values() -> None:
         )
 
 
+def test_plan_freezes_sequence_inputs() -> None:
+    snapshots = ["s"]
+    tables = ["t"]
+    columns = [ColumnGenerationSpec("t", "id", "string")]
+    plan = GenerationPlan("p", 1, "r", snapshots, ["a"], "c", "s", tables, columns)
+    snapshots.append("changed")
+    tables.append("changed")
+    columns.clear()
+    assert plan.source_snapshot_ids == ("s",)
+    assert plan.tables == ("t",)
+    assert len(plan.columns) == 1
+
+
 def test_plan_requires_evidence() -> None:
     with pytest.raises(ValueError, match="source snapshots"):
         GenerationPlan(

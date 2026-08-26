@@ -106,6 +106,14 @@ class GenerationPlan:
     plan_fingerprint: str = ""
 
     def __post_init__(self) -> None:
+        for field_name in (
+            "source_snapshot_ids",
+            "input_artifact_ids",
+            "tables",
+            "columns",
+            "cross_column_rules",
+        ):
+            object.__setattr__(self, field_name, tuple(getattr(self, field_name)))
         for field_name, enum_type in (
             ("status", PlanStatus),
             ("mode", GenerationMode),
