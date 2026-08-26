@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 REQUIRED_TABLES = {
+    "sda_schema_migrations",
     "sda_runs",
     "sda_execution_attempts",
     "sda_approvals",
@@ -13,6 +14,7 @@ REQUIRED_TABLES = {
     "sda_audit_events",
 }
 REQUIRED_FRAGMENTS = {
+    "sda_schema_migrations": ("migration_id TEXT PRIMARY KEY", "applied_at TIMESTAMPTZ"),
     "sda_runs": ("idempotency_key TEXT NOT NULL UNIQUE", "sda_runs_status"),
     "sda_execution_attempts": ("REFERENCES sda_runs(run_id)", "sda_one_running_attempt_per_stage"),
     "sda_approvals": ("PRIMARY KEY (run_id, approval_type)", "sda_approval_decision"),

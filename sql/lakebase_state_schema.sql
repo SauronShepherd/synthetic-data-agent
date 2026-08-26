@@ -1,4 +1,9 @@
 -- SDA operational state schema. Analytical evidence and generated rows remain in Delta.
+CREATE TABLE IF NOT EXISTS sda_schema_migrations (
+    migration_id TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS sda_runs (
     run_id TEXT PRIMARY KEY,
     request_id TEXT NOT NULL,
