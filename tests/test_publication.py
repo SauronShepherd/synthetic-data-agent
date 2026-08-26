@@ -60,6 +60,25 @@ def test_revoke_removes_alias() -> None:
     assert revoked.status is PublicationStatus.REVOKED
 
 
+def test_publication_exposes_validated_and_approved_lifecycle_states() -> None:
+    registry, _ = staged()
+    validation, privacy = reports()
+    assert (
+        registry.validate("dataset", "v1", validation=validation).status
+        is PublicationStatus.VALIDATED
+    )
+    assert (
+        registry.approve("dataset", "v1", privacy=privacy, actor="reviewer").status
+        is PublicationStatus.APPROVED
+    )
+    assert (
+        registry.publish(
+            "dataset", "v1", validation=validation, privacy=privacy, actor="reviewer"
+        ).status
+        is PublicationStatus.PUBLISHED
+    )
+
+
 def test_publication_rejects_mismatched_validation_evidence() -> None:
     registry, _ = staged()
     validation, privacy = reports()

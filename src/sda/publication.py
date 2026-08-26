@@ -11,6 +11,8 @@ from sda.validation import CheckStatus, ValidationReport
 
 class PublicationStatus(StrEnum):
     STAGED = "staged"
+    VALIDATED = "validated"
+    APPROVED = "approved"
     PUBLISHED = "published"
     REVOKED = "revoked"
 
@@ -77,6 +79,12 @@ class PublicationRegistry:
         except KeyError as exc:
             raise PublicationError("dataset version is not staged") from exc
         if current.status is not PublicationStatus.STAGED:
+            if current.status is PublicationStatus.VALIDATED:
+                raise PublicationError("human approval is required")
+            if current.status is PublicationStatus.APPROVED:
+                published = replace(current, status=PublicationStatus.PUBLISHED, published_by=actor)
+                self._items[key] = published
+                return published
             return current
         if validation.technical_disposition is not CheckStatus.PASS:
             raise PublicationError("technical validation did not pass")
@@ -94,6 +102,51 @@ class PublicationRegistry:
                 raise PublicationError(f"alias already points to another dataset: {alias}")
             self._aliases[alias] = key
         return published
+
+    def validate(
+        self, dataset_id: str, dataset_version: str, *, validation: ValidationReport
+    ) -> Publication:
+        """Advance a staged artifact only after its technical validation passes."""
+        key = (dataset_id, dataset_version)
+        try:
+            current = self._items[key]
+        except KeyError as exc:
+            raise PublicationError("dataset version is not staged") from exc
+        if current.status is not PublicationStatus.STAGED:
+            return current
+        if validation.technical_disposition is not CheckStatus.PASS:
+            raise PublicationError("technical validation did not pass")
+        if current.validation_fingerprint != validation.fingerprint:
+            raise PublicationError("validation evidence fingerprint does not match staged artifact")
+        validated = replace(current, status=PublicationStatus.VALIDATED)
+        self._items[key] = validated
+        return validated
+
+    def approve(
+        self,
+        dataset_id: str,
+        dataset_version: str,
+        *,
+        privacy: PrivacyReport,
+        actor: str,
+    ) -> Publication:
+        """Advance a technically validated artifact after independent approvals."""
+        if not actor.strip():
+            raise PublicationError("approval actor is required")
+        key = (dataset_id, dataset_version)
+        try:
+            current = self._items[key]
+        except KeyError as exc:
+            raise PublicationError("dataset version is not staged") from exc
+        if current.status is not PublicationStatus.VALIDATED:
+            if current.status is PublicationStatus.APPROVED:
+                return current
+            raise PublicationError("technical validation is required before approval")
+        if privacy.decision is not PrivacyDecision.APPROVED:
+            raise PublicationError("privacy approval is required")
+        approved = replace(current, status=PublicationStatus.APPROVED, published_by=actor)
+        self._items[key] = approved
+        return approved
 
     def revoke(self, dataset_id: str, dataset_version: str, *, reason: str) -> Publication:
         if not reason.strip():
