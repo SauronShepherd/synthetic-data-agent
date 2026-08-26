@@ -118,6 +118,12 @@ def test_pattern_receipt_counts_are_immutable() -> None:
     receipt = PatternExecutionReceipt(candidate_count_by_family={"correlation": 1})
     with pytest.raises(TypeError, match="immutable"):
         receipt.candidate_count_by_family["correlation"] = 2
+    from sda.patterns.models import PatternExecutionReceipt
+
+    with pytest.raises(ValueError, match="counts"):
+        PatternExecutionReceipt(patterns_emitted=-1)
+    with pytest.raises(ValueError, match="sample_fraction"):
+        PatternExecutionReceipt(sample_fraction=0)
 
 
 def test_pattern_rejects_invalid_support_metrics() -> None:

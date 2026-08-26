@@ -94,6 +94,24 @@ class PatternExecutionReceipt:
     sample_seed: int | None = None
 
     def __post_init__(self) -> None:
+        count_fields = (
+            "candidate_count_total",
+            "patterns_emitted",
+            "patterns_accepted_for_planning",
+            "patterns_review_required",
+            "patterns_rejected",
+            "patterns_insufficient",
+            "rules_evaluated",
+            "conflicts_found",
+            "source_tables_scanned",
+            "source_tables_reused",
+        )
+        if any(getattr(self, name) < 0 for name in count_fields):
+            raise ValueError("pattern receipt counts must not be negative")
+        if self.sample_fraction is not None and not 0 < self.sample_fraction <= 1:
+            raise ValueError("pattern receipt sample_fraction must be between 0 and 1")
+        if self.sample_seed is not None and self.sample_seed < 0:
+            raise ValueError("pattern receipt sample_seed must not be negative")
         object.__setattr__(
             self, "candidate_count_by_family", _freeze(self.candidate_count_by_family)
         )
