@@ -16,6 +16,8 @@ def test_noise_is_deterministic_and_preserves_baseline() -> None:
     assert len(first.mutations) == 2
     assert first.output_fingerprint == fingerprint(first.rows)
     assert first.output_fingerprint == second.output_fingerprint
+    with pytest.raises(TypeError, match="immutable"):
+        first.rows[0]["value"] = "changed"  # type: ignore[index]
 
 
 def test_noise_rejects_unknown_columns() -> None:

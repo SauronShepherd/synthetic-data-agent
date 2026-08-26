@@ -30,6 +30,17 @@ class NoiseError(ValueError):
     """Raised when a noise plan is invalid or exceeds its budget."""
 
 
+class _FrozenDict(dict[str, Any]):
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("noise result rows are immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
+def _freeze_rows(rows: tuple[dict[str, Any], ...]) -> tuple[dict[str, Any], ...]:
+    return tuple(_FrozenDict(row) for row in rows)
+
+
 @dataclass(frozen=True, slots=True)
 class NoisePlan:
     noise_id: str
@@ -79,7 +90,8 @@ def inject_nulls(
         raise NoiseError("baseline fingerprint does not match the noise plan")
     if not baseline or plan.budget == 0:
         copied = tuple(dict(row) for row in baseline)
-        return NoiseResult(copied, (), plan.baseline_fingerprint, fingerprint(copied))
+        frozen = _freeze_rows(copied)
+        return NoiseResult(frozen, (), plan.baseline_fingerprint, fingerprint(frozen))
     if any(column not in row for row in baseline):
         raise NoiseError(f"column not present in baseline: {column}")
     candidates = sorted(
@@ -94,7 +106,8 @@ def inject_nulls(
         rows[index][column] = None
         mutations.append(Mutation(plan.noise_id, index, column, plan.defect_type, before, None))
     output = tuple(rows)
-    return NoiseResult(output, tuple(mutations), plan.baseline_fingerprint, fingerprint(output))
+    frozen = _freeze_rows(output)
+    return NoiseResult(frozen, tuple(mutations), plan.baseline_fingerprint, fingerprint(frozen))
 
 
 def apply_noise(
@@ -129,4 +142,5 @@ def apply_noise(
         rows[index][column] = after
         mutations.append(Mutation(plan.noise_id, index, column, plan.defect_type, before, after))
     output = tuple(rows)
-    return NoiseResult(output, tuple(mutations), plan.baseline_fingerprint, fingerprint(output))
+    frozen = _freeze_rows(output)
+    return NoiseResult(frozen, tuple(mutations), plan.baseline_fingerprint, fingerprint(frozen))
