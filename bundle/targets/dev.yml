@@ -7,6 +7,8 @@ targets:
       - group_name: ${var.developer_group_name}
         level: CAN_MANAGE
     variables:
+      catalog_name: workspace
+      sda_profile_catalog: workspace
       sda_catalog_allowlist: samples
       sda_schema_allowlist: ""
       sda_table_patterns: ""
@@ -17,13 +19,13 @@ targets:
       sda_scope_tables: sales_franchises,sales_transactions
       sda_relationship_parent_table: samples.bakehouse.sales_franchises
       sda_relationship_child_table: samples.bakehouse.sales_transactions
-      sda_relationship_output_table: sda_dev.profiles.relationship_analysis_scope
-      sda_graph_output_table: sda_dev.profiles.dependency_graph_scope
-      sda_metadata_inventory_table: sda_dev.profiles.metadata_inventory
-      sda_manifest_table: sda_dev.profiles.run_manifests
-      sda_artifact_registry_table: sda_dev.profiles.artifact_registry
-      sda_pattern_registry_table: sda_dev.profiles.pattern_registry
-      sda_pattern_evidence_table: sda_dev.profiles.pattern_evidence
+      sda_relationship_output_table: workspace.profiles.relationship_analysis_scope
+      sda_graph_output_table: workspace.profiles.dependency_graph_scope
+      sda_metadata_inventory_table: workspace.profiles.metadata_inventory
+      sda_manifest_table: workspace.profiles.run_manifests
+      sda_artifact_registry_table: workspace.profiles.artifact_registry
+      sda_pattern_registry_table: workspace.profiles.pattern_registry
+      sda_pattern_evidence_table: workspace.profiles.pattern_evidence
       sda_pattern_mode: quick
       sda_pattern_min_support_rows: "100"
       sda_pattern_min_support_rate: "0.001"
