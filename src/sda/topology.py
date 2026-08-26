@@ -175,6 +175,9 @@ def validate_topology(plan: TopologyPlan, result: TopologyResult) -> None:
     ):
         raise TopologyError("topology result contains invalid or duplicate node IDs")
     node_set = set(node_ids)
+    edge_ids = [str(edge.get("edge_id", "")) for edge in result.edges]
+    if any(not edge_id for edge_id in edge_ids) or len(edge_ids) != len(set(edge_ids)):
+        raise TopologyError("topology result contains invalid or duplicate edge IDs")
     pairs: set[tuple[str, str]] = set()
     adjacency: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
     degree = {node_id: 0 for node_id in node_ids}

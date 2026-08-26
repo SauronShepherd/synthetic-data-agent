@@ -74,6 +74,18 @@ def test_topology_validator_rejects_inconsistent_metrics() -> None:
         validate_topology(plan, corrupted)
 
 
+def test_topology_validator_rejects_duplicate_edge_ids() -> None:
+    plan = TopologyPlan("g", "fp", node_count=3, edge_count=2)
+    result = generate_topology(plan)
+    corrupted = type(result)(
+        result.nodes,
+        (result.edges[0], {**result.edges[1], "edge_id": result.edges[0]["edge_id"]}),
+        result.metrics,
+    )
+    with pytest.raises(TopologyError, match="edge IDs"):
+        validate_topology(plan, corrupted)
+
+
 def test_topology_validator_accepts_acyclic_undirected_tree() -> None:
     plan = TopologyPlan(
         "tree", "fp", node_count=3, edge_count=2, kind=GraphKind.UNDIRECTED, acyclic=True
