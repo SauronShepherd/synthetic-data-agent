@@ -449,6 +449,25 @@ class PatternDetector:
             ),
             origin=PatternOrigin.OBSERVED,
         ).value
+        population_rows = int(metric.get("population_rows", support))
+        violation_rows = int(metric.get("violation_rows", 0))
+        violation_rate = metric.get("violation_rate")
+        if violation_rate is None and population_rows:
+            violation_rate = violation_rows / population_rows
+        evidence_quality = {
+            "validation_mode": metric.get("method", "exact"),
+            "support_quality": "sufficient",
+            "confidence": metric.get("confidence"),
+            "stability": metric.get("stability", "unknown"),
+            "population_rows": population_rows,
+            "sampling": {
+                "fraction": self.config.sample_fraction,
+                "seed": self.config.sample_seed,
+            },
+            "violation_count": violation_rows,
+            "violation_rate": violation_rate,
+            "limitations": tuple(metric.get("limitations", ())),
+        }
         return Pattern(
             pid,
             analysis_id,
@@ -461,7 +480,7 @@ class PatternDetector:
             support,
             support_rate,
             metric,
-            {"validation_mode": metric.get("method", "exact"), "support_quality": "sufficient"},
+            evidence_quality,
             decision=decision,
             warnings=("observed_pattern_requires_review",)
             if family is PatternFamily.BUSINESS_RULE

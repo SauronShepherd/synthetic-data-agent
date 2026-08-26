@@ -31,6 +31,9 @@ def test_correlation_is_evidence_and_observed_is_not_auto_approved() -> None:
     assert result[0].origin.value == "observed"
     assert result[0].decision == "accepted_for_planning"
     assert result[0].metric["valid_pair_count"] == 40
+    assert result[0].evidence_quality["population_rows"] == 40
+    assert result[0].evidence_quality["sampling"]["seed"] == 1729
+    assert result[0].evidence_quality["violation_count"] == 0
 
 
 def test_correlation_pairs_remain_aligned_when_values_are_null() -> None:
