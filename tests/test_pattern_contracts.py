@@ -4,7 +4,13 @@ from sda.patterns import PatternConfig, PatternDetector, PatternInputRefs
 from sda.patterns.candidates import generate_candidates
 from sda.patterns.conflicts import detect_rule_conflicts, resolve_rule_conflicts
 from sda.patterns.fanout import fanout_by_segment
-from sda.patterns.models import Pattern, PatternExecutionReceipt, PatternFamily, PatternOrigin
+from sda.patterns.models import (
+    Pattern,
+    PatternDetectionResult,
+    PatternExecutionReceipt,
+    PatternFamily,
+    PatternOrigin,
+)
 from sda.patterns.persistence import (
     PATTERN_EVIDENCE_SCHEMA_VERSION,
     PATTERN_REGISTRY_SCHEMA_VERSION,
@@ -238,6 +244,15 @@ def test_pattern_receipt_serializes_all_execution_accounting() -> None:
         "sample_fraction": 0.5,
         "sample_seed": 9,
     }
+
+
+def test_pattern_detection_review_questions_are_immutable_and_serializable() -> None:
+    result = PatternDetectionResult(
+        (), None, PatternExecutionReceipt(), review_questions=({"reason": {"code": "review"}},)
+    )
+    with pytest.raises(TypeError, match="immutable"):
+        result.review_questions[0]["reason"]["code"] = "changed"  # type: ignore[index]
+    assert result.to_dict()["review_questions"] == result.review_questions
 
 
 def test_pattern_rejects_invalid_support_metrics() -> None:

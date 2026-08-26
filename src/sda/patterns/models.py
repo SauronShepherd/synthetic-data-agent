@@ -132,6 +132,24 @@ class PatternDetectionResult:
     warnings: tuple[str, ...] = ()
     review_questions: tuple[dict[str, Any], ...] = ()
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "patterns", tuple(self.patterns))
+        object.__setattr__(self, "warnings", tuple(self.warnings))
+        object.__setattr__(
+            self,
+            "review_questions",
+            tuple(_freeze(question) for question in self.review_questions),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "patterns": tuple(pattern.to_dict() for pattern in self.patterns),
+            "artifact_ref": self.artifact_ref,
+            "receipt": self.receipt.to_dict(),
+            "warnings": self.warnings,
+            "review_questions": self.review_questions,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class PatternConfig:
