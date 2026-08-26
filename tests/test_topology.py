@@ -6,6 +6,7 @@ from sda.topology import (
     GraphKind,
     TopologyError,
     TopologyPlan,
+    TopologyResult,
     generate_topology,
     manifest_for_topology,
     validate_topology,
