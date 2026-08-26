@@ -77,6 +77,7 @@ class StreamManifest:
     seed: int
     query_id: str | None
     watermark_delay_seconds: float
+    manifest_schema_version: str = "stream-manifest-v1"
 
     def __post_init__(self) -> None:
         if not self.stream_id.strip() or not self.plan_fingerprint.strip():
@@ -87,6 +88,8 @@ class StreamManifest:
             raise ValueError("empty stream manifests must not contain event IDs")
         if self.watermark_delay_seconds < 0:
             raise ValueError("watermark_delay_seconds must not be negative")
+        if not self.manifest_schema_version.strip():
+            raise ValueError("manifest_schema_version must not be empty")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -102,6 +105,7 @@ class StreamManifest:
             "seed": self.seed,
             "query_id": self.query_id,
             "watermark_delay_seconds": self.watermark_delay_seconds,
+            "manifest_schema_version": self.manifest_schema_version,
         }
 
 
