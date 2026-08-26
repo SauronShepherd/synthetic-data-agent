@@ -25,7 +25,13 @@ jobs:
       - name: Type check
         run: mypy src
       - name: Tests and coverage
-        run: python -m pytest -q -m "not spark" --tb=short --cov=src/sda --cov-report=term-missing
+        run: python -m pytest -q -m "not spark" --tb=short --junitxml=test-results.xml --cov=src/sda --cov-report=term-missing
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-diagnostics
+          path: test-results.xml
       - name: Spark tests
         run: python -m pytest -q -m spark --tb=short
       - name: Build wheel
