@@ -39,6 +39,20 @@ def test_continuous_requires_checkpoint_and_local_generator_rejects_it() -> None
         generate_bounded_events(continuous)
 
 
+def test_string_stream_modes_are_normalized_before_safety_checks() -> None:
+    with pytest.raises(ValueError, match="checkpoint"):
+        plan(mode="continuous")
+    continuous = plan(mode="continuous", checkpoint_id="cp-1")
+    assert continuous.mode is StreamMode.CONTINUOUS
+    with pytest.raises(StreamError, match="Structured Streaming"):
+        generate_bounded_events(continuous)
+
+
+def test_unknown_stream_mode_is_rejected() -> None:
+    with pytest.raises(ValueError, match="unsupported stream mode"):
+        plan(mode="not-a-mode")
+
+
 def test_offsets_and_bounds_are_fail_closed() -> None:
     with pytest.raises(StreamError, match="within"):
         generate_bounded_events(plan(), start_offset=5)

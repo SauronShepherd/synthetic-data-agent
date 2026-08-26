@@ -43,6 +43,13 @@ class StreamingPlan:
     watermark_delay_seconds: float = 0.0
 
     def __post_init__(self) -> None:
+        try:
+            normalized_mode = (
+                self.mode if isinstance(self.mode, StreamMode) else StreamMode(self.mode)
+            )
+        except ValueError as exc:
+            raise ValueError(f"unsupported stream mode: {self.mode!r}") from exc
+        object.__setattr__(self, "mode", normalized_mode)
         if not self.stream_id.strip() or not self.plan_fingerprint.strip():
             raise ValueError("stream_id and plan_fingerprint must not be empty")
         if self.event_count < 0 or self.max_events < 1:
@@ -59,7 +66,7 @@ class StreamingPlan:
             raise ValueError("watermark_delay_seconds must not be negative")
         if self.event_count > self.max_events:
             raise ValueError("event_count exceeds max_events")
-        if self.mode is StreamMode.CONTINUOUS and not self.checkpoint_id.strip():
+        if normalized_mode is StreamMode.CONTINUOUS and not self.checkpoint_id.strip():
             raise ValueError("continuous streams require checkpoint_id")
 
 
@@ -81,6 +88,13 @@ class StreamManifest:
     manifest_schema_version: str = "stream-manifest-v1"
 
     def __post_init__(self) -> None:
+        try:
+            normalized_mode = (
+                self.mode if isinstance(self.mode, StreamMode) else StreamMode(self.mode)
+            )
+        except ValueError as exc:
+            raise ValueError(f"unsupported stream mode: {self.mode!r}") from exc
+        object.__setattr__(self, "mode", normalized_mode)
         if not self.stream_id.strip() or not self.plan_fingerprint.strip():
             raise ValueError("stream manifest identity must not be empty")
         if self.event_count < 0:
