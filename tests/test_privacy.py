@@ -43,3 +43,13 @@ def test_direct_identifiers_and_rare_quasi_identifiers_are_checked() -> None:
         "rare_quasi_identifier_values",
     }
     assert "a@example.test" not in str(report.findings)
+
+
+def test_privacy_report_serializes_decision_and_schema_version() -> None:
+    report = assess_privacy({"t": (({"x": 1}),)})
+    assert report.to_dict() == {
+        "decision": "approved",
+        "findings": (),
+        "policy_ref": "strict-default",
+        "schema_version": "privacy-report-v1",
+    }

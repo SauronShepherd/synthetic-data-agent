@@ -22,12 +22,33 @@ class PrivacyFinding:
     message: str
     evidence: dict[str, Any]
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "severity": self.severity,
+            "message": self.message,
+            "evidence": self.evidence,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class PrivacyReport:
     decision: PrivacyDecision
     findings: tuple[PrivacyFinding, ...]
     policy_ref: str
+    schema_version: str = "privacy-report-v1"
+
+    def __post_init__(self) -> None:
+        if not self.policy_ref.strip() or not self.schema_version.strip():
+            raise ValueError("privacy policy_ref and schema_version are required")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "decision": self.decision.value,
+            "findings": tuple(finding.to_dict() for finding in self.findings),
+            "policy_ref": self.policy_ref,
+            "schema_version": self.schema_version,
+        }
 
 
 def assess_privacy(
