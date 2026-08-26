@@ -14,6 +14,15 @@ from typing import Any
 from sda.artifacts.fingerprint import fingerprint
 
 
+class _FrozenDict(dict[str, Any]):
+    """JSON-compatible immutable mapping used inside frozen plan objects."""
+
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("plan mappings are immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
 class PlanStatus(StrEnum):
     DRAFT = "draft"
     AWAITING_APPROVAL = "awaiting_approval"
@@ -47,6 +56,7 @@ class ColumnGenerationSpec:
                 raise ValueError(f"{name} must not be empty")
         if any(not value.strip() for value in self.source_evidence_ids):
             raise ValueError("source_evidence_ids must not contain empty values")
+        object.__setattr__(self, "parameters", _FrozenDict(self.parameters))
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +103,7 @@ class GenerationPlan:
             raise ValueError("plan_fingerprint does not match plan contents")
         if not self.plan_fingerprint:
             object.__setattr__(self, "plan_fingerprint", expected)
+        object.__setattr__(self, "budgets", _FrozenDict(self.budgets))
 
     def _fingerprint_payload(self) -> dict[str, Any]:
         value = asdict(self)

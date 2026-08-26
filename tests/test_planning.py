@@ -47,3 +47,23 @@ def test_plan_transitions_are_fail_closed() -> None:
     assert plan.status is PlanStatus.APPROVED
     with pytest.raises(ValueError, match="invalid plan transition"):
         plan.transition(PlanStatus.DRAFT)
+
+
+def test_nested_plan_mappings_are_immutable() -> None:
+    plan = GenerationPlan(
+        "p",
+        1,
+        "r",
+        ("s",),
+        ("a",),
+        "c",
+        "s",
+        ("t",),
+        (ColumnGenerationSpec("t", "id", "string", parameters={"prefix": "x"}),),
+        budgets={"max_rows": 2},
+    )
+    with pytest.raises(TypeError, match="immutable"):
+        plan.budgets["max_rows"] = 3  # type: ignore[index]
+    with pytest.raises(TypeError, match="immutable"):
+        plan.columns[0].parameters["prefix"] = "y"  # type: ignore[index]
+    assert plan.plan_fingerprint == plan.compute_fingerprint()
