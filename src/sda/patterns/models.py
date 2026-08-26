@@ -102,6 +102,7 @@ class PatternExecutionReceipt:
     source_tables_reused: int = 0
     sample_fraction: float | None = None
     sample_seed: int | None = None
+    schema_version: str = "pattern-execution-receipt-v1"
 
     def __post_init__(self) -> None:
         count_fields = (
@@ -122,6 +123,8 @@ class PatternExecutionReceipt:
             raise ValueError("pattern receipt sample_fraction must be between 0 and 1")
         if self.sample_seed is not None and self.sample_seed < 0:
             raise ValueError("pattern receipt sample_seed must not be negative")
+        if not self.schema_version.strip():
+            raise ValueError("pattern receipt schema_version must not be empty")
         object.__setattr__(
             self, "candidate_count_by_family", _freeze(self.candidate_count_by_family)
         )

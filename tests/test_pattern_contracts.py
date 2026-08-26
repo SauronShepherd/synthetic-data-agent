@@ -243,6 +243,7 @@ def test_pattern_receipt_serializes_all_execution_accounting() -> None:
         "source_tables_reused": 0,
         "sample_fraction": 0.5,
         "sample_seed": 9,
+        "schema_version": "pattern-execution-receipt-v1",
     }
 
 
