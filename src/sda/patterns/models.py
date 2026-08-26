@@ -219,6 +219,7 @@ class PatternConfig:
     def __post_init__(self) -> None:
         if (
             self.mode not in {"quick", "full"}
+            or self.sensitive_value_policy not in {"no_values", "fingerprints_only"}
             or self.min_support_rows < 1
             or not 0 <= self.min_support_rate <= 1
             or self.max_candidates < 1

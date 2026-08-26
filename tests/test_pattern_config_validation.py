@@ -16,3 +16,8 @@ from sda.patterns.models import PatternConfig
 def test_pattern_config_rejects_invalid_bounds(field, value):
     with pytest.raises(ValueError):
         PatternConfig(**{field: value})
+
+
+def test_pattern_config_rejects_unknown_sensitive_value_policy() -> None:
+    with pytest.raises(ValueError):
+        PatternConfig(sensitive_value_policy="raw_values")
