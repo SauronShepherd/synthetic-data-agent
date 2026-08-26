@@ -86,6 +86,7 @@ class StreamCheckpoint:
     stream_id: str
     plan_fingerprint: str
     schema_version: str
+    query_id: str
     next_offset: int
     replay_fingerprint: str
 
@@ -106,6 +107,7 @@ def checkpoint(plan: StreamingPlan, events: tuple[dict[str, Any], ...]) -> Strea
         plan.stream_id,
         plan.plan_fingerprint,
         plan.schema_version,
+        plan.query_id,
         next_offset,
         manifest(plan, events).replay_fingerprint,
     )
@@ -115,10 +117,11 @@ def resume_from_checkpoint(
     plan: StreamingPlan, saved: StreamCheckpoint
 ) -> tuple[dict[str, Any], ...]:
     """Resume a bounded stream after validating checkpoint ownership."""
-    if (saved.stream_id, saved.plan_fingerprint, saved.schema_version) != (
+    if (saved.stream_id, saved.plan_fingerprint, saved.schema_version, saved.query_id) != (
         plan.stream_id,
         plan.plan_fingerprint,
         plan.schema_version,
+        plan.query_id,
     ):
         raise StreamError("checkpoint is incompatible with the stream plan")
     if saved.next_offset < 0 or saved.next_offset > plan.event_count:
