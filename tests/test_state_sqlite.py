@@ -22,6 +22,7 @@ def test_sqlite_state_survives_repository_reopen(tmp_path: object) -> None:
     repo = SQLiteStateRepository(path)
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
+    repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     repo.close()
     reopened = SQLiteStateRepository(path)
     assert reopened.get_run("run-1").status is WorkflowStatus.PLANNED
@@ -95,6 +96,7 @@ def test_sqlite_failed_run_can_be_explicitly_retried() -> None:
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
     for status in (
         WorkflowStatus.PLANNED,
+        WorkflowStatus.AWAITING_APPROVAL,
         WorkflowStatus.APPROVED,
         WorkflowStatus.EXECUTING,
         WorkflowStatus.FAILED,

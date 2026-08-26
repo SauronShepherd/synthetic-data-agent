@@ -21,9 +21,10 @@ def test_idempotent_run_creation_and_legal_transitions() -> None:
     run = RunRecord("run-1", "req-1", "idem-1")
     assert repo.create_run(run) == repo.create_run(run)
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
+    repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     repo.transition_run("run-1", WorkflowStatus.APPROVED)
     repo.transition_run("run-1", WorkflowStatus.EXECUTING)
-    assert repo.get_run("run-1").version == 3
+    assert repo.get_run("run-1").version == 4
 
 
 def test_idempotency_key_rejects_conflicting_run_content() -> None:
@@ -58,6 +59,7 @@ def test_failed_run_can_be_explicitly_retried() -> None:
     repo = InMemoryStateRepository()
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
+    repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     repo.transition_run("run-1", WorkflowStatus.APPROVED)
     repo.transition_run("run-1", WorkflowStatus.EXECUTING)
     repo.transition_run("run-1", WorkflowStatus.FAILED)

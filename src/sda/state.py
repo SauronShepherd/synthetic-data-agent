@@ -133,9 +133,7 @@ class Feedback:
 
 _ALLOWED: dict[WorkflowStatus, frozenset[WorkflowStatus]] = {
     WorkflowStatus.REQUESTED: frozenset({WorkflowStatus.PLANNED, WorkflowStatus.CANCELLED}),
-    WorkflowStatus.PLANNED: frozenset(
-        {WorkflowStatus.AWAITING_APPROVAL, WorkflowStatus.APPROVED, WorkflowStatus.REJECTED}
-    ),
+    WorkflowStatus.PLANNED: frozenset({WorkflowStatus.AWAITING_APPROVAL, WorkflowStatus.REJECTED}),
     WorkflowStatus.AWAITING_APPROVAL: frozenset(
         {WorkflowStatus.APPROVED, WorkflowStatus.REJECTED, WorkflowStatus.CANCELLED}
     ),
