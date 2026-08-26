@@ -4,7 +4,7 @@ from sda.patterns import PatternConfig, PatternDetector, PatternInputRefs
 from sda.patterns.candidates import generate_candidates
 from sda.patterns.conflicts import detect_rule_conflicts, resolve_rule_conflicts
 from sda.patterns.fanout import fanout_by_segment
-from sda.patterns.models import PatternOrigin
+from sda.patterns.models import PatternExecutionReceipt, PatternOrigin
 from sda.patterns.persistence import (
     PATTERN_EVIDENCE_SCHEMA_VERSION,
     PATTERN_REGISTRY_SCHEMA_VERSION,
@@ -150,6 +150,32 @@ def test_pattern_receipt_counts_are_immutable() -> None:
         PatternExecutionReceipt(patterns_emitted=-1)
     with pytest.raises(ValueError, match="sample_fraction"):
         PatternExecutionReceipt(sample_fraction=0)
+
+
+def test_pattern_receipt_serializes_all_execution_accounting() -> None:
+    receipt = PatternExecutionReceipt(
+        candidate_count_total=4,
+        patterns_emitted=2,
+        patterns_accepted_for_planning=1,
+        sample_fraction=0.5,
+        sample_seed=9,
+    )
+    assert receipt.to_dict() == {
+        "candidate_count_total": 4,
+        "candidate_count_by_family": {},
+        "candidate_skipped_by_reason": {},
+        "patterns_emitted": 2,
+        "patterns_accepted_for_planning": 1,
+        "patterns_review_required": 0,
+        "patterns_rejected": 0,
+        "patterns_insufficient": 0,
+        "rules_evaluated": 0,
+        "conflicts_found": 0,
+        "source_tables_scanned": 0,
+        "source_tables_reused": 0,
+        "sample_fraction": 0.5,
+        "sample_seed": 9,
+    }
 
 
 def test_pattern_rejects_invalid_support_metrics() -> None:

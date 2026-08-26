@@ -119,6 +119,10 @@ class PatternExecutionReceipt:
             self, "candidate_skipped_by_reason", _freeze(self.candidate_skipped_by_reason)
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize execution accounting without source rows or examples."""
+        return asdict(self)
+
 
 @dataclass(frozen=True, slots=True)
 class PatternDetectionResult:
