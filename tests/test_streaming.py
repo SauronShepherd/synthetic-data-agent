@@ -87,7 +87,14 @@ def test_bounded_events_have_deterministic_inter_arrival_times() -> None:
 
 
 def test_manifest_records_the_declared_event_rate_contract() -> None:
-    current = plan(events_per_second=4.0, inter_arrival_seconds=0.25)
+    current = plan(events_per_second=4.0, inter_arrival_seconds=0.25, seed=42)
     result = manifest(current, generate_bounded_events(current))
     assert result.events_per_second == 4.0
     assert result.inter_arrival_seconds == 0.25
+    assert result.seed == 42
+
+
+def test_stream_seed_is_part_of_deterministic_event_identity() -> None:
+    first = generate_bounded_events(plan(seed=1))
+    second = generate_bounded_events(plan(seed=2))
+    assert first[0]["event_id"] != second[0]["event_id"]
