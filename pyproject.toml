@@ -45,6 +45,7 @@ markers = [
   "unit: fast local tests",
   "spark: tests requiring PySpark",
   "databricks: tests requiring a Databricks workspace",
+  "integration: tests requiring an explicitly configured external service",
 ]
 
 [tool.ruff]
