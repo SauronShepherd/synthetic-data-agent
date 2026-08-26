@@ -98,6 +98,7 @@ def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> No
     assert result.receipt.candidate_count_by_family == {
         "correlation": 1,
         "conditional_distribution": 2,
+        "conditional_missingness": 2,
     }
     assert (
         sum(result.receipt.candidate_count_by_family.values())
@@ -188,6 +189,18 @@ def test_candidates_are_bounded_and_deterministic() -> None:
     right = generate_candidates("main.s.t", dict(reversed(list(columns.items()))), config=config)
     assert len(left) == 7
     assert left == right
+
+
+def test_candidates_include_structural_pattern_families() -> None:
+    candidates = generate_candidates(
+        "main.events",
+        {"id": "int", "status": "string", "started_at": "timestamp", "ended_at": "timestamp"},
+        config=PatternConfig(max_candidates=50),
+    )
+    families = {candidate.family for candidate in candidates}
+    assert PatternFamily.TEMPORAL_ORDER in families
+    assert PatternFamily.STATE_TRANSITION in families
+    assert PatternFamily.CONDITIONAL_MISSINGNESS in families
 
 
 def test_pattern_detector_rejects_inputs_over_scan_budget() -> None:

@@ -85,4 +85,38 @@ def generate_candidates(
                         PatternFamily.CONDITIONAL_DISTRIBUTION, table, (driver,), (outcome,)
                     )
                 )
+    # These candidates are deliberately structural.  Metrics are evaluated only
+    # after the bounded input adapter has established that the required columns
+    # and evidence are available.
+    temporal = tuple(name for name in outcomes if name.endswith(("_at", "_date", "_time", "_ts")))
+    for earlier, later in combinations(temporal, 2):
+        result.append(PatternCandidate(PatternFamily.TEMPORAL_ORDER, table, (earlier,), (later,)))
+    entity_columns = tuple(
+        name for name in outcomes if name.lower().endswith("_id") or name.lower() == "id"
+    )
+    state_columns = tuple(name for name in outcomes if name.lower() in {"status", "state", "stage"})
+    for entity, state, event_time in (
+        (entity, state, event_time)
+        for entity in entity_columns
+        for state in state_columns
+        for event_time in temporal
+    ):
+        result.append(
+            PatternCandidate(
+                PatternFamily.STATE_TRANSITION,
+                table,
+                (entity, state, event_time),
+            )
+        )
+    for driver in drivers:
+        for outcome in outcomes:
+            if driver != outcome:
+                result.append(
+                    PatternCandidate(
+                        PatternFamily.CONDITIONAL_MISSINGNESS,
+                        table,
+                        (driver,),
+                        (outcome,),
+                    )
+                )
     return tuple(result[: cfg.max_candidates])
