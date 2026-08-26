@@ -21,8 +21,16 @@ design evidence; the repository is the source of truth for what is currently pre
   local contracts and tests.
 - [x] Generation-plan, validation-report, and publication artifact types are registered
   in the durable artifact taxonomy.
-- [x] The local suite passes: 132 passed, 2 skipped using the checked-in `.testdeps`
-  dependency set.
+- [x] The local suite passes: 191 passed, 2 skipped using the checked-in `.testdeps`
+  dependency set. CI separates the non-Spark coverage run from the dedicated Spark
+  test job.
+- [x] The executable local slice includes immutable approved plans, deterministic
+  standalone/relational generation, validation/privacy/publication gates, durable
+  SQLite workflow state, bounded streaming replay/checkpoints, topology constraints,
+  and controlled noise mutations.
+- [ ] Production readiness remains explicitly unclaimed until Lakebase/PostgreSQL,
+  governed Databricks execution, continuous Structured Streaming, distributed graph
+  generation, and workspace integration tests are delivered.
 
 ### Global completion gate
 
