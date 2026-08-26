@@ -208,3 +208,51 @@ class InMemoryStateRepository:
             )
             self._attempts[attempt_id] = updated
             return updated
+
+    def renew_attempt_lease(
+        self, attempt_id: str, *, worker_id: str, lease_seconds: int = 300
+    ) -> ExecutionAttempt:
+        if not worker_id.strip() or lease_seconds < 1:
+            raise ValueError("worker_id must not be empty and lease_seconds must be positive")
+        with self._lock:
+            current = self._attempts.get(attempt_id)
+            if current is None:
+                raise StateError(f"unknown attempt: {attempt_id}")
+            if current.status is not AttemptStatus.RUNNING or current.worker_id != worker_id:
+                raise StateError("attempt lease is not owned by worker")
+            if current.lease_expires_at is None or _parse_time(
+                current.lease_expires_at
+            ) <= datetime.now(UTC):
+                raise StateError("attempt lease has expired")
+            updated = replace(
+                current,
+                lease_expires_at=(datetime.now(UTC) + timedelta(seconds=lease_seconds)).isoformat(),
+            )
+            self._attempts[attempt_id] = updated
+            return updated
+
+    def recover_stale_attempts(
+        self, *, now: datetime | None = None
+    ) -> tuple[ExecutionAttempt, ...]:
+        current_time = now or datetime.now(UTC)
+        with self._lock:
+            recovered: list[ExecutionAttempt] = []
+            for attempt_id, attempt in self._attempts.items():
+                if (
+                    attempt.status is AttemptStatus.RUNNING
+                    and attempt.lease_expires_at is not None
+                    and _parse_time(attempt.lease_expires_at) <= current_time
+                ):
+                    updated = replace(
+                        attempt,
+                        status=AttemptStatus.ABANDONED,
+                        error_code="stale_lease",
+                        lease_expires_at=None,
+                    )
+                    self._attempts[attempt_id] = updated
+                    recovered.append(updated)
+            return tuple(recovered)
+
+
+def _parse_time(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from sda.state import (
@@ -51,3 +53,18 @@ def test_approval_is_unique_per_type() -> None:
     repo.record_approval(approval)
     with pytest.raises(StateError, match="already recorded"):
         repo.record_approval(approval)
+
+
+def test_in_memory_lease_renewal_and_stale_recovery_match_durable_contract() -> None:
+    repo = InMemoryStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    attempt = repo.acquire_attempt(
+        ExecutionAttempt("run-1", "attempt-1", "generate", worker_id="worker-1"),
+        lease_seconds=30,
+    )
+    renewed = repo.renew_attempt_lease("attempt-1", worker_id="worker-1", lease_seconds=60)
+    assert renewed.lease_expires_at != attempt.lease_expires_at
+    with pytest.raises(StateError, match="owned"):
+        repo.renew_attempt_lease("attempt-1", worker_id="other")
+    recovered = repo.recover_stale_attempts(now=datetime.now(UTC) + timedelta(seconds=120))
+    assert recovered[0].status is AttemptStatus.ABANDONED
