@@ -65,6 +65,7 @@ def test_pipeline_can_write_atomic_staging_output(tmp_path) -> None:
         staging_path=str(destination),
     )
     assert [json.loads(line) for line in destination.read_text().splitlines()] == list(result.rows)
+    assert result.manifest.locations["staging"] == str(destination)
 
 
 def test_pipeline_blocks_publication_for_unapproved_direct_identifier() -> None:

@@ -109,9 +109,16 @@ def run_standalone(
             AuditLevel.INFO,
             "standalone generation finished",
             stage="publish",
-            metadata={"rows": row_count, "published": publication is not None},
+            metadata={
+                "rows": row_count,
+                "published": publication is not None,
+                **({"staging_path": staging_path} if staging_path is not None else {}),
+            },
         )
     )
+    locations = {"output": location}
+    if staging_path is not None:
+        locations["staging"] = staging_path
     run_manifest = RunManifest(
         run_id=plan.request_id,
         tool_name="standalone_generator",
@@ -127,7 +134,7 @@ def run_standalone(
         warning_count=sum(
             1 for check in validation.checks if check.status.value in {"WARN", "NOT_APPLICABLE"}
         ),
-        locations={"output": location},
+        locations=locations,
     )
     return PipelineResult(
         rows, receipt, generation_manifest, validation, privacy, publication, run_manifest
