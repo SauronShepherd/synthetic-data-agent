@@ -234,7 +234,7 @@ design evidence; the repository is the source of truth for what is currently pre
 
 ## 9. Quality, privacy, approval, and publication (SDA 15)
 
-- [ ] Implement check contracts with `PASS`, `WARN`, `FAIL`, `NOT_APPLICABLE`, method,
+- [x] Implement check contracts with `PASS`, `WARN`, `FAIL`, `NOT_APPLICABLE`, method,
   evidence refs, thresholds, freshness, population, unsupported reason, and severity.
 - [ ] Validate schema, counts, keys/FKs, fan-out, distributions, conditional nulls,
   formats, time, patterns/rules, streaming behavior, topology, noise execution,
