@@ -4,10 +4,36 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Callable
+from datetime import date, datetime
 from typing import Any
 
 from sda.state import StateRepository
 from sda.state_sqlite import SQLiteStateRepository
+
+
+def _normalise(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+class _PostgresCursor:
+    def __init__(self, cursor: Any) -> None:
+        self._cursor = cursor
+
+    @property
+    def rowcount(self) -> int:
+        return self._cursor.rowcount
+
+    def execute(self, statement: str, parameters: tuple[Any, ...]) -> None:
+        self._cursor.execute(statement, parameters)
+
+    def fetchone(self) -> Any:
+        row = self._cursor.fetchone()
+        return tuple(_normalise(value) for value in row) if row is not None else None
+
+    def fetchall(self) -> list[tuple[Any, ...]]:
+        return [tuple(_normalise(value) for value in row) for row in self._cursor.fetchall()]
 
 
 class _PostgresConnection:
@@ -27,7 +53,7 @@ class _PostgresConnection:
             statement = statement.replace(f" {source} ", f" {target} ")
             statement = statement.replace(f" {source}(", f" {target}(")
         try:
-            cursor = self._connection.cursor()
+            cursor = _PostgresCursor(self._connection.cursor())
             cursor.execute(statement, parameters)
             return cursor
         except Exception as exc:
