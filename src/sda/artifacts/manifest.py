@@ -8,6 +8,13 @@ from typing import Any
 from sda.artifacts.fingerprint import fingerprint
 
 
+class _FrozenDict(dict[str, str]):
+    def _immutable(self, *args: Any, **kwargs: Any) -> None:
+        raise TypeError("manifest mappings are immutable")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
+
+
 @dataclass(frozen=True, slots=True)
 class RunManifest:
     run_id: str
@@ -40,6 +47,7 @@ class RunManifest:
             raise ValueError("status must be running, complete, or failed")
         if self.warning_count < 0:
             raise ValueError("warning_count must not be negative")
+        object.__setattr__(self, "locations", _FrozenDict(self.locations))
 
     @property
     def manifest_id(self) -> str:
