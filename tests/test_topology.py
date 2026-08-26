@@ -156,3 +156,13 @@ def test_topology_plan_normalizes_graph_kind_strings() -> None:
     assert plan.kind is GraphKind.DIRECTED
     with pytest.raises(ValueError, match="unsupported graph kind"):
         TopologyPlan("g", "fp", node_count=2, edge_count=1, kind="unknown")
+
+
+def test_topology_result_recursively_freezes_nested_attributes() -> None:
+    result = TopologyResult(
+        ({"node_id": "n", "labels": ["a", {"sensitive": False}]},),
+        (),
+        {},
+    )
+    with pytest.raises(TypeError, match="immutable"):
+        result.nodes[0]["labels"][1]["sensitive"] = True  # type: ignore[index]

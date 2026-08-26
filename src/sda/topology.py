@@ -27,6 +27,14 @@ class _FrozenDict(dict[str, Any]):
     __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable  # type: ignore[assignment]
 
 
+def _freeze(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _FrozenDict({str(key): _freeze(item) for key, item in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class TopologyPlan:
     topology_id: str
@@ -96,8 +104,8 @@ class TopologyResult:
     metrics: dict[str, int | float]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "nodes", tuple(_FrozenDict(node) for node in self.nodes))
-        object.__setattr__(self, "edges", tuple(_FrozenDict(edge) for edge in self.edges))
+        object.__setattr__(self, "nodes", tuple(_freeze(node) for node in self.nodes))
+        object.__setattr__(self, "edges", tuple(_freeze(edge) for edge in self.edges))
         object.__setattr__(self, "metrics", _FrozenDict(self.metrics))
 
     @property
