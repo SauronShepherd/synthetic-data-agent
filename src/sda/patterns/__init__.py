@@ -14,6 +14,7 @@ from sda.patterns.models import (
 )
 from sda.patterns.precedence import RulePrecedencePolicy
 from sda.patterns.scoring import EvidenceQuality, PatternScoringPolicy
+from sda.patterns.spark_metrics import UnsupportedMetricResult, spark_metric
 
 __all__ = [
     "Pattern",
@@ -30,4 +31,6 @@ __all__ = [
     "PatternScoringPolicy",
     "EvidenceQuality",
     "RulePrecedencePolicy",
+    "spark_metric",
+    "UnsupportedMetricResult",
 ]
