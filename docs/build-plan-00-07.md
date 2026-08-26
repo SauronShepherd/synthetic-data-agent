@@ -118,9 +118,9 @@ approved vocabulary is part of the contract.
   duplicate upstream-reference rejection.
 - [ ] Add Spark integration tests for every supported metric on real partitions,
   skewed keys, nulls, unsupported types, and bounded scale.
-- [ ] Add no-raw-value tests for every detector and persistence path.
-- [ ] Add conflict-resolution fixtures for overlapping and contradictory rules.
-- [ ] Add bundle smoke coverage proving all SDA 04–06 artifacts are consumed.
+- [x] Add no-raw-value tests for every detector and persistence path.
+- [x] Add conflict-resolution fixtures for overlapping and contradictory rules.
+- [x] Add bundle smoke coverage proving all SDA 04–06 artifacts are consumed.
 
 ## Cross-article acceptance gates
 
