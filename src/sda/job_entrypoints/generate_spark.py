@@ -94,6 +94,7 @@ def main() -> None:
     rows = generate_rows(plan, row_count=args.row_count)
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     output = QualifiedName.parse(args.output_table)
+    spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{output.catalog}`.`{output.schema}`")
     frame = spark.createDataFrame([{"run_id": args.run_id, **row} for row in rows])
     frame.write.mode("overwrite").option(
         "userMetadata", f"sda-run-id={args.run_id};plan={plan.plan_fingerprint}"
