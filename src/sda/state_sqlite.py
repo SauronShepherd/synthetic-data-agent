@@ -39,6 +39,9 @@ class SQLiteStateRepository:
             self._connection.execute(
                 "ALTER TABLE attempts ADD COLUMN started_at TEXT NOT NULL DEFAULT ''"
             )
+            self._connection.execute(
+                "UPDATE attempts SET started_at = CURRENT_TIMESTAMP WHERE started_at = ''"
+            )
         if "completed_at" not in attempt_columns:
             self._connection.execute("ALTER TABLE attempts ADD COLUMN completed_at TEXT")
         self._connection.execute(
