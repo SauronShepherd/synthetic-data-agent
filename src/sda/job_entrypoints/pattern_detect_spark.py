@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import UTC, datetime
 from dataclasses import replace
+from datetime import UTC, datetime
 
 from sda.patterns.detector import PatternDetector
 from sda.patterns.models import PatternConfig
