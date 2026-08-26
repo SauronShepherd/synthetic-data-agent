@@ -22,6 +22,7 @@ SUPPORTED_DEFECTS = frozenset(
     {
         "null_injection",
         "casing",
+        "misspelling",
         "malformed_value",
         "invalid_category",
         "out_of_range",
@@ -185,6 +186,13 @@ def apply_noise(
             if not isinstance(before, str):
                 raise NoiseError("casing defects require a string column")
             after = before.swapcase()
+        elif plan.defect_type == "misspelling":
+            if not isinstance(before, str):
+                raise NoiseError("misspelling defects require a string column")
+            if not before:
+                raise NoiseError("misspelling defects require non-empty strings")
+            replacement = "x" if before[0].lower() != "x" else "z"
+            after = replacement + before[1:]
         elif plan.defect_type == "malformed_value":
             after = f"{before}__MALFORMED"
         elif plan.defect_type == "invalid_category":
