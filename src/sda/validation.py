@@ -9,6 +9,7 @@ from enum import StrEnum
 from typing import Any, cast
 
 from sda.artifacts.fingerprint import fingerprint
+from sda.patterns.rules import evaluate_rule
 
 
 class _FrozenDict(dict[str, Any]):
@@ -164,6 +165,7 @@ def validate_tables(
     format_patterns: dict[str, dict[str, str]] | None = None,
     time_orderings: tuple[tuple[str, str, str], ...] = (),
     numeric_bounds: dict[str, dict[str, tuple[float, float]]] | None = None,
+    rules: tuple[Any, ...] = (),
     validation_vector: dict[str, CheckStatus] | None = None,
     intended_use: str = "unspecified",
 ) -> ValidationReport:
@@ -180,6 +182,52 @@ def validate_tables(
     validation_vector = validation_vector or {}
     if distribution_tolerance < 0:
         raise ValueError("distribution_tolerance must not be negative")
+    for rule in rules:
+        table = str(getattr(rule, "table", ""))
+        rows = tables.get(table)
+        rule_id = str(getattr(rule, "rule_id", ""))
+        check_id = f"rule:{rule_id or fingerprint(rule)}"
+        if rows is None:
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.FAIL,
+                    "rule table is unavailable; cannot validate rule",
+                    {"supported": False, "reason": "table_missing"},
+                    method="rule_evaluation",
+                )
+            )
+            continue
+        evaluation = evaluate_rule(list(rows), rule)
+        if evaluation.population_rows == 0:
+            checks.append(
+                ValidationCheck(
+                    check_id,
+                    CheckStatus.NOT_APPLICABLE,
+                    "rule has no evaluable population",
+                    {"population_rows": 0},
+                    method="rule_evaluation",
+                    unsupported_reason="no_evaluable_population",
+                    severity="warning",
+                )
+            )
+            continue
+        checks.append(
+            ValidationCheck(
+                check_id,
+                CheckStatus.PASS if evaluation.violation_rows == 0 else CheckStatus.FAIL,
+                "rule satisfied" if evaluation.violation_rows == 0 else "rule violations detected",
+                {
+                    "population_rows": evaluation.population_rows,
+                    "satisfying_rows": evaluation.satisfying_rows,
+                    "violation_rows": evaluation.violation_rows,
+                    "satisfaction_rate": evaluation.satisfaction_rate,
+                    "violation_rate": evaluation.violation_rate,
+                },
+                method=evaluation.validation_mode,
+                population=str(evaluation.population_rows),
+            )
+        )
     for table, columns in required_columns.items():
         if table not in tables:
             checks.append(

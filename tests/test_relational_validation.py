@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from sda.patterns.rules import BusinessRule
 from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus
 from sda.relational import (
     CompositeForeignKeySpec,
@@ -36,6 +37,18 @@ def test_validation_fails_closed_when_no_checks_are_requested() -> None:
     report = validate_tables({"users": (({"id": 1}),)})
     assert report.technical_disposition is CheckStatus.FAIL
     assert report.checks[0].check_id == "validation_scope"
+
+
+def test_validation_evaluates_business_rules_with_metrics() -> None:
+    rule = BusinessRule(
+        "positive_amount",
+        "orders",
+        ({"column": "amount", "operator": "gt", "value": 0, "role": "assertion"},),
+    )
+    report = validate_tables({"orders": (({"amount": 1}), ({"amount": -1}))}, rules=(rule,))
+    check = next(item for item in report.checks if item.check_id == "rule:positive_amount")
+    assert check.status is CheckStatus.FAIL
+    assert check.evidence["violation_rows"] == 1
 
 
 def plan() -> GenerationPlan:
