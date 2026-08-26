@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from enum import StrEnum
+from typing import Any
 
 from sda.privacy import PrivacyDecision, PrivacyReport
 from sda.validation import CheckStatus, ValidationReport
@@ -45,6 +46,11 @@ class Publication:
             )
         ):
             raise ValueError("publication identity and evidence fields must not be empty")
+
+    def to_dict(self) -> dict[str, Any]:
+        value = asdict(self)
+        value["status"] = self.status.value
+        return value
 
 
 class PublicationRegistry:

@@ -124,3 +124,14 @@ def test_approved_publication_binds_privacy_evidence() -> None:
     changed = PrivacyReport(PrivacyDecision.APPROVED, (), "different-policy")
     with pytest.raises(PublicationError, match="privacy evidence fingerprint"):
         registry.publish("dataset", "v1", validation=validation, privacy=changed, actor="reviewer")
+
+
+def test_publication_serializes_lifecycle_and_evidence_bindings() -> None:
+    registry, item = staged()
+    validation, privacy = reports()
+    registry.validate("dataset", "v1", validation=validation)
+    approved = registry.approve("dataset", "v1", privacy=privacy, actor="reviewer")
+    payload = approved.to_dict()
+    assert payload["status"] == "approved"
+    assert payload["validation_fingerprint"] == item.validation_fingerprint
+    assert payload["privacy_fingerprint"] == privacy.fingerprint
