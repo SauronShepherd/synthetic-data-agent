@@ -43,6 +43,7 @@ class RunManifest:
             "tool_version",
             "artifact_schema_version",
             "environment",
+            "configuration_hash",
         ):
             if not getattr(self, field_name).strip():
                 raise ValueError(f"{field_name} must not be empty")
