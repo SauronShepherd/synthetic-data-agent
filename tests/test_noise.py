@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from sda.artifacts.fingerprint import fingerprint
-from sda.noise import NoiseError, NoisePlan, apply_noise, inject_nulls
+from sda.noise import NoiseError, NoisePlan, NoiseProfile, apply_noise, inject_nulls
 
 
 def test_noise_is_deterministic_and_preserves_baseline() -> None:
@@ -122,3 +122,8 @@ def test_noise_truth_ledger_is_raw_value_free() -> None:
     assert ledger[0]["before_fingerprint"] == fingerprint("secret")
     assert ledger[0]["after_fingerprint"] == fingerprint("SECRET")
     assert "secret" not in str(ledger)
+
+
+def test_historical_noise_profile_is_a_supported_plan_contract() -> None:
+    plan = NoisePlan("n", "baseline", profile=NoiseProfile.HISTORICAL)
+    assert plan.profile.value == "historical"

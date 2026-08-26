@@ -11,6 +11,7 @@ from sda.artifacts.fingerprint import fingerprint
 
 
 class NoiseProfile(StrEnum):
+    HISTORICAL = "historical"
     MILD = "mild"
     QA = "qa"
     STRESS = "stress"
