@@ -35,6 +35,13 @@ class SQLiteStateRepository:
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS approvals (run_id TEXT NOT NULL REFERENCES runs(run_id), approval_type TEXT NOT NULL, decision TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY (run_id, approval_type))"
         )
+        approval_columns = {
+            str(row[1]) for row in self._connection.execute("PRAGMA table_info(approvals)")
+        }
+        if "decided_at" not in approval_columns:
+            self._connection.execute(
+                "ALTER TABLE approvals ADD COLUMN decided_at TEXT NOT NULL DEFAULT ''"
+            )
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS feedback (feedback_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), actor TEXT NOT NULL, category TEXT NOT NULL, message TEXT NOT NULL, evidence_ref TEXT, created_at TEXT NOT NULL)"
         )
