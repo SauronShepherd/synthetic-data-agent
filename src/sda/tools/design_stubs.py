@@ -1,8 +1,8 @@
-"""Deterministic design stubs used to exercise the Article 02 workflow.
+"""Legacy deterministic design fixtures used to exercise the Article 02 workflow.
 
-These stubs do not access Databricks and do not generate data. They prove that the
-agent coordinates specialized tools and records their outputs instead of performing
-the calculations itself.
+These fixtures do not access Databricks or perform production generation. They prove
+that the agent coordinates specialized tools and records their outputs instead of
+performing the calculations itself; executable local generation lives in ``sda.pipeline``.
 """
 
 from __future__ import annotations
@@ -64,9 +64,9 @@ class DesignTool:
 
 
 def article_02_toolchain() -> tuple[DesignTool, ...]:
-    """Return the designed end-to-end tool sequence.
+    """Return the legacy Article 02 coordination sequence.
 
-    Generation and publication remain design-only placeholders in this milestone.
+    This fixture is intentionally separate from the executable SDA 07 pipeline.
     """
     return (
         DesignTool(
