@@ -98,6 +98,7 @@ def test_manifest_records_the_declared_event_rate_contract() -> None:
     assert result.seed == 42
     assert result.query_id == "query-1"
     assert result.watermark_delay_seconds == 0.0
+    assert result.to_dict()["seed"] == 42
 
 
 def test_stream_seed_is_part_of_deterministic_event_identity() -> None:

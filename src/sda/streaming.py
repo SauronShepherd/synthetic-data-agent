@@ -78,6 +78,32 @@ class StreamManifest:
     query_id: str | None
     watermark_delay_seconds: float
 
+    def __post_init__(self) -> None:
+        if not self.stream_id.strip() or not self.plan_fingerprint.strip():
+            raise ValueError("stream manifest identity must not be empty")
+        if self.event_count < 0:
+            raise ValueError("stream manifest event_count must not be negative")
+        if (self.event_count == 0) != (self.first_event_id is None and self.last_event_id is None):
+            raise ValueError("empty stream manifests must not contain event IDs")
+        if self.watermark_delay_seconds < 0:
+            raise ValueError("watermark_delay_seconds must not be negative")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stream_id": self.stream_id,
+            "plan_fingerprint": self.plan_fingerprint,
+            "event_count": self.event_count,
+            "first_event_id": self.first_event_id,
+            "last_event_id": self.last_event_id,
+            "checkpoint_id": self.checkpoint_id,
+            "replay_fingerprint": self.replay_fingerprint,
+            "events_per_second": self.events_per_second,
+            "inter_arrival_seconds": self.inter_arrival_seconds,
+            "seed": self.seed,
+            "query_id": self.query_id,
+            "watermark_delay_seconds": self.watermark_delay_seconds,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class StreamCheckpoint:
