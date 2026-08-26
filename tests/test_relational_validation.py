@@ -304,6 +304,18 @@ def test_missing_format_table_returns_structured_failure() -> None:
     assert "unavailable" in report.checks[0].message
 
 
+def test_key_validation_supports_complex_values_without_driver_type_errors() -> None:
+    report = validate_tables(
+        {
+            "parents": (({"key": [1, 2]}),),
+            "children": (({"parent_key": [1, 2]}),),
+        },
+        unique_keys={"parents": "key"},
+        foreign_keys=(("children", "parent_key", "parents", "key"),),
+    )
+    assert report.technical_disposition is CheckStatus.PASS
+
+
 def test_validation_checks_parent_fanout_including_zero_child_parents() -> None:
     tables = {
         "parents": (({"id": 1}), ({"id": 2})),

@@ -289,13 +289,14 @@ def validate_tables(
             )
             continue
         values = [row.get(column) for row in tables.get(table, ())]
-        unique = len(values) == len(set(values)) and None not in values
+        keys = [fingerprint(value) for value in values]
+        unique = len(values) == len(set(keys)) and None not in values
         checks.append(
             ValidationCheck(
                 f"unique:{table}.{column}",
                 CheckStatus.PASS if unique else CheckStatus.FAIL,
                 f"{table}.{column} is {'unique and non-null' if unique else 'not unique or contains nulls'}",
-                {"rows": len(values), "distinct": len(set(values))},
+                {"rows": len(values), "distinct": len(set(keys))},
             )
         )
     for table, columns in unique_key_sets.items():
@@ -326,13 +327,14 @@ def validate_tables(
             )
             continue
         keys = [tuple(row[column] for column in columns) for row in rows]
-        unique = None not in keys and len(keys) == len(set(keys))
+        key_fingerprints = [fingerprint(key) for key in keys]
+        unique = None not in keys and len(keys) == len(set(key_fingerprints))
         checks.append(
             ValidationCheck(
                 check_id,
                 CheckStatus.PASS if unique else CheckStatus.FAIL,
                 f"{check_id} is {'unique and non-null' if unique else 'not unique or contains nulls'}",
-                {"rows": len(keys), "distinct": len(set(keys))},
+                {"rows": len(keys), "distinct": len(set(key_fingerprints))},
                 method="composite_key_uniqueness",
             )
         )
@@ -349,9 +351,11 @@ def validate_tables(
                 )
             )
             continue
-        parent_values = {row.get(parent_column) for row in tables.get(parent, ())}
+        parent_values = {fingerprint(row.get(parent_column)) for row in tables.get(parent, ())}
         child_values = [row.get(child_column) for row in tables.get(child, ())]
-        orphans = sum(value is not None and value not in parent_values for value in child_values)
+        orphans = sum(
+            value is not None and fingerprint(value) not in parent_values for value in child_values
+        )
         checks.append(
             ValidationCheck(
                 f"foreign_key:{child}.{child_column}",
