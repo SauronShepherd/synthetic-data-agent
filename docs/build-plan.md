@@ -106,37 +106,37 @@ design evidence; the repository is the source of truth for what is currently pre
   real stage contracts or clearly isolate them as documentation fixtures. The module
   is explicitly documented as a legacy Article 02 fixture and is separate from the
   executable SDA 07 pipeline.
-- [ ] Define request, scope, evidence snapshot, generation plan, approval, execution
+- [x] Define request, scope, evidence snapshot, generation plan, approval, execution
   attempt, artifact, validation report, publication, and feedback models.
-- [ ] Define the state machine: `REQUESTED -> PLANNED -> AWAITING_APPROVAL ->
+- [x] Define the state machine: `REQUESTED -> PLANNED -> AWAITING_APPROVAL ->
   APPROVED -> EXECUTING -> GENERATED_AWAITING_VALIDATION -> VALIDATED ->
   PRIVACY_APPROVED -> PUBLISHED`, with explicit rejection, cancellation, retry, and
   expiry transitions.
-- [ ] Enforce legal transitions, actor identity, timestamps, reason codes, optimistic
+- [x] Enforce legal transitions, actor identity, timestamps, reason codes, optimistic
   concurrency, and immutable plan versions.
-- [ ] Add idempotency keys at request, plan, stage, artifact, and publication level.
+- [x] Add idempotency keys at request, plan, stage, artifact, and publication level.
 
 ### 3.2 Durable operational state (SDA 08–09)
 
-- [ ] Implement a Lakebase/PostgreSQL persistence adapter for active workflow state,
+- [x] Implement a Lakebase/PostgreSQL persistence adapter for active workflow state,
   execution attempts, leases, heartbeats, approvals, retries, and compact summaries.
-- [ ] Add migrations, constraints, indexes, retention, backup/restore, and environment
+- [x] Add migrations, constraints, indexes, retention, backup/restore, and environment
   configuration; keep analytical evidence and generated rows in Delta.
-- [ ] Implement lease acquisition, heartbeat renewal, stale-worker recovery, bounded
+- [x] Implement lease acquisition, heartbeat renewal, stale-worker recovery, bounded
   retries, and exactly-once logical completion for stage attempts.
-- [ ] Add repository interfaces with an in-memory test adapter and integration tests
+- [x] Add repository interfaces with an in-memory test adapter and integration tests
   against a disposable/controlled database.
-- [ ] Record user corrections and feedback without mutating historical evidence.
+- [x] Record user corrections and feedback without mutating historical evidence.
 
 ### 3.3 Release foundation
 
-- [ ] Add CI jobs for lint, mypy, unit tests, Spark tests, package build, bundle
+- [x] Add CI jobs for lint, mypy, unit tests, Spark tests, package build, bundle
   validation, schema migration checks, and security/hygiene scans.
-- [ ] Pin or constrain compatible Databricks Runtime, Spark, GraphFrames, connector,
+- [x] Pin or constrain compatible Databricks Runtime, Spark, GraphFrames, connector,
   and Python versions; document optional dependency behavior.
 - [ ] Add environment promotion rules, service-principal permissions, UC grants,
   secret references, and rollback instructions to the bundle.
-- [ ] Remove or complete the `pass` branches in Spark entrypoints, especially
+- [x] Remove or complete the `pass` branches in Spark entrypoints, especially
   `src/sda/job_entrypoints/table_profile_spark.py:238`; every branch must have an
   explicit supported behavior or a fail-closed error.
 
