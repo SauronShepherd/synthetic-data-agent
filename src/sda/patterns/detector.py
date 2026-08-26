@@ -367,7 +367,7 @@ class PatternDetector:
             candidate_count_total=len(candidates),
             patterns_emitted=len(patterns),
             patterns_accepted_for_planning=accepted,
-            patterns_review_required=len(patterns) - accepted,
+            patterns_review_required=len(patterns) - accepted - rejected - insufficient,
             patterns_rejected=rejected,
             patterns_insufficient=insufficient,
             conflicts_found=len(rule_conflicts),
