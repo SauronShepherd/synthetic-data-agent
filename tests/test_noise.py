@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from sda.artifacts.fingerprint import fingerprint
@@ -57,6 +59,16 @@ def test_noise_rejects_unsupported_defect_and_wrong_type() -> None:
             NoisePlan("n", fingerprint(baseline), defect_type="casing", budget=1),
             column="value",
         )
+
+
+def test_future_timestamp_noise_preserves_datetime_type() -> None:
+    baseline = (({"created_at": datetime(2020, 1, 1, tzinfo=UTC)}),)
+    result = apply_noise(
+        baseline,
+        NoisePlan("n", fingerprint(baseline), defect_type="future_timestamp", budget=1),
+        column="created_at",
+    )
+    assert result.rows[0]["created_at"] == datetime(2020, 12, 31, tzinfo=UTC)
 
 
 def test_omission_removes_only_deterministically_selected_columns() -> None:

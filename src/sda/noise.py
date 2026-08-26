@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -27,6 +28,7 @@ SUPPORTED_DEFECTS = frozenset(
         "omission",
         "duplicate",
         "near_duplicate",
+        "future_timestamp",
     }
 )
 
@@ -184,6 +186,10 @@ def apply_noise(
             if not before:
                 raise NoiseError("near_duplicate defects require non-empty strings")
             after = before[:-1] + ("_" if before[-1:] != "_" else "-")
+        elif plan.defect_type == "future_timestamp":
+            if not isinstance(before, date | datetime):
+                raise NoiseError("future_timestamp defects require a date or datetime column")
+            after = before + timedelta(days=365)
         else:
             if not isinstance(before, int | float) or isinstance(before, bool):
                 raise NoiseError("out_of_range defects require a numeric column")
