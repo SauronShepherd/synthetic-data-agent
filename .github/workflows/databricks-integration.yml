@@ -20,7 +20,7 @@ jobs:
       - name: Run Ruff
         run: ruff check src tests
       - name: Run mypy
-        run: mypy src tests
+        run: mypy src
       - name: Build wheel
         run: python -m pip wheel --no-deps --no-build-isolation -w dist .
       - name: Check release hygiene

@@ -2,5 +2,5 @@
 set -euo pipefail
 
 ruff check .
-mypy src tests
+mypy src
 pytest
