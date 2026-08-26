@@ -57,6 +57,21 @@ class ValidationCheck:
             raise ValueError("NOT_APPLICABLE checks require unsupported_reason")
         object.__setattr__(self, "evidence", _freeze(self.evidence))
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the check contract with immutable evidence preserved."""
+        return {
+            "check_id": self.check_id,
+            "status": self.status.value,
+            "message": self.message,
+            "evidence": self.evidence,
+            "threshold": self.threshold,
+            "method": self.method,
+            "freshness": self.freshness,
+            "population": self.population,
+            "severity": self.severity,
+            "unsupported_reason": self.unsupported_reason,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationReport:
@@ -89,6 +104,18 @@ class ValidationReport:
     @property
     def fingerprint(self) -> str:
         return fingerprint(self)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the complete validation disposition for artifact storage."""
+        return {
+            "checks": tuple(check.to_dict() for check in self.checks),
+            "intended_use": self.intended_use,
+            "technical_disposition": self.technical_disposition.value,
+            "validation_vector": {
+                dimension: status.value for dimension, status in self.validation_vector.items()
+            },
+            "fingerprint": self.fingerprint,
+        }
 
 
 def not_applicable_check(check_id: str, reason: str) -> ValidationCheck:

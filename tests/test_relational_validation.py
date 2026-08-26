@@ -250,6 +250,20 @@ def test_validate_tables_preserves_intended_use_validation_vector() -> None:
         report.validation_vector["schema"] = CheckStatus.FAIL  # type: ignore[index]
 
 
+def test_validation_report_serializes_check_contract_and_disposition() -> None:
+    report = validate_tables(
+        {"customers": (({"id": 1}),)},
+        expected_counts={"customers": 1},
+        intended_use="qa",
+        validation_vector={"schema": CheckStatus.PASS},
+    )
+    payload = report.to_dict()
+    assert payload["technical_disposition"] == "PASS"
+    assert payload["validation_vector"] == {"schema": "PASS"}
+    assert payload["checks"][0]["check_id"] == "row_count:customers"
+    assert payload["fingerprint"] == report.fingerprint
+
+
 def test_validation_checks_time_ordering() -> None:
     report = validate_tables(
         {"events": (({"started": 1, "ended": 2}), ({"started": 4, "ended": 3}))},
