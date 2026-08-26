@@ -65,7 +65,10 @@ class SQLiteStateRepository(StateRepository):
             "SELECT run_id FROM runs WHERE idempotency_key = ?", (run.idempotency_key,)
         ).fetchone()
         if existing:
-            return self.get_run(existing[0])
+            current = self.get_run(existing[0])
+            if current.run_id != run.run_id or current.request_id != run.request_id:
+                raise StateError("idempotency key already exists with different content")
+            return current
         try:
             self._connection.execute(
                 "INSERT INTO runs (run_id, request_id, idempotency_key, status, plan_id, plan_fingerprint, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

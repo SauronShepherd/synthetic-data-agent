@@ -38,6 +38,14 @@ def test_sqlite_state_enforces_idempotency_and_version() -> None:
     repo.close()
 
 
+def test_sqlite_state_rejects_conflicting_idempotency_content() -> None:
+    repo = SQLiteStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    with pytest.raises(StateError, match="different content"):
+        repo.create_run(RunRecord("run-2", "req-2", "idem-1"))
+    repo.close()
+
+
 def test_sqlite_state_persists_approvals_and_attempts() -> None:
     repo = SQLiteStateRepository()
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
