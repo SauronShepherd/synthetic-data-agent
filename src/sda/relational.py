@@ -83,6 +83,10 @@ class RelationalGenerationReceipt:
     schema_version: str = "relational-generation-receipt-v1"
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "table_counts", tuple(tuple(item) for item in self.table_counts))
+        object.__setattr__(
+            self, "table_fingerprints", tuple(tuple(item) for item in self.table_fingerprints)
+        )
         if not self.plan_id.strip() or not self.plan_fingerprint.strip():
             raise ValueError("receipt plan identity must not be empty")
         if any(count < 0 for _, count in self.table_counts):
@@ -108,6 +112,8 @@ class RelationalGenerationManifest:
     schema_version: str = "relational-generation-manifest-v1"
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "source_snapshot_ids", tuple(self.source_snapshot_ids))
+        object.__setattr__(self, "input_artifact_ids", tuple(self.input_artifact_ids))
         if not all(
             value.strip()
             for value in (self.run_id, self.output_namespace, self.plan_id, self.plan_fingerprint)
