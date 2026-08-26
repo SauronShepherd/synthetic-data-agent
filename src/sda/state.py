@@ -91,6 +91,28 @@ class Approval:
             raise ValueError("decision must be approved or rejected")
 
 
+@dataclass(frozen=True, slots=True)
+class Feedback:
+    """Immutable correction or review note attached to a run/evidence snapshot."""
+
+    feedback_id: str
+    run_id: str
+    actor: str
+    category: str
+    message: str
+    evidence_ref: str | None = None
+    created_at: str = ""
+
+    def __post_init__(self) -> None:
+        if any(
+            not value.strip()
+            for value in (self.feedback_id, self.run_id, self.actor, self.category, self.message)
+        ):
+            raise ValueError("feedback identity and message fields must not be empty")
+        if not self.created_at:
+            object.__setattr__(self, "created_at", datetime.now(UTC).isoformat())
+
+
 _ALLOWED: dict[WorkflowStatus, frozenset[WorkflowStatus]] = {
     WorkflowStatus.REQUESTED: frozenset({WorkflowStatus.PLANNED, WorkflowStatus.CANCELLED}),
     WorkflowStatus.PLANNED: frozenset(
@@ -127,6 +149,7 @@ class InMemoryStateRepository:
         self._by_idempotency: dict[str, str] = {}
         self._attempts: dict[str, ExecutionAttempt] = {}
         self._approvals: list[Approval] = []
+        self._feedback: dict[str, Feedback] = {}
         self._lock = RLock()
 
     def create_run(self, run: RunRecord) -> RunRecord:
@@ -176,6 +199,22 @@ class InMemoryStateRepository:
             self.get_run(approval.run_id)
             self._approvals.append(approval)
             return approval
+
+    def record_feedback(self, feedback: Feedback) -> Feedback:
+        with self._lock:
+            self.get_run(feedback.run_id)
+            existing = self._feedback.get(feedback.feedback_id)
+            if existing is not None:
+                if existing != feedback:
+                    raise StateError("feedback id already exists with different content")
+                return existing
+            self._feedback[feedback.feedback_id] = feedback
+            return feedback
+
+    def list_feedback(self, run_id: str) -> tuple[Feedback, ...]:
+        with self._lock:
+            self.get_run(run_id)
+            return tuple(item for item in self._feedback.values() if item.run_id == run_id)
 
     def acquire_attempt(
         self, attempt: ExecutionAttempt, *, lease_seconds: int = 300

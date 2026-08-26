@@ -15,6 +15,7 @@ from sda.state import (
     Approval,
     AttemptStatus,
     ExecutionAttempt,
+    Feedback,
     RunRecord,
     StateError,
     WorkflowStatus,
@@ -33,6 +34,9 @@ class SQLiteStateRepository:
         )
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS approvals (run_id TEXT NOT NULL REFERENCES runs(run_id), approval_type TEXT NOT NULL, decision TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY (run_id, approval_type))"
+        )
+        self._connection.execute(
+            "CREATE TABLE IF NOT EXISTS feedback (feedback_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), actor TEXT NOT NULL, category TEXT NOT NULL, message TEXT NOT NULL, evidence_ref TEXT, created_at TEXT NOT NULL)"
         )
         self._connection.commit()
 
@@ -126,6 +130,44 @@ class SQLiteStateRepository:
             self._connection.rollback()
             raise StateError("approval already recorded") from exc
         return approval
+
+    def record_feedback(self, feedback: Feedback) -> Feedback:
+        self.get_run(feedback.run_id)
+        existing = self._connection.execute(
+            "SELECT feedback_id, run_id, actor, category, message, evidence_ref, created_at FROM feedback WHERE feedback_id = ?",
+            (feedback.feedback_id,),
+        ).fetchone()
+        if existing is not None:
+            current = Feedback(*existing)
+            if current != feedback:
+                raise StateError("feedback id already exists with different content")
+            return current
+        try:
+            self._connection.execute(
+                "INSERT INTO feedback VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    feedback.feedback_id,
+                    feedback.run_id,
+                    feedback.actor,
+                    feedback.category,
+                    feedback.message,
+                    feedback.evidence_ref,
+                    feedback.created_at,
+                ),
+            )
+            self._connection.commit()
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise StateError("feedback cannot be recorded") from exc
+        return feedback
+
+    def list_feedback(self, run_id: str) -> tuple[Feedback, ...]:
+        self.get_run(run_id)
+        rows = self._connection.execute(
+            "SELECT feedback_id, run_id, actor, category, message, evidence_ref, created_at FROM feedback WHERE run_id = ? ORDER BY created_at, feedback_id",
+            (run_id,),
+        ).fetchall()
+        return tuple(Feedback(*row) for row in rows)
 
     def acquire_attempt(
         self, attempt: ExecutionAttempt, *, lease_seconds: int = 300

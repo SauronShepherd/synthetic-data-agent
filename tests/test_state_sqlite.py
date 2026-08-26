@@ -8,6 +8,7 @@ from sda.state import (
     Approval,
     AttemptStatus,
     ExecutionAttempt,
+    Feedback,
     RunRecord,
     StateError,
     WorkflowStatus,
@@ -69,3 +70,20 @@ def test_sqlite_state_renews_and_recovers_stale_leases() -> None:
     with pytest.raises(StateError, match="owned"):
         repo.renew_attempt_lease("attempt-1", worker_id="worker-1")
     repo.close()
+
+
+def test_sqlite_feedback_is_idempotent_and_survives_reopen(tmp_path: object) -> None:
+    path = str(tmp_path / "state.db")
+    repo = SQLiteStateRepository(path)
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    feedback = Feedback("feedback-1", "run-1", "reviewer", "correction", "Use profile v2")
+    assert repo.record_feedback(feedback) == feedback
+    assert repo.record_feedback(feedback) == feedback
+    repo.close()
+    reopened = SQLiteStateRepository(path)
+    assert reopened.list_feedback("run-1") == (feedback,)
+    with pytest.raises(StateError, match="different content"):
+        reopened.record_feedback(
+            Feedback("feedback-1", "run-1", "reviewer", "correction", "changed")
+        )
+    reopened.close()

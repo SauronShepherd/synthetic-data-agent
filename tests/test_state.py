@@ -8,6 +8,7 @@ from sda.state import (
     Approval,
     AttemptStatus,
     ExecutionAttempt,
+    Feedback,
     InMemoryStateRepository,
     RunRecord,
     StateError,
@@ -68,3 +69,15 @@ def test_in_memory_lease_renewal_and_stale_recovery_match_durable_contract() -> 
         repo.renew_attempt_lease("attempt-1", worker_id="other")
     recovered = repo.recover_stale_attempts(now=datetime.now(UTC) + timedelta(seconds=120))
     assert recovered[0].status is AttemptStatus.ABANDONED
+
+
+def test_feedback_is_idempotent_and_does_not_mutate_the_run() -> None:
+    repo = InMemoryStateRepository()
+    original = repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    feedback = Feedback("feedback-1", "run-1", "reviewer", "correction", "Use profile v2")
+    assert repo.record_feedback(feedback) == feedback
+    assert repo.record_feedback(feedback) == feedback
+    assert repo.list_feedback("run-1") == (feedback,)
+    assert repo.get_run("run-1") == original
+    with pytest.raises(StateError, match="different content"):
+        repo.record_feedback(Feedback("feedback-1", "run-1", "reviewer", "correction", "changed"))
