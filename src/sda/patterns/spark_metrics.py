@@ -6,8 +6,8 @@ they never collect source rows to the driver.
 
 from __future__ import annotations
 
-from functools import reduce
 from dataclasses import dataclass
+from functools import reduce
 from operator import and_
 from typing import Any
 
