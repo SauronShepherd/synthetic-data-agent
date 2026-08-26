@@ -127,3 +127,24 @@ def test_noise_truth_ledger_is_raw_value_free() -> None:
 def test_historical_noise_profile_is_a_supported_plan_contract() -> None:
     plan = NoisePlan("n", "baseline", profile=NoiseProfile.HISTORICAL)
     assert plan.profile.value == "historical"
+
+
+def test_noise_scenarios_are_deterministic_but_independently_selected() -> None:
+    baseline = tuple({"value": str(index)} for index in range(4))
+    first = apply_noise(
+        baseline,
+        NoisePlan("n", fingerprint(baseline), defect_type="casing", budget=1, scenario="holiday"),
+        column="value",
+    )
+    second = apply_noise(
+        baseline,
+        NoisePlan("n", fingerprint(baseline), defect_type="casing", budget=1, scenario="holiday"),
+        column="value",
+    )
+    other = apply_noise(
+        baseline,
+        NoisePlan("n", fingerprint(baseline), defect_type="casing", budget=1, scenario="peak"),
+        column="value",
+    )
+    assert first == second
+    assert first.mutations[0].row_index != other.mutations[0].row_index

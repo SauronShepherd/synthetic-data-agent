@@ -53,6 +53,7 @@ class NoisePlan:
     defect_type: str = "null_injection"
     budget: int = 0
     seed: int = 1729
+    scenario: str = ""
 
     def __post_init__(self) -> None:
         if not self.noise_id.strip() or not self.baseline_fingerprint.strip():
@@ -61,6 +62,8 @@ class NoisePlan:
             raise ValueError("noise budget and seed must not be negative")
         if not self.defect_type.strip():
             raise ValueError("defect_type must not be empty")
+        if self.scenario and not self.scenario.strip():
+            raise ValueError("scenario must not be whitespace")
         if self.defect_type not in SUPPORTED_DEFECTS:
             raise ValueError(f"unsupported defect_type: {self.defect_type}")
 
@@ -98,6 +101,10 @@ class NoiseResult:
         return tuple(mutation.to_dict() for mutation in self.mutations)
 
 
+def _selection_key(plan: NoisePlan, index: int) -> bytes:
+    return hashlib.sha256(f"{plan.noise_id}|{plan.seed}|{plan.scenario}|{index}".encode()).digest()
+
+
 def inject_nulls(
     baseline: tuple[dict[str, Any], ...],
     plan: NoisePlan,
@@ -115,7 +122,7 @@ def inject_nulls(
         raise NoiseError(f"column not present in baseline: {column}")
     candidates = sorted(
         range(len(baseline)),
-        key=lambda index: hashlib.sha256(f"{plan.noise_id}|{plan.seed}|{index}".encode()).digest(),
+        key=lambda index: _selection_key(plan, index),
     )
     selected = set(candidates[: min(plan.budget, len(candidates))])
     rows = [dict(row) for row in baseline]
@@ -141,7 +148,7 @@ def apply_noise(
         raise NoiseError(f"column not present in baseline: {column}")
     candidates = sorted(
         range(len(baseline)),
-        key=lambda index: hashlib.sha256(f"{plan.noise_id}|{plan.seed}|{index}".encode()).digest(),
+        key=lambda index: _selection_key(plan, index),
     )[: min(plan.budget, len(baseline))]
     rows = [dict(row) for row in baseline]
     mutations: list[Mutation] = []
