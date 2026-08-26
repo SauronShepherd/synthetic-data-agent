@@ -104,6 +104,18 @@ def test_pattern_receipt_counts_are_immutable() -> None:
         receipt.candidate_count_by_family["correlation"] = 2
 
 
+def test_pattern_rejects_invalid_support_metrics() -> None:
+    pattern = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [{"x": 1, "y": 2}, {"x": 2, "y": 4}],
+        table="main.s.t",
+        columns={"x": "int", "y": "int"},
+    )[0]
+    from dataclasses import replace
+
+    with pytest.raises(ValueError, match="support_rate"):
+        replace(pattern, support_rate=1.1, pattern_id="")
+
+
 def test_fanout_includes_zero_child_parents() -> None:
     parents = [{"id": 1, "segment": "A"}, {"id": 2, "segment": "A"}]
     children = [{"parent_id": 1}]

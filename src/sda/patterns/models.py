@@ -169,6 +169,16 @@ class Pattern:
     review_status: str = "not_required"
 
     def __post_init__(self) -> None:
+        if self.support_rows < 0:
+            raise ValueError("support_rows must not be negative")
+        if self.support_rate is not None and not 0 <= self.support_rate <= 1:
+            raise ValueError("support_rate must be between 0 and 1")
+        if (
+            not self.pattern_id.strip()
+            or not self.analysis_id.strip()
+            or not self.primary_table.strip()
+        ):
+            raise ValueError("pattern identity fields must not be empty")
         for name in (
             "condition",
             "outcome",
