@@ -7,7 +7,6 @@ from typing import Any, cast
 from sda.artifacts.delta import persist_artifact_lifecycle, persist_distributed_evidence
 from sda.patterns.models import Pattern
 
-
 PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v1"
 PATTERN_EVIDENCE_SCHEMA_VERSION = "sda07-pattern-evidence-v1"
 
