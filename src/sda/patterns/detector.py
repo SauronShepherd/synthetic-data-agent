@@ -173,7 +173,8 @@ class PatternDetector:
             name
             for name in names
             if name not in numeric
-            and len({row.get(name) for row in rows}) <= self.config.max_segment_cardinality
+            and len({fingerprint(row.get(name)) for row in rows})
+            <= self.config.max_segment_cardinality
         ]
         for driver in categorical:
             for outcome in names:
@@ -205,7 +206,8 @@ class PatternDetector:
         # Evaluate conditional null rates in the standalone path as well as the
         # coordinated path, using stable segment ordering and the same support gate.
         for driver in categorical:
-            values = sorted({row.get(driver) for row in rows}, key=lambda value: str(value))[
+            values_by_fingerprint = {fingerprint(row.get(driver)): row.get(driver) for row in rows}
+            values = [values_by_fingerprint[key] for key in sorted(values_by_fingerprint)][
                 : self.config.max_segment_cardinality
             ]
             for value in values:

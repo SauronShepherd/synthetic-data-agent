@@ -95,6 +95,17 @@ def test_standalone_detection_emits_conditional_missingness_patterns() -> None:
     assert missing[0].metric["missing_rate"] == 1.0
 
 
+def test_standalone_missingness_handles_nested_segment_values() -> None:
+    patterns = PatternDetector(PatternConfig(min_support_rows=1)).detect(
+        [
+            {"segment": {"tier": "a"}, "value": None},
+            {"segment": {"tier": "b"}, "value": 1},
+        ],
+        table="main.s.t",
+    )
+    assert any(p.family is PatternFamily.CONDITIONAL_MISSINGNESS for p in patterns)
+
+
 def test_standalone_detection_emits_state_transition_patterns() -> None:
     patterns = PatternDetector(PatternConfig(min_support_rows=1)).detect(
         [
