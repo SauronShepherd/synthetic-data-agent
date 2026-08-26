@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from sda.artifacts.fingerprint import fingerprint
+
 
 class NoiseProfile(StrEnum):
     MILD = "mild"
@@ -72,6 +74,8 @@ def inject_nulls(
     column: str,
 ) -> NoiseResult:
     """Inject up to ``budget`` nulls without mutating the clean baseline."""
+    if fingerprint(baseline) != plan.baseline_fingerprint:
+        raise NoiseError("baseline fingerprint does not match the noise plan")
     if not baseline or plan.budget == 0:
         return NoiseResult(tuple(dict(row) for row in baseline), (), plan.baseline_fingerprint)
     if any(column not in row for row in baseline):
@@ -94,6 +98,8 @@ def apply_noise(
     baseline: tuple[dict[str, Any], ...], plan: NoisePlan, *, column: str
 ) -> NoiseResult:
     """Apply one deterministic, bounded defect class to an immutable baseline."""
+    if fingerprint(baseline) != plan.baseline_fingerprint:
+        raise NoiseError("baseline fingerprint does not match the noise plan")
     if plan.defect_type == "null_injection":
         return inject_nulls(baseline, plan, column=column)
     if any(column not in row for row in baseline):
