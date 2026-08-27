@@ -62,7 +62,7 @@ jobs:
           test -n "$DATABRICKS_HOST"
           test -n "$DATABRICKS_TOKEN"
           cat > "$HOME/.databrickscfg" <<EOF
-          [sda]
+          [sda-sdg]
           host = $DATABRICKS_HOST
           token = $DATABRICKS_TOKEN
           EOF
