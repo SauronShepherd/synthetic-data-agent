@@ -492,9 +492,19 @@ class PatternDetector:
         for candidate in candidates:
             family = candidate.family.value
             candidate_count_by_family[family] = candidate_count_by_family.get(family, 0) + 1
+        # Entity identifiers are grouping keys, not analytical variables.  In
+        # particular, numeric identifiers must not leak into correlation
+        # evidence merely because their physical type is numeric.  Keep the
+        # original names for the dedicated state-transition family below, but
+        # restrict the general detector to approved analytical columns.
+        analytical_types = {
+            name: column_type for name, column_type in types.items() if name not in excluded
+        }
         patterns = tuple(
             pattern
-            for pattern in self.detect(rows, table=table, columns=types, analysis_id=run_id)
+            for pattern in self.detect(
+                rows, table=table, columns=analytical_types, analysis_id=run_id
+            )
             if pattern.family in {PatternFamily.CORRELATION, PatternFamily.TEMPORAL_ORDER}
         )
         # Add bounded conditional and lifecycle evidence to the same aggregate result.
@@ -551,7 +561,7 @@ class PatternDetector:
                 : self.config.max_segment_cardinality
             ]
             for driver_value in driver_values:
-                for outcome in names:
+                for outcome in roles.get("outcome", ()):
                     if outcome in excluded:
                         continue
                     metric = conditional_missingness(rows, {driver: driver_value}, outcome)
