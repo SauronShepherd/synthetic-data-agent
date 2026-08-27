@@ -475,9 +475,13 @@ class PatternDetector:
         # never enter either role.
         excluded = set(roles.get("excluded", ()))
         roles["outcome"] = tuple(
-            name for name in names if types.get(name) == "double" and name not in excluded
+            name
+            for name in roles.get("outcome", ())
+            if types.get(name) == "double" and name not in excluded
         )
-        roles["driver"] = tuple(name for name in names if name not in excluded)
+        roles["driver"] = tuple(
+            name for name in roles.get("driver", ()) if name in names and name not in excluded
+        )
         for override in role_overrides:
             if override.table == table:
                 roles[override.role] = tuple(
