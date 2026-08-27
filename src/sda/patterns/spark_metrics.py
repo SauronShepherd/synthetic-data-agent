@@ -141,6 +141,35 @@ def spark_spearman(frame: Any, left: str, right: str) -> Any:
     )
 
 
+def spark_correlation_outlier_diagnostic(frame: Any, left: str, right: str) -> Any:
+    """Compare correlation on the full population with a bounded central slice."""
+    _require_columns(frame, (left, right), metric="spark_correlation_outlier_diagnostic")
+    from pyspark.sql import functions as F
+
+    valid = frame.where(F.col(left).isNotNull() & F.col(right).isNotNull())
+    quantiles = valid.approxQuantile([left, right], [0.01, 0.99], 0.01)
+    if len(quantiles) != 2 or any(len(values) != 2 for values in quantiles):
+        return valid.limit(1).select(
+            F.lit(None).cast("double").alias("full_value"),
+            F.lit(None).cast("double").alias("trimmed_value"),
+            F.lit(False).alias("sign_changed"),
+        )
+    (left_low, left_high), (right_low, right_high) = quantiles
+    full = valid.agg(F.corr(left, right).alias("full_value"))
+    central = valid.where(
+        (F.col(left) >= F.lit(left_low))
+        & (F.col(left) <= F.lit(left_high))
+        & (F.col(right) >= F.lit(right_low))
+        & (F.col(right) <= F.lit(right_high))
+    ).agg(F.corr(left, right).alias("trimmed_value"))
+    return full.crossJoin(central).withColumn(
+        "sign_changed",
+        F.col("full_value").isNotNull()
+        & F.col("trimmed_value").isNotNull()
+        & (F.col("full_value") * F.col("trimmed_value") < 0),
+    )
+
+
 def spark_conditional_distribution(frame: Any, drivers: tuple[str, ...], outcome: str) -> Any:
     if not drivers:
         raise ValueError("at least one driver column is required")

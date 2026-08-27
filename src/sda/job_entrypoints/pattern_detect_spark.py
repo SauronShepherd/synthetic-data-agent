@@ -295,6 +295,7 @@ def main() -> None:
     from sda.patterns.spark_metrics import (
         spark_conditional_distribution,
         spark_conditional_missingness,
+        spark_correlation_outlier_diagnostic,
         spark_fanout_by_segment,
         spark_pearson,
         spark_spearman,
@@ -320,6 +321,11 @@ def main() -> None:
                 >= args.min_support_rate
             ):
                 row = summary[0].asDict()
+                diagnostic = (
+                    spark_correlation_outlier_diagnostic(source, left, right).limit(1).collect()
+                )
+                if diagnostic:
+                    row["correlation_outlier_diagnostic"] = diagnostic[0].asDict()
                 patterns.append(
                     detector._pattern(
                         analysis_id or "pattern-run",
