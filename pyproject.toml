@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synthetic-data-agent"
-version = "0.7.0.dev0"
-description = "SDA 07 governed metadata, profiling, relationship, and pattern evidence for Databricks."
+version = "0.8.0.dev0"
+description = "SDA 00-08 governed synthetic-data workflow contracts for Databricks."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

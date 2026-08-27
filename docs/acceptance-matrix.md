@@ -1,6 +1,6 @@
 # SDA 00–08 acceptance matrix
 
-This matrix is the release boundary for the current `0.7.0.dev0` milestone.
+This matrix is the release boundary for the current `0.8.0.dev0` milestone.
 “Verified” means covered by local contracts/tests; it does not imply governed
 Databricks production readiness.
 

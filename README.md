@@ -1,4 +1,4 @@
-# Synthetic Data Agent — SDA 07 (`0.7.0.dev0`)
+# Synthetic Data Agent — SDA 00–08 (`0.8.0.dev0`)
 
 The implemented deterministic pipeline is metadata -> profiles -> relationships -> patterns ->
 approved-plan generation -> validation/privacy gates -> publication contracts. SDA 07 emits
