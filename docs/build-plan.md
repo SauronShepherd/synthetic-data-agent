@@ -1,6 +1,6 @@
 # Synthetic Data Agent: Complete Build Plan
 
-Status: analysis baseline for SDA 07 (`0.7.0.dev0`)
+Status: historical implementation backlog; current release baseline is SDA 00–08 (`0.8.0.dev0`)
 
 This document is the implementation backlog derived from the SDA 01–07 article
 documents and the current repository. The articles are treated as requirements and
