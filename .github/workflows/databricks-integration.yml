@@ -70,7 +70,7 @@ jobs:
           databricks bundle run uc_metadata_reader -t dev --profile sda-sdg --params="catalog_allowlist=workspace,schema_allowlist=${fixture_schema},table_patterns=sda07_${fixture_suffix}_*" 2>&1 | tee /tmp/sda-metadata.log
           databricks bundle run table_profiler -t dev --profile sda-sdg --params="source_table=${fixture_orders}" 2>&1 | tee /tmp/sda-profile.log
           databricks bundle run relationship_detector -t dev --profile sda-sdg --params="parent_table=${fixture_customers},child_table=${fixture_orders},parent_columns=customer_id,child_columns=customer_id,dry_run=false" 2>&1 | tee /tmp/sda-relationship.log
-          databricks bundle run analyze_scope -t dev --profile sda-sdg --params="catalog=workspace,schema=${fixture_schema},tables=sda07_${fixture_suffix}_customers,sda07_${fixture_suffix}_orders,parent_table=${fixture_customers},child_table=${fixture_orders},parent_columns=customer_id,child_columns=customer_id,dry_run=false" 2>&1 | tee /tmp/sda-scope.log
+          databricks bundle run analyze_scope -t dev --profile sda-sdg --params="catalog=workspace,schema=${fixture_schema},tables=sda07_${fixture_suffix}_customers|sda07_${fixture_suffix}_orders,parent_table=${fixture_customers},child_table=${fixture_orders},parent_columns=customer_id,child_columns=customer_id,dry_run=false" 2>&1 | tee /tmp/sda-scope.log
 
           metadata_id="$(grep -oE 'metadata_inventory_[a-f0-9]{64}' /tmp/sda-metadata.log | tail -1)"
           profile_id="$(grep -oE 'profile_id[^a-f0-9]*[a-f0-9]{64}' /tmp/sda-profile.log | grep -oE '[a-f0-9]{64}' | tail -1)"

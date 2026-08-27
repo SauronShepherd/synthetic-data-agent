@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
@@ -38,7 +39,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
-    tables = tuple(item.strip() for item in args.tables.split(",") if item.strip())
+    tables = tuple(item.strip() for item in re.split(r"[,;|]", args.tables) if item.strip())
     if not tables:
         raise ValueError("--tables must contain at least one table")
     names = tuple(QualifiedName.parse(f"{args.catalog}.{args.schema}.{table}") for table in tables)
