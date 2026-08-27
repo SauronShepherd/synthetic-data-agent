@@ -20,6 +20,7 @@ from sda.patterns.persistence import (
 )
 from sda.patterns.precedence import RulePrecedencePolicy
 from sda.patterns.rules import BusinessRule, RuleStrength, evaluate_rule
+from sda.patterns.roles import assign_roles
 from sda.patterns.safety import SafeValueKind, safe_pattern_value
 from sda.patterns.scoring import PatternScoringPolicy
 from sda.patterns.stability import stability
@@ -374,6 +375,17 @@ def test_coordinator_roles_exclude_entity_columns_from_driver_candidates() -> No
         selected_tables=("main.orders",),
     )
     assert all("customer_id" not in pattern.columns for pattern in result.patterns)
+
+
+def test_empty_sensitivity_signals_do_not_exclude_columns() -> None:
+    roles = assign_roles(
+        [
+            {"name": "segment", "data_type": "string", "sensitivity": ()},
+            {"name": "amount", "data_type": "double", "sensitivity": []},
+        ]
+    )
+    assert "segment" not in roles["excluded"]
+    assert "amount" not in roles["excluded"]
 
 
 def test_candidates_are_bounded_and_deterministic() -> None:

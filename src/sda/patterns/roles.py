@@ -15,7 +15,12 @@ def assign_roles(columns: Sequence[Mapping[str, object]]) -> dict[str, tuple[str
     for col in columns:
         name = str(col.get("name", col.get("column_name", "")))
         kind = str(col.get("profile_kind", col.get("data_type", ""))).lower()
-        sensitivity = str(col.get("sensitivity", ""))
+        raw_sensitivity = col.get("sensitivity", "")
+        sensitivity = (
+            bool(raw_sensitivity)
+            if isinstance(raw_sensitivity, (list, tuple, set, frozenset, dict))
+            else bool(str(raw_sensitivity).strip())
+        )
         if sensitivity or any(
             token in name.lower() for token in ("email", "ssn", "password", "token")
         ):
