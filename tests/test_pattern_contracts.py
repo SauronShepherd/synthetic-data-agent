@@ -131,7 +131,9 @@ def test_state_transition_evidence_preserves_event_vs_ingestion_order() -> None:
         pattern for pattern in patterns if pattern.family is PatternFamily.STATE_TRANSITION
     )
     assert transition.metric["event_order"]["late_arrival_entity_count"] == 1
-    assert "ingestion_order_differs_from_event_order" in transition.metric["event_order"]["warnings"]
+    assert (
+        "ingestion_order_differs_from_event_order" in transition.metric["event_order"]["warnings"]
+    )
 
 
 def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> None:
@@ -288,11 +290,15 @@ def test_coordinator_multi_family_acceptance_fixture() -> None:
                 }
             )
     rule_a = BusinessRule(
-        "observed-rule", "main.orders", ({"column": "status", "value": "active", "role": "outcome"},),
+        "observed-rule",
+        "main.orders",
+        ({"column": "status", "value": "active", "role": "outcome"},),
         origin=PatternOrigin.OBSERVED,
     )
     rule_b = BusinessRule(
-        "user-rule", "main.orders", ({"column": "status", "value": "cancelled", "role": "outcome"},),
+        "user-rule",
+        "main.orders",
+        ({"column": "status", "value": "cancelled", "role": "outcome"},),
         origin=PatternOrigin.USER_PROVIDED,
     )
     result = PatternDetector(PatternConfig(min_support_rows=10, max_candidates=500)).detect(
@@ -305,7 +311,10 @@ def test_coordinator_multi_family_acceptance_fixture() -> None:
         rules=(rule_a, rule_b),
         fanout_inputs=(
             {
-                "parents": [{"customer_id": f"c{i}", "segment": "premium" if i % 2 == 0 else "standard"} for i in range(60)],
+                "parents": [
+                    {"customer_id": f"c{i}", "segment": "premium" if i % 2 == 0 else "standard"}
+                    for i in range(60)
+                ],
                 "children": [{"customer_id": f"c{i}"} for i in range(0, 60, 2)],
                 "parent_key": "customer_id",
                 "child_key": "customer_id",

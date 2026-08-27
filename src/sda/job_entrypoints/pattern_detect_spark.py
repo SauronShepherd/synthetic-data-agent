@@ -57,7 +57,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--sample-seed", type=int, default=1729)
     p.add_argument("--max-rows-scanned", type=int, default=100_000)
     p.add_argument("--include-spearman", nargs="?", const=True, default=False, type=_bool_arg)
-    p.add_argument("--allow-best-effort-snapshot", nargs="?", const=True, default=False, type=_bool_arg)
+    p.add_argument(
+        "--allow-best-effort-snapshot", nargs="?", const=True, default=False, type=_bool_arg
+    )
     return p.parse_args()
 
 
@@ -131,8 +133,16 @@ def main() -> None:
         # Use the same fail-closed input contract as the local coordinator.
         # Legacy relationship/graph registries remain an explicit compatibility
         # fallback for deployments that have not migrated those artifacts.
-        if all((args.metadata_artifact_id, args.relationship_artifact_id,
-                args.dependency_graph_artifact_id)) and profile_ids:
+        if (
+            all(
+                (
+                    args.metadata_artifact_id,
+                    args.relationship_artifact_id,
+                    args.dependency_graph_artifact_id,
+                )
+            )
+            and profile_ids
+        ):
             try:
                 upstream_refs = load_pattern_inputs(
                     registry,
@@ -148,11 +158,10 @@ def main() -> None:
                 if not (args.relationship_registry_table or args.dependency_graph_registry_table):
                     raise SystemExit(f"unable to validate pattern inputs: {exc}") from exc
         expected_types = (
-            (ArtifactType.METADATA_INVENTORY,) if args.metadata_artifact_id else ()
-        ) + tuple(ArtifactType.TABLE_PROFILE for _ in profile_ids) + (
-            (ArtifactType.RELATIONSHIP_ANALYSIS,) if args.relationship_artifact_id else ()
-        ) + (
-            (ArtifactType.DEPENDENCY_GRAPH,) if args.dependency_graph_artifact_id else ()
+            ((ArtifactType.METADATA_INVENTORY,) if args.metadata_artifact_id else ())
+            + tuple(ArtifactType.TABLE_PROFILE for _ in profile_ids)
+            + ((ArtifactType.RELATIONSHIP_ANALYSIS,) if args.relationship_artifact_id else ())
+            + ((ArtifactType.DEPENDENCY_GRAPH,) if args.dependency_graph_artifact_id else ())
         )
         for artifact_id, expected_type in zip(input_ids, expected_types, strict=True):
             try:
@@ -319,13 +328,24 @@ def main() -> None:
                 )
                 if spearman_rows:
                     row = spearman_rows[0].asDict()
-                    if row["value"] is not None and int(row["valid_pair_count"]) / max(source_count, 1) >= args.min_support_rate:
+                    if (
+                        row["value"] is not None
+                        and int(row["valid_pair_count"]) / max(source_count, 1)
+                        >= args.min_support_rate
+                    ):
                         row["association_name"] = "spearman"
-                        patterns.append(detector._pattern(
-                            analysis_id or "pattern-run", source_table,
-                            PatternFamily.CORRELATION, (left, right), {}, {"outcome": right},
-                            int(row["valid_pair_count"]), row,
-                        ))
+                        patterns.append(
+                            detector._pattern(
+                                analysis_id or "pattern-run",
+                                source_table,
+                                PatternFamily.CORRELATION,
+                                (left, right),
+                                {},
+                                {"outcome": right},
+                                int(row["valid_pair_count"]),
+                                row,
+                            )
+                        )
     # Execute the remaining table-local families on bounded aggregate results.
     categorical = [
         name
@@ -447,16 +467,28 @@ def main() -> None:
                         data,
                     )
                 )
-    if all((args.fanout_parent_table, args.fanout_child_table, args.fanout_parent_key,
-            args.fanout_child_key, args.fanout_segment)):
+    if all(
+        (
+            args.fanout_parent_table,
+            args.fanout_child_table,
+            args.fanout_parent_key,
+            args.fanout_child_key,
+            args.fanout_segment,
+        )
+    ):
         parent = spark.table(QualifiedName.parse(args.fanout_parent_table).quoted)
         child = spark.table(QualifiedName.parse(args.fanout_child_table).quoted)
-        fanout_rows = spark_fanout_by_segment(
-            parent, child,
-            parent_keys=tuple(args.fanout_parent_key.split(",")),
-            child_keys=tuple(args.fanout_child_key.split(",")),
-            segments=tuple(args.fanout_segment.split(",")),
-        ).where(F.col("parent_count") >= args.min_support_rows).collect()
+        fanout_rows = (
+            spark_fanout_by_segment(
+                parent,
+                child,
+                parent_keys=tuple(args.fanout_parent_key.split(",")),
+                child_keys=tuple(args.fanout_child_key.split(",")),
+                segments=tuple(args.fanout_segment.split(",")),
+            )
+            .where(F.col("parent_count") >= args.min_support_rows)
+            .collect()
+        )
         parent_count = parent.count()
         for row in fanout_rows:
             data = row.asDict()
@@ -465,11 +497,18 @@ def main() -> None:
                 continue
             segments = tuple(args.fanout_segment.split(","))
             condition = {segment: data.pop(segment) for segment in segments}
-            patterns.append(detector._pattern(
-                analysis_id or "pattern-run", source_table, PatternFamily.FANOUT_BY_SEGMENT,
-                segments, condition,
-                {"child_count": tuple(args.fanout_child_key.split(","))}, support, data,
-            ))
+            patterns.append(
+                detector._pattern(
+                    analysis_id or "pattern-run",
+                    source_table,
+                    PatternFamily.FANOUT_BY_SEGMENT,
+                    segments,
+                    condition,
+                    {"child_count": tuple(args.fanout_child_key.split(","))},
+                    support,
+                    data,
+                )
+            )
 
     # Multiple families can describe the same finding; persist one content-id row.
     patterns = [
@@ -504,9 +543,11 @@ def main() -> None:
                 "evidence": args.pattern_evidence_table,
                 "registry": args.artifact_registry_table,
             },
-            source_references=(SourceReference(
-                source_table, "TABLE", snapshot_kind, source_version, snapshot_timestamp, None
-            ),),
+            source_references=(
+                SourceReference(
+                    source_table, "TABLE", snapshot_kind, source_version, snapshot_timestamp, None
+                ),
+            ),
             checksum=fingerprint([pattern.to_dict() for pattern in patterns]),
             summary="Spark-native pattern registry",
             input_artifact_ids=input_ids,

@@ -24,10 +24,19 @@ def assign_roles(columns: Sequence[Mapping[str, object]]) -> dict[str, tuple[str
             roles["lifecycle"].append(name)
         elif name.lower().endswith(("_id", "_key")):
             roles["entity"].append(name)
-        elif (
-            any(token in kind for token in ("numeric", "categor", "string", "boolean"))
-            or kind in {"byte", "short", "int", "integer", "long", "bigint", "float", "double", "decimal"}
-        ):
+        elif any(
+            token in kind for token in ("numeric", "categor", "string", "boolean")
+        ) or kind in {
+            "byte",
+            "short",
+            "int",
+            "integer",
+            "long",
+            "bigint",
+            "float",
+            "double",
+            "decimal",
+        }:
             roles["driver"].append(name)
             roles["outcome"].append(name)
         else:

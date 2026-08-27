@@ -156,7 +156,9 @@ class RelationshipDetector:
                 for relationship in child_relationships
                 for column in relationship["child_columns"]
             )
-            links = [tuple(row.get(column) for column in link_columns) for row in rows.get(child, ())]
+            links = [
+                tuple(row.get(column) for column in link_columns) for row in rows.get(child, ())
+            ]
             # A bridge requires a unique combined FK link for each row; parent
             # count alone is insufficient evidence.
             unique = len(links) == len(set(links)) if links else False

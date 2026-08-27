@@ -127,10 +127,9 @@ def spark_spearman(frame: Any, left: str, right: str) -> Any:
     from pyspark.sql.window import Window
 
     valid = frame.where(F.col(left).isNotNull() & F.col(right).isNotNull())
-    ranked = (
-        valid.withColumn("__sda_left_rank", F.percent_rank().over(Window.orderBy(F.col(left))))
-        .withColumn("__sda_right_rank", F.percent_rank().over(Window.orderBy(F.col(right))))
-    )
+    ranked = valid.withColumn(
+        "__sda_left_rank", F.percent_rank().over(Window.orderBy(F.col(left)))
+    ).withColumn("__sda_right_rank", F.percent_rank().over(Window.orderBy(F.col(right))))
     return (
         ranked.agg(
             F.count(F.lit(1)).alias("valid_pair_count"),

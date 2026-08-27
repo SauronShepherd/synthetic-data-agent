@@ -79,17 +79,14 @@ def measure_join(
         else ()
     )
     partial_keys = any(
-        any(v is None for v in key) and not all(v is None for v in key)
-        for key in raw_child_keys
+        any(v is None for v in key) and not all(v is None for v in key) for key in raw_child_keys
     )
     if (match_option or "").upper() == "FULL" and partial_keys:
         # MATCH FULL requires a composite foreign key to be either entirely
         # NULL or entirely populated.  Partial keys are invalid evidence and
         # must not be treated as ordinary orphans/joins.
         warnings = tuple(
-            dict.fromkeys(
-                (*warnings, "match_full_partial_key_invalid", "candidate_rejected")
-            )
+            dict.fromkeys((*warnings, "match_full_partial_key_invalid", "candidate_rejected"))
         )
     fanout = [child_reference_counts.get(key, 0) for key in pset]
     sorted_fanout = sorted(fanout)

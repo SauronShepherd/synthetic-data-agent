@@ -18,7 +18,9 @@ def test_pattern_entrypoint_accepts_false_boolean_parameters(raw: str) -> None:
     assert _bool_arg(raw) is False
 
 
-def test_pattern_entrypoint_parses_databricks_boolean_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pattern_entrypoint_parses_databricks_boolean_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(
         sys,
         "argv",

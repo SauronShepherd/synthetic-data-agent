@@ -30,7 +30,11 @@ def main() -> None:
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     source = spark.table(args.source_table)
     fields = {field.name: field.dataType.simpleString() for field in source.schema.fields}
-    numeric = [name for name, dtype in fields.items() if dtype in {"double", "float", "int", "bigint", "decimal"}]
+    numeric = [
+        name
+        for name, dtype in fields.items()
+        if dtype in {"double", "float", "int", "bigint", "decimal"}
+    ]
     categorical = [name for name, dtype in fields.items() if dtype in {"string", "boolean"}]
     temporal = [name for name in fields if name.lower().endswith(("_at", "_date", "_time", "_ts"))]
     if len(numeric) < 2:
@@ -54,29 +58,43 @@ def main() -> None:
             raise RuntimeError("temporal order returned no aggregate result")
         if spark_temporal_lag(source, earlier, later).limit(1).count() != 1:
             raise RuntimeError("temporal lag returned no aggregate result")
-    state = next((name for name in categorical if name.lower() in {"status", "state", "stage"}), None)
+    state = next(
+        (name for name in categorical if name.lower() in {"status", "state", "stage"}), None
+    )
     entity = next((name for name in fields if name.lower().endswith(("_id", "id"))), None)
     if state and entity and temporal:
-        repeated_entities = (
-            source.groupBy(entity).count().where("count > 1").limit(1).count()
-        )
-        if repeated_entities and spark_state_transitions(
-            source, entity_keys=(entity,), state_column=state, event_time=temporal[0]
-        ).limit(1).count() < 1:
+        repeated_entities = source.groupBy(entity).count().where("count > 1").limit(1).count()
+        if (
+            repeated_entities
+            and spark_state_transitions(
+                source, entity_keys=(entity,), state_column=state, event_time=temporal[0]
+            )
+            .limit(1)
+            .count()
+            < 1
+        ):
             raise RuntimeError("state transitions returned no aggregate result")
     parent = spark.table(args.parent_table)
     child = spark.table(args.child_table)
-    parent_key = args.parent_key if args.parent_key in parent.columns else next(
-        (name for name in parent.columns if name.lower().endswith(("_id", "id"))), None
+    parent_key = (
+        args.parent_key
+        if args.parent_key in parent.columns
+        else next((name for name in parent.columns if name.lower().endswith(("_id", "id"))), None)
     )
-    child_key = args.child_key if args.child_key in child.columns else next(
-        (name for name in child.columns if name.lower().endswith(("_id", "id"))), None
+    child_key = (
+        args.child_key
+        if args.child_key in child.columns
+        else next((name for name in child.columns if name.lower().endswith(("_id", "id"))), None)
     )
-    segment = args.segment if args.segment in parent.columns else next(
-        (name for name in parent.columns if name != parent_key), None
+    segment = (
+        args.segment
+        if args.segment in parent.columns
+        else next((name for name in parent.columns if name != parent_key), None)
     )
     if not parent_key or not child_key or not segment:
-        raise RuntimeError("fan-out contract requires resolvable parent key, child key, and segment")
+        raise RuntimeError(
+            "fan-out contract requires resolvable parent key, child key, and segment"
+        )
     fanout = spark_fanout_by_segment(
         parent,
         child,

@@ -272,8 +272,7 @@ class PatternDetector:
                             (
                                 name
                                 for name in names
-                                if name.lower()
-                                in {"ingested_at", "ingestion_at", "ingestion_time"}
+                                if name.lower() in {"ingested_at", "ingestion_at", "ingestion_time"}
                             ),
                             None,
                         )
@@ -431,22 +430,30 @@ class PatternDetector:
             else "string"
             for name in names
         }
-        metadata_content: dict[str, Any] = upstream_artifacts[0].content if upstream_artifacts else {}
-        profile_content: dict[str, Any] = upstream_artifacts[1].content if len(upstream_artifacts) > 1 else {}
-        metadata_table = next(
-            (
-                item for item in metadata_content.get("tables", ())
-                if item.get("full_name") == table
-            ),
-        ) if isinstance(metadata_content.get("tables", ()), list) else None
+        metadata_content: dict[str, Any] = (
+            upstream_artifacts[0].content if upstream_artifacts else {}
+        )
+        profile_content: dict[str, Any] = (
+            upstream_artifacts[1].content if len(upstream_artifacts) > 1 else {}
+        )
+        metadata_table = (
+            next(
+                (
+                    item
+                    for item in metadata_content.get("tables", ())
+                    if item.get("full_name") == table
+                ),
+            )
+            if isinstance(metadata_content.get("tables", ()), list)
+            else None
+        )
         raw_sensitivity = (
-            metadata_table.get("sensitivity_signals", {}) if metadata_table else
-            metadata_content.get("sensitivity_signals", {})
+            metadata_table.get("sensitivity_signals", {})
+            if metadata_table
+            else metadata_content.get("sensitivity_signals", {})
         )
         sensitivity = raw_sensitivity if isinstance(raw_sensitivity, dict) else {}
-        self._sensitive_columns = {
-            name for name, signals in sensitivity.items() if signals
-        }
+        self._sensitive_columns = {name for name, signals in sensitivity.items() if signals}
         role_columns = [
             {"name": name, "data_type": types[name], "sensitivity": sensitivity.get(name, "")}
             for name in names
@@ -473,7 +480,9 @@ class PatternDetector:
         roles["driver"] = tuple(name for name in names if name not in excluded)
         for override in role_overrides:
             if override.table == table:
-                roles[override.role] = tuple(sorted(set(roles.get(override.role, ())) | {override.column}))
+                roles[override.role] = tuple(
+                    sorted(set(roles.get(override.role, ())) | {override.column})
+                )
         candidates = generate_candidates(table, types, roles=roles, config=self.config)
         candidate_count_by_family: dict[str, int] = {}
         for candidate in candidates:
@@ -487,11 +496,13 @@ class PatternDetector:
         # Add bounded conditional and lifecycle evidence to the same aggregate result.
         categorical = [name for name in roles.get("driver", ()) if types.get(name) == "string"]
         numeric = [name for name in roles.get("outcome", ()) if types.get(name) == "double"]
+
         def supported(support: int, population: int | None = None) -> bool:
             denominator = population if population is not None else len(rows)
             return support >= self.config.min_support_rows and (
                 denominator == 0 or support / denominator >= self.config.min_support_rate
             )
+
         for driver in categorical[: self.config.max_segment_cardinality]:
             for outcome in numeric[: self.config.max_candidates]:
                 cells = conditional_counts(
@@ -518,11 +529,18 @@ class PatternDetector:
                         )
                 for group in numeric_by_group(rows, group=driver, outcome=outcome):
                     if supported(group["count"]):
-                        patterns += (self._pattern(
-                            run_id, table, PatternFamily.CONDITIONAL_DISTRIBUTION,
-                            (driver, outcome), {driver: group["group"]}, {"outcome": outcome},
-                            group["count"], {**group, "global_count": len(rows), "method": "exact"},
-                        ),)
+                        patterns += (
+                            self._pattern(
+                                run_id,
+                                table,
+                                PatternFamily.CONDITIONAL_DISTRIBUTION,
+                                (driver, outcome),
+                                {driver: group["group"]},
+                                {"outcome": outcome},
+                                group["count"],
+                                {**group, "global_count": len(rows), "method": "exact"},
+                            ),
+                        )
         # Emit conditional-missingness findings for every bounded driver/outcome pair.
         for driver in categorical[: self.config.max_candidates]:
             driver_values = sorted({row.get(driver) for row in rows}, key=lambda value: str(value))[
@@ -683,7 +701,9 @@ class PatternDetector:
         rule_conflicts = resolve_rule_conflicts(list(rules), self.rule_precedence_policy)
         emitted_by_family: dict[str, int] = {}
         for pattern in patterns:
-            emitted_by_family[pattern.family.value] = emitted_by_family.get(pattern.family.value, 0) + 1
+            emitted_by_family[pattern.family.value] = (
+                emitted_by_family.get(pattern.family.value, 0) + 1
+            )
         skipped_by_reason = {
             f"{family}_insufficient_support": count - emitted_by_family.get(family, 0)
             for family, count in candidate_count_by_family.items()
@@ -778,16 +798,22 @@ class PatternDetector:
         origin: PatternOrigin = PatternOrigin.OBSERVED,
     ) -> Pattern:
         sensitive_columns: set[str] = getattr(self, "_sensitive_columns", set())
+
         def protect(payload: dict[str, Any]) -> dict[str, Any]:
             protected = dict(payload)
             for key in tuple(protected):
                 if key in sensitive_columns:
                     safe = safe_pattern_value(
                         value=protected[key],
-                        column_policy=("redact_values" if self.config.sensitive_value_policy == "fingerprints_only" else "no_values"),
+                        column_policy=(
+                            "redact_values"
+                            if self.config.sensitive_value_policy == "fingerprints_only"
+                            else "no_values"
+                        ),
                     )
                     protected[key] = {"kind": safe.kind.value, "value": safe.value}
             return protected
+
         condition = protect(condition)
         outcome = protect(outcome)
         pid = "pat_" + fingerprint(
@@ -807,11 +833,17 @@ class PatternDetector:
                 support_quality="sufficient",
                 validation_mode=metric.get("method", "exact"),
                 stability_quality=(
-                    "stable" if stability_result is not None and stability_result.get("stable") is True
-                    else "unstable" if stability_result is not None
+                    "stable"
+                    if stability_result is not None and stability_result.get("stable") is True
+                    else "unstable"
+                    if stability_result is not None
                     else str(metric.get("stability", "unavailable"))
                 ),
-                source_quality=("compatible" if metric.get("source_compatible", getattr(self, "_source_compatible", True)) else "mismatch"),
+                source_quality=(
+                    "compatible"
+                    if metric.get("source_compatible", getattr(self, "_source_compatible", True))
+                    else "mismatch"
+                ),
             ),
             origin=origin,
         ).value
@@ -824,7 +856,9 @@ class PatternDetector:
             violation_rate = violation_rows / population_rows
         evidence_quality = {
             "validation_mode": metric.get("method", "exact"),
-            "source_quality": "compatible" if metric.get("source_compatible", getattr(self, "_source_compatible", True)) else "mismatch",
+            "source_quality": "compatible"
+            if metric.get("source_compatible", getattr(self, "_source_compatible", True))
+            else "mismatch",
             "support_quality": "sufficient",
             "confidence": metric.get("confidence"),
             "stability": stability_result or metric.get("stability", "unavailable"),
@@ -877,13 +911,16 @@ class PatternDetector:
             if family is PatternFamily.BUSINESS_RULE
             else (),
             generation_action=GenerationAction(
-                kind=generation_kind, evidence_pattern_id=pid,
+                kind=generation_kind,
+                evidence_pattern_id=pid,
                 condition=tuple(condition),
                 fallback_levels=tuple(level.condition_columns for level in fallback.levels),
             ).to_dict(),
             validation_action=ValidationAction(
-                kind=validation_kind, evidence_pattern_id=pid,
-                metric=family.value, tolerance=metric.get("tolerance"),
+                kind=validation_kind,
+                evidence_pattern_id=pid,
+                metric=family.value,
+                tolerance=metric.get("tolerance"),
             ).to_dict(),
             review_status="required" if family is PatternFamily.BUSINESS_RULE else "not_required",
             rule_strength=(
