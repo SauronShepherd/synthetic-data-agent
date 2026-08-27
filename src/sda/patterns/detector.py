@@ -473,7 +473,7 @@ class PatternDetector:
         # Numeric columns are outcomes for correlation/distribution evidence;
         # drivers may be categorical or numeric, while excluded/sensitive fields
         # never enter either role.
-        excluded = set(roles.get("excluded", ()))
+        excluded = set(roles.get("excluded", ())) | set(roles.get("entity", ()))
         roles["outcome"] = tuple(
             name
             for name in roles.get("outcome", ())
