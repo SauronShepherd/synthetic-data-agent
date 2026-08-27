@@ -41,7 +41,7 @@ jobs:
       - name: Configure Databricks profile
         shell: bash
         env:
-          DATABRICKS_HOST: ${{ secrets.SDA_DATABRICKS_HOST || secrets.DATABRICKS_HOST }}
+          DATABRICKS_HOST: https://dbc-62483078-323e.cloud.databricks.com
           DATABRICKS_TOKEN: ${{ secrets.SDA_DATABRICKS_TOKEN || secrets.DATABRICKS_TOKEN }}
         run: |
           test -n "$DATABRICKS_HOST"

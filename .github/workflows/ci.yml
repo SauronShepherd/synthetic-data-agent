@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: quality
     env:
-      DATABRICKS_HOST: ${{ secrets.SDA_DATABRICKS_HOST || secrets.DATABRICKS_HOST }}
+      DATABRICKS_HOST: https://dbc-62483078-323e.cloud.databricks.com
       DATABRICKS_TOKEN: ${{ secrets.SDA_DATABRICKS_TOKEN || secrets.DATABRICKS_TOKEN }}
     steps:
       - uses: actions/checkout@v5
