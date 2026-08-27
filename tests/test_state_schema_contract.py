@@ -10,6 +10,12 @@ def test_lakebase_state_schema_has_required_contracts() -> None:
     assert validate(sql) == []
 
 
+def test_state_schema_validator_requires_request_and_artifact_contracts() -> None:
+    errors = validate("CREATE TABLE IF NOT EXISTS sda_runs (run_id TEXT PRIMARY KEY);")
+    assert any("sda_generation_requests" in error for error in errors)
+    assert any("sda_artifact_uses" in error for error in errors)
+
+
 def test_state_schema_validator_rejects_missing_table() -> None:
     errors = validate("CREATE TABLE IF NOT EXISTS sda_runs (run_id TEXT PRIMARY KEY);")
     assert any("sda_execution_attempts" in error for error in errors)

@@ -22,6 +22,35 @@ CREATE TABLE IF NOT EXISTS sda_runs (
     CONSTRAINT sda_runs_version_nonnegative CHECK (version >= 0)
 );
 
+CREATE TABLE IF NOT EXISTS sda_generation_requests (
+    request_id TEXT PRIMARY KEY,
+    requester_id TEXT NOT NULL,
+    environment TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    source_scope JSONB NOT NULL,
+    generation_options JSONB NOT NULL DEFAULT '{}'::jsonb,
+    target_catalog TEXT,
+    target_schema TEXT,
+    intended_use TEXT,
+    submitted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sda_generation_plans (
+    plan_id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL REFERENCES sda_generation_requests(request_id),
+    run_id TEXT NOT NULL REFERENCES sda_runs(run_id),
+    version INTEGER NOT NULL CHECK (version > 0),
+    fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    supersedes_plan_id TEXT,
+    UNIQUE(request_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS sda_generation_plans_request_version
+    ON sda_generation_plans(request_id, version);
+
 CREATE TABLE IF NOT EXISTS sda_execution_attempts (
     attempt_id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES sda_runs(run_id),
@@ -85,3 +114,48 @@ CREATE TABLE IF NOT EXISTS sda_audit_events (
 
 CREATE INDEX IF NOT EXISTS sda_audit_events_run_time
     ON sda_audit_events(run_id, occurred_at);
+
+-- Immutable workflow transition history; current status is only a projection.
+CREATE TABLE IF NOT EXISTS sda_transition_events (
+    event_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES sda_runs(run_id),
+    from_status TEXT NOT NULL,
+    to_status TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS sda_transition_events_run_time
+    ON sda_transition_events(run_id, occurred_at, event_id);
+
+CREATE TABLE IF NOT EXISTS sda_run_steps (
+    step_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES sda_runs(run_id),
+    step_name TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    input_artifacts JSONB NOT NULL DEFAULT '[]'::jsonb,
+    output_artifacts JSONB NOT NULL DEFAULT '[]'::jsonb,
+    warning_count INTEGER NOT NULL DEFAULT 0 CHECK (warning_count >= 0),
+    error_code TEXT,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMPTZ,
+    UNIQUE(run_id, step_name)
+);
+
+CREATE INDEX IF NOT EXISTS sda_run_steps_run_order
+    ON sda_run_steps(run_id, started_at, step_id);
+
+CREATE TABLE IF NOT EXISTS sda_artifact_uses (
+    use_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES sda_runs(run_id),
+    artifact_id TEXT NOT NULL,
+    decision TEXT NOT NULL CHECK (decision IN ('produced', 'reused', 'invalidated', 'rejected')),
+    compatibility_fingerprint TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS sda_artifact_uses_run_time
+    ON sda_artifact_uses(run_id, recorded_at, use_id);

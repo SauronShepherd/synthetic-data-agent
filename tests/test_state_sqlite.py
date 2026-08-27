@@ -7,10 +7,15 @@ import pytest
 
 from sda.state import (
     Approval,
+    ArtifactDecision,
+    ArtifactUse,
     AttemptStatus,
     ExecutionAttempt,
     Feedback,
+    PlanRecord,
+    RequestRecord,
     RunRecord,
+    RunStep,
     StateError,
     WorkflowStatus,
 )
@@ -21,11 +26,27 @@ def test_sqlite_state_survives_repository_reopen(tmp_path: object) -> None:
     path = str(tmp_path / "state.db")
     repo = SQLiteStateRepository(path)
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
-    repo.transition_run("run-1", WorkflowStatus.PLANNED)
+    request = RequestRecord("req-1", "alice", "dev", "request-idem-1", '{"tables":["orders"]}')
+    repo.create_request(request)
+    repo.transition_run("run-1", WorkflowStatus.PLANNED, actor="agent", reason="scope accepted")
     repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     repo.close()
     reopened = SQLiteStateRepository(path)
     assert reopened.get_run("run-1").status is WorkflowStatus.AWAITING_APPROVAL
+    assert reopened.list_transition_events("run-1")[0].actor == "agent"
+    assert reopened.list_transition_events("run-1")[0].reason == "scope accepted"
+    assert reopened.get_request("req-1") == request
+    plan = PlanRecord("plan-1", "req-1", "run-1", 1, "fp-1", "approved", "{}")
+    reopened.create_plan(plan)
+    reopened.close()
+    reopened = SQLiteStateRepository(path)
+    assert reopened.get_plan("plan-1") == plan
+    assert len(reopened.list_transition_events("run-1")) == 2
+    step = RunStep("step-1", "run-1", "metadata", "uc_metadata_reader", output_artifacts=("meta-1",))
+    reopened.create_step(step)
+    reopened.close()
+    reopened = SQLiteStateRepository(path)
+    assert reopened.list_steps("run-1")[0].output_artifacts == ("meta-1",)
     reopened.close()
 
 
@@ -75,6 +96,29 @@ def test_sqlite_state_persists_approvals_and_attempts() -> None:
     repo.close()
 
 
+def test_sqlite_state_allows_only_one_running_attempt_per_stage() -> None:
+    repo = SQLiteStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "profile"))
+    with pytest.raises(StateError, match="running attempt"):
+        repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile"))
+    repo.complete_attempt("attempt-1", success=False, error_code="test")
+    assert repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile")).attempt_id == "attempt-2"
+    repo.close()
+
+
+def test_sqlite_artifact_use_decisions_survive_reopen(tmp_path: object) -> None:
+    path = str(tmp_path / "artifact-use.db")
+    repo = SQLiteStateRepository(path)
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    use = ArtifactUse("use-1", "run-1", "profile-1", ArtifactDecision.PRODUCED, "fp-1")
+    repo.record_artifact_use(use)
+    repo.close()
+    reopened = SQLiteStateRepository(path)
+    assert reopened.list_artifact_uses("run-1") == (use,)
+    reopened.close()
+
+
 def test_sqlite_state_renews_and_recovers_stale_leases() -> None:
     repo = SQLiteStateRepository()
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
@@ -91,6 +135,22 @@ def test_sqlite_state_renews_and_recovers_stale_leases() -> None:
     assert recovered[0].status is AttemptStatus.ABANDONED
     with pytest.raises(StateError, match="owned"):
         repo.renew_attempt_lease("attempt-1", worker_id="worker-1")
+    repo.close()
+
+
+def test_sqlite_expired_worker_cannot_complete_before_recovery() -> None:
+    repo = SQLiteStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    repo.acquire_attempt(
+        ExecutionAttempt("run-1", "attempt-1", "generate", worker_id="worker-1"),
+        lease_seconds=1,
+    )
+    repo._connection.execute(
+        "UPDATE attempts SET lease_expires_at = ? WHERE attempt_id = ?",
+        ((datetime.now(UTC) - timedelta(seconds=1)).isoformat(), "attempt-1"),
+    )
+    with pytest.raises(StateError, match="lease has expired"):
+        repo.complete_attempt("attempt-1", success=True)
     repo.close()
 
 

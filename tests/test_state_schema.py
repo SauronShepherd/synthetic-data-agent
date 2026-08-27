@@ -11,6 +11,18 @@ def test_lakebase_schema_contains_immutable_feedback_contract() -> None:
     assert "sda_feedback_identity_nonempty" in sql
 
 
+def test_lakebase_schema_contains_immutable_transition_history() -> None:
+    sql = (Path(__file__).parents[1] / "sql" / "lakebase_state_schema.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "CREATE TABLE IF NOT EXISTS sda_transition_events" in sql
+    assert "sda_transition_events_run_time" in sql
+    assert "CREATE TABLE IF NOT EXISTS sda_run_steps" in sql
+    assert "UNIQUE(run_id, step_name)" in sql
+    assert "CREATE TABLE IF NOT EXISTS sda_artifact_uses" in sql
+    assert "CREATE TABLE IF NOT EXISTS sda_generation_plans" in sql
+
+
 def test_lakebase_schema_tracks_migration_versions() -> None:
     sql = (Path(__file__).parents[1] / "sql" / "lakebase_state_schema.sql").read_text(
         encoding="utf-8"

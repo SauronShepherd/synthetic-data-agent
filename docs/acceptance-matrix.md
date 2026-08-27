@@ -1,4 +1,4 @@
-# SDA 01–07 acceptance matrix
+# SDA 00–08 acceptance matrix
 
 This matrix is the release boundary for the current `0.7.0.dev0` milestone.
 “Verified” means covered by local contracts/tests; it does not imply governed
@@ -13,6 +13,7 @@ Databricks production readiness.
 | SDA 05 | Table profiling and privacy-safe evidence | `src/sda/tools/table_profiler.py`, `src/sda/profiling/` | Bounded local/Spark paths verified; production-scale performance pending |
 | SDA 06 | PK/FK relationships, fan-out, dependency graph | `src/sda/relationships/`, `src/sda/relational.py`, `src/sda/topology.py` | Local contracts verified; distributed graph generation pending |
 | SDA 07 | Cross-column patterns and business rules | `src/sda/patterns/`, `src/sda/job_entrypoints/pattern_detect_spark.py` | Registry/evidence schemas, compatibility, budgets, lineage, and detectors verified locally; Lakebase, Genie, and governed integration proof pending |
+| SDA 08 | Durable requests, plans, runs, steps, leases, audit history, and artifact decisions | `src/sda/state.py`, `src/sda/state_sqlite.py`, `src/sda/state_postgres.py`, `sql/lakebase_state_schema.sql`, `src/sda/workflows/analyze_scope.py` | Local in-memory/SQLite contracts, restart, retry, concurrency, and workflow handoff verified; live Lakebase migration, OAuth, backup/restore, and scale-to-zero proof pending |
 
 ## Release gates
 

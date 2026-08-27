@@ -54,9 +54,14 @@ class _PostgresConnection:
         statement = statement.replace("?", "%s")
         for source, target in (
             ("runs", "sda_runs"),
+            ("requests", "sda_generation_requests"),
+            ("plans", "sda_generation_plans"),
             ("attempts", "sda_execution_attempts"),
             ("approvals", "sda_approvals"),
             ("feedback", "sda_feedback"),
+            ("transition_events", "sda_transition_events"),
+            ("run_steps", "sda_run_steps"),
+            ("artifact_uses", "sda_artifact_uses"),
         ):
             statement = statement.replace(f" {source} ", f" {target} ")
             statement = statement.replace(f" {source}(", f" {target}(")

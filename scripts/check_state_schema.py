@@ -7,19 +7,29 @@ from pathlib import Path
 
 REQUIRED_TABLES = {
     "sda_schema_migrations",
+    "sda_generation_requests",
+    "sda_generation_plans",
     "sda_runs",
     "sda_execution_attempts",
     "sda_approvals",
     "sda_feedback",
     "sda_audit_events",
+    "sda_transition_events",
+    "sda_run_steps",
+    "sda_artifact_uses",
 }
 REQUIRED_FRAGMENTS = {
     "sda_schema_migrations": ("migration_id TEXT PRIMARY KEY", "applied_at TIMESTAMPTZ"),
     "sda_runs": ("idempotency_key TEXT NOT NULL UNIQUE", "sda_runs_status"),
+    "sda_generation_requests": ("idempotency_key TEXT NOT NULL UNIQUE", "source_scope JSONB"),
+    "sda_generation_plans": ("fingerprint TEXT NOT NULL", "UNIQUE(request_id, version)"),
     "sda_execution_attempts": ("REFERENCES sda_runs(run_id)", "sda_one_running_attempt_per_stage"),
     "sda_approvals": ("PRIMARY KEY (run_id, approval_type)", "sda_approval_decision"),
     "sda_feedback": ("feedback_id TEXT PRIMARY KEY", "sda_feedback_identity_nonempty"),
     "sda_audit_events": ("metadata JSONB", "sda_audit_events_run_time"),
+    "sda_transition_events": ("from_status TEXT NOT NULL", "sda_transition_events_run_time"),
+    "sda_run_steps": ("output_artifacts JSONB", "UNIQUE(run_id, step_name)"),
+    "sda_artifact_uses": ("compatibility_fingerprint TEXT NOT NULL", "sda_artifact_uses_run_time"),
 }
 
 
