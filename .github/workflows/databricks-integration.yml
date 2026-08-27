@@ -1,5 +1,5 @@
 name: SDA Databricks Integration
-# Triggered after repository Databricks credentials were refreshed.
+# Triggered after repository Databricks credentials were refreshed (retry).
 
 on:
   workflow_dispatch:
