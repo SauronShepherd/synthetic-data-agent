@@ -2,6 +2,9 @@ name: SDA Databricks Integration
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - codex/sda07-integration
 
 jobs:
   quality:
