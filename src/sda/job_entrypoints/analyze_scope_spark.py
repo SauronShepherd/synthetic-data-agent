@@ -461,8 +461,8 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 from sda.relationships.graph import DependencyGraph
 
                 dependency_graph = DependencyGraph()
-                for table in tables:
-                    dependency_graph.add_node(table)
+                for table_name in tables:
+                    dependency_graph.add_node(table_name)
                 for edge in accepted_edges:
                     dependency_graph.add_edge(edge["parent_table"], edge["child_table"])
                 cycles = dependency_graph.cycles()
