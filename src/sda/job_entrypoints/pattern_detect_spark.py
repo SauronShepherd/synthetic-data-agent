@@ -241,14 +241,27 @@ def main() -> None:
     if source_count > args.max_rows_scanned:
         raise SystemExit(f"source rows exceed max_rows_scanned budget ({args.max_rows_scanned})")
     columns = {field.name: field.dataType.simpleString() for field in source.schema.fields}
-    role_columns = [
-        {
-            "name": field.name,
-            "data_type": field.dataType.simpleString(),
-            "sensitivity": (),
-        }
-        for field in source.schema.fields
-    ]
+    profile_by_column: dict[str, dict[str, object]] = {}
+    for ref in upstream_refs:
+        content = ref.content if isinstance(ref.content, dict) else {}
+        profile_rows = content.get("column_profiles", ())
+        if isinstance(profile_rows, (list, tuple)):
+            for profile in profile_rows:
+                if isinstance(profile, dict):
+                    name = profile.get("column_name", profile.get("name"))
+                    if name:
+                        profile_by_column[str(name)] = profile
+    role_columns = []
+    for field in source.schema.fields:
+        profile = profile_by_column.get(field.name, {})
+        role_columns.append(
+            {
+                "name": field.name,
+                "data_type": profile.get("declared_data_type", field.dataType.simpleString()),
+                "profile_kind": profile.get("profile_kind", ""),
+                "sensitivity": profile.get("sensitivity_signals", ()),
+            }
+        )
     roles = assign_roles(role_columns)
     upstream_sensitivity: set[str] = set()
     for ref in upstream_refs:
