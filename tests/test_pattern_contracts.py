@@ -19,8 +19,8 @@ from sda.patterns.persistence import (
     require_pattern_schema_version,
 )
 from sda.patterns.precedence import RulePrecedencePolicy
-from sda.patterns.rules import BusinessRule, RuleStrength, evaluate_rule
 from sda.patterns.roles import assign_roles
+from sda.patterns.rules import BusinessRule, RuleStrength, evaluate_rule
 from sda.patterns.safety import SafeValueKind, safe_pattern_value
 from sda.patterns.scoring import PatternScoringPolicy
 from sda.patterns.stability import stability
