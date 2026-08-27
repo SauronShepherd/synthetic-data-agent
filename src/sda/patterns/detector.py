@@ -552,6 +552,8 @@ class PatternDetector:
             ]
             for driver_value in driver_values:
                 for outcome in names:
+                    if outcome in excluded:
+                        continue
                     metric = conditional_missingness(rows, {driver: driver_value}, outcome)
                     if metric.get("support_rows", 0) >= self.config.min_support_rows:
                         patterns += (
