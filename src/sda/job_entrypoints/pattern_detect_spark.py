@@ -265,11 +265,13 @@ def main() -> None:
     roles = assign_roles(role_columns)
     upstream_sensitivity: set[str] = set()
     for ref in upstream_refs:
-        content: dict[str, object] = ref.content if isinstance(ref.content, dict) else {}
-        signals: object = content.get("sensitivity_signals", {})
+        artifact_content: dict[str, object] = (
+            ref.content if isinstance(ref.content, dict) else {}
+        )
+        signals: object = artifact_content.get("sensitivity_signals", {})
         if isinstance(signals, dict):
             upstream_sensitivity.update(name for name, value in signals.items() if value)
-        profiles = content.get("column_profiles", ())
+        profiles = artifact_content.get("column_profiles", ())
         for profile in profiles if isinstance(profiles, (list, tuple)) else ():
             if isinstance(profile, dict) and profile.get("sensitivity_signals"):
                 upstream_sensitivity.add(str(profile.get("column_name", "")))
