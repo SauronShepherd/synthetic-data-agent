@@ -165,7 +165,7 @@ def main() -> None:
         )
         for artifact_id, expected_type in zip(input_ids, expected_types, strict=True):
             try:
-                ref = registry.require_complete(artifact_id)
+                ref = registry.require_latest_complete(artifact_id)
             except Exception as exc:
                 legacy_table = (
                     args.relationship_registry_table

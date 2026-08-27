@@ -23,6 +23,16 @@ def test_pattern_task_receives_all_upstream_artifact_references() -> None:
         assert f"--{parameter.replace('_', '-')}" in block
 
 
+def test_relationship_task_forwards_shared_artifact_registry() -> None:
+    resources = (ROOT / "bundle" / "resources.yml").read_text(encoding="utf-8")
+    block = resources.split("relationship_detector:", 1)[1].split(
+        "analyze_scope:", 1
+    )[0]
+    assert "name: artifact_registry_table" in block
+    assert "--artifact-registry-table" in block
+    assert '"{{job.parameters.artifact_registry_table}}"' in block
+
+
 def test_bundle_contract_rejects_target_missing_pattern_variable(tmp_path: Path) -> None:
     (tmp_path / "bundle" / "targets").mkdir(parents=True)
     (tmp_path / "bundle" / "targets" / "dev.yml").write_text(

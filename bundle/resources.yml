@@ -290,6 +290,8 @@ resources:
               - "{{job.parameters.child_columns}}"
               - --output-table
               - "{{job.parameters.output_table}}"
+              - --artifact-registry-table
+              - "{{job.parameters.artifact_registry_table}}"
               - --run-id
               - "{{job.parameters.run_id}}"
               - --environment
