@@ -51,9 +51,22 @@ jobs:
   bundle-validate:
     runs-on: ubuntu-latest
     needs: quality
+    environment: databricks-dev
+    env:
+      DATABRICKS_HOST: ${{ secrets.SDA_DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.SDA_DATABRICKS_TOKEN }}
     steps:
       - uses: actions/checkout@v5
       - uses: databricks/setup-cli@main
+      - name: Configure Databricks authentication
+        run: |
+          test -n "$DATABRICKS_HOST"
+          test -n "$DATABRICKS_TOKEN"
+          cat > "$HOME/.databrickscfg" <<EOF
+          [sda]
+          host = $DATABRICKS_HOST
+          token = $DATABRICKS_TOKEN
+          EOF
       - name: Validate bundle syntax
         run: |
           python scripts/check_bundle_contract.py
