@@ -51,6 +51,7 @@ jobs:
   bundle-validate:
     runs-on: ubuntu-latest
     needs: quality
+    environment: databricks-dev
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
