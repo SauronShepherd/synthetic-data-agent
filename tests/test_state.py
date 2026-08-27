@@ -115,6 +115,62 @@ def test_state_rejects_illegal_transition_and_stale_version() -> None:
         repo.transition_run("run-1", WorkflowStatus.APPROVED, expected_version=0)
 
 
+@pytest.mark.parametrize(
+    ("statuses",),
+    [
+        ((WorkflowStatus.REQUESTED, WorkflowStatus.CANCELLED),),
+        ((WorkflowStatus.REQUESTED, WorkflowStatus.PLANNED, WorkflowStatus.REJECTED),),
+        (
+            (
+                WorkflowStatus.REQUESTED,
+                WorkflowStatus.PLANNED,
+                WorkflowStatus.AWAITING_APPROVAL,
+                WorkflowStatus.CANCELLED,
+            ),
+        ),
+        (
+            (
+                WorkflowStatus.REQUESTED,
+                WorkflowStatus.PLANNED,
+                WorkflowStatus.AWAITING_APPROVAL,
+                WorkflowStatus.APPROVED,
+                WorkflowStatus.EXECUTING,
+                WorkflowStatus.FAILED,
+                WorkflowStatus.EXECUTING,
+                WorkflowStatus.GENERATED_AWAITING_VALIDATION,
+                WorkflowStatus.VALIDATED,
+                WorkflowStatus.PRIVACY_APPROVED,
+                WorkflowStatus.PUBLISHED,
+            ),
+        ),
+        (
+            (
+                WorkflowStatus.REQUESTED,
+                WorkflowStatus.PLANNED,
+                WorkflowStatus.AWAITING_APPROVAL,
+                WorkflowStatus.APPROVED,
+                WorkflowStatus.EXECUTING,
+                WorkflowStatus.GENERATED_AWAITING_VALIDATION,
+                WorkflowStatus.FAILED,
+                WorkflowStatus.CANCELLED,
+            ),
+        ),
+    ],
+)
+def test_every_declared_workflow_branch_is_executable(
+    statuses: tuple[WorkflowStatus, ...],
+) -> None:
+    repo = InMemoryStateRepository()
+    repo.create_run(RunRecord("run-branch", "req-branch", "idem-branch"))
+    for expected_version, status in enumerate(statuses[1:]):
+        run = repo.transition_run(
+            "run-branch", status, expected_version=expected_version,
+            actor="contract-test", reason="branch coverage",
+        )
+        assert run.status is status
+    assert len(repo.list_transition_events("run-branch")) == len(statuses) - 1
+
+
 def test_failed_run_can_be_explicitly_retried() -> None:
     repo = InMemoryStateRepository()
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
