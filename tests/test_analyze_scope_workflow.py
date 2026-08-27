@@ -1,7 +1,7 @@
 import pytest
 
 from sda.models import AgentState, GenerationRequest, SourceScope
-from sda.state import InMemoryStateRepository, PlanRecord
+from sda.state import InMemoryStateRepository, PlanRecord, WorkflowStatus
 from sda.tools.design_stubs import article_02_toolchain
 from sda.workflows.analyze_scope import analyze_scope
 
@@ -64,6 +64,30 @@ def test_analyze_scope_binds_run_to_immutable_plan_version() -> None:
     assert stored_run.plan_id == "plan-1"
     assert stored_run.plan_fingerprint == "fp-1"
     assert repository.get_plan("plan-1") == plan
+
+
+def test_analyze_scope_advances_plan_bound_run_to_planned() -> None:
+    request = GenerationRequest(
+        request_id="request-lifecycle",
+        source=SourceScope("main", "sales", ("orders",)),
+    )
+    repository = InMemoryStateRepository()
+    plan = PlanRecord(
+        "plan-lifecycle", request.request_id, request.request_id, 1,
+        "fp-lifecycle", "approved", "{}"
+    )
+
+    analyze_scope(
+        AgentState(request), article_02_toolchain()[:1],
+        state_repository=repository, plan=plan
+    )
+
+    run = repository.get_run(request.request_id)
+    assert run.status is WorkflowStatus.PLANNED
+    events = repository.list_transition_events(request.request_id)
+    assert [(event.from_status, event.to_status) for event in events] == [
+        (WorkflowStatus.REQUESTED, WorkflowStatus.PLANNED)
+    ]
 
 
 @pytest.mark.parametrize("status", ["rejected", "superseded", "expired"])

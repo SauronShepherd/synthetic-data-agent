@@ -18,6 +18,7 @@ from sda.state import (
     RunStep,
     StateRepository,
     StepStatus,
+    WorkflowStatus,
 )
 from sda.tools.base import AgentTool
 from sda.version import __version__
@@ -92,6 +93,14 @@ def analyze_scope(
             run.plan_id != plan.plan_id or run.plan_fingerprint != plan.fingerprint
         ):
             raise ValueError("existing run is bound to a different plan")
+        if plan is not None and run.status is WorkflowStatus.REQUESTED:
+            run = state_repository.transition_run(
+                run.run_id,
+                WorkflowStatus.PLANNED,
+                expected_version=run.version,
+                actor="analyze_scope",
+                reason="immutable evidence-analysis plan accepted",
+            )
     agent = SyntheticDataAgent()
     tool_list = tuple(tools)
     active_tool_name: str | None = None
