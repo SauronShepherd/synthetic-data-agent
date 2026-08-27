@@ -105,6 +105,13 @@ databricks bundle deploy -t dev --profile <profile-name>
 databricks bundle run uc_metadata_reader -t dev --profile <profile-name>
 ```
 
+## Spark runtime prerequisite
+
+The Spark test suite uses the bundled PySpark 4.x runtime. It requires a Java
+runtime capable of loading class-file version 61 or newer (Java 17+). Java 11
+fails before Spark starts with `UnsupportedClassVersionError`; this is an
+environment prerequisite, not an application-test result.
+
 Do not commit profile names, workspace URLs, run URLs, user emails, or tokens to the repository.
 
 ## Databricks Free/serverless workflow
