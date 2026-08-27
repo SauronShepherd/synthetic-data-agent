@@ -265,9 +265,7 @@ def main() -> None:
     roles = assign_roles(role_columns)
     upstream_sensitivity: set[str] = set()
     for ref in upstream_refs:
-        artifact_content: dict[str, object] = (
-            ref.content if isinstance(ref.content, dict) else {}
-        )
+        artifact_content: dict[str, object] = ref.content if isinstance(ref.content, dict) else {}
         signals: object = artifact_content.get("sensitivity_signals", {})
         if isinstance(signals, dict):
             upstream_sensitivity.update(name for name, value in signals.items() if value)
@@ -391,6 +389,29 @@ def main() -> None:
                         {"outcome": outcome},
                         support,
                         data,
+                    )
+                )
+        for outcome in numeric[:10]:
+            rows = (
+                spark_conditional_distribution(source, (driver,), outcome)
+                .where(F.col("support_rows") >= args.min_support_rows)
+                .where(F.col("support_rows") / F.lit(max(source_count, 1)) >= args.min_support_rate)
+                .limit(detector.config.max_candidates)
+                .collect()
+            )
+            for row in rows:
+                data = row.asDict()
+                support = int(data.pop("support_rows"))
+                patterns.append(
+                    detector._pattern(
+                        analysis_id or "pattern-run",
+                        source_table,
+                        PatternFamily.CONDITIONAL_DISTRIBUTION,
+                        (driver, outcome),
+                        {driver: data.pop(driver)},
+                        {"outcome": outcome},
+                        support,
+                        {**data, "outcome_kind": "numeric", "method": "exact"},
                     )
                 )
     for outcome in columns:
