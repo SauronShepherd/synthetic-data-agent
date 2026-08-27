@@ -360,6 +360,22 @@ def test_coordinator_emits_segment_fanout_from_authorized_relationship_rows() ->
     assert fanout[0].metric["zero_child_count"] == 1
 
 
+def test_coordinator_roles_exclude_entity_columns_from_driver_candidates() -> None:
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        [
+            {"customer_id": "c1", "segment": "A", "amount": 10},
+            {"customer_id": "c2", "segment": "A", "amount": 20},
+            {"customer_id": "c3", "segment": "B", "amount": 30},
+        ],
+        table="main.orders",
+        input_refs=PatternInputRefs("meta", ("profile",), "rel", "graph"),
+        run_id="role-contract",
+        environment="dev",
+        selected_tables=("main.orders",),
+    )
+    assert all("customer_id" not in pattern.columns for pattern in result.patterns)
+
+
 def test_candidates_are_bounded_and_deterministic() -> None:
     columns = {f"c{i}": "double" for i in range(20)}
     config = PatternConfig(max_candidates=7)
