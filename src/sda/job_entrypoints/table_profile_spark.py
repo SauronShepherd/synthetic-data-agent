@@ -394,6 +394,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             checksum=fingerprint(profile.to_dict()),
             summary=profile.agent_summary,
             warnings=profile.warnings,
+            content=profile.to_dict(),
             input_artifact_ids=(
                 (profile.metadata_inventory_id,) if profile.metadata_inventory_id else ()
             ),

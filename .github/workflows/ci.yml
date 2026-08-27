@@ -60,6 +60,10 @@ jobs:
       - name: Verify controlled-target preflight rejects missing identities
         run: |
           if python scripts/preflight_bundle.py --target staging; then exit 1; fi
+      - name: Validate deployment targets
+        run: |
+          python scripts/validate_bundle_config.py --target staging
+          python scripts/validate_bundle_config.py --target prod
 
   postgres-integration:
     runs-on: ubuntu-latest

@@ -203,6 +203,7 @@ def artifact_ref_to_registry_row(ref: ArtifactRef) -> dict[str, object]:
         "input_artifact_ids_json": json.dumps(sorted(set(ref.input_artifact_ids))),
         "warnings_json": json.dumps(sorted(set(ref.warnings))),
         "summary": ref.summary,
+        "content_json": json.dumps(ref.content, sort_keys=True, default=str),
         "error_code": ref.error_code,
         "error_message_safe": ref.error_message_safe,
         "registry_schema_version": "2",

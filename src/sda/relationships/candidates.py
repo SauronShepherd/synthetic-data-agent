@@ -15,6 +15,7 @@ class KeyCandidate:
     origin: str = "inferred"
     declared_constraint: str | None = None
     hints: tuple[str, ...] = ()
+    match_option: str | None = None
 
     @property
     def width(self) -> int:
@@ -135,7 +136,16 @@ def discover_candidates(
             pcols = tuple(getattr(constraint, "referenced_columns", ()))
             if parent and cols and len(cols) == len(pcols) <= max_width:
                 out.append(
-                    KeyCandidate(child_name, cols, parent, pcols, "declared", constraint.name)
+                    KeyCandidate(
+                        child_name,
+                        cols,
+                        parent,
+                        pcols,
+                        "declared",
+                        constraint.name,
+                        (),
+                        getattr(constraint, "match_option", None),
+                    )
                 )
                 count += 1
         if count >= max_per_table:

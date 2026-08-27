@@ -39,6 +39,18 @@ def test_join_metrics_exclude_nulls_and_report_orphans() -> None:
     assert result.cardinality == "many_to_one"
 
 
+def test_match_full_rejects_partial_composite_foreign_keys() -> None:
+    result = measure_join(
+        [{"country": "ES", "number": 1}],
+        [{"country": "ES", "number": None}],
+        ("country", "number"),
+        ("country", "number"),
+        match_option="FULL",
+    )
+    assert "match_full_partial_key_invalid" in result.warnings
+    assert "candidate_rejected" in result.warnings
+
+
 def test_detector_preserves_declared_composite_column_order() -> None:
     parent = Table(
         (Column("country"), Column("number")), (Constraint("PRIMARY KEY", ("country", "number")),)

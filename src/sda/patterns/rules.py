@@ -8,11 +8,10 @@ from sda.patterns.models import PatternOrigin
 
 
 class RuleStrength(IntEnum):
-    OBSERVED = 1
+    ANOMALY_SIGNAL = 1
     PROBABILISTIC = 2
     CONDITIONAL = 3
     HARD = 4
-    ANOMALY_SIGNAL = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,7 +20,7 @@ class BusinessRule:
     table: str
     predicates: tuple[dict[str, Any], ...]
     origin: PatternOrigin = PatternOrigin.USER_PROVIDED
-    strength: RuleStrength = RuleStrength.CONDITIONAL
+    strength: RuleStrength = RuleStrength.PROBABILISTIC
     approved: bool = False
     effective_from: str | None = None
     effective_to: str | None = None

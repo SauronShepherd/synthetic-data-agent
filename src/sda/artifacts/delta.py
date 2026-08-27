@@ -124,6 +124,7 @@ def persist_artifact_registry(spark: Any, ref: ArtifactRef, location: str) -> No
         ),
         "warnings_json": json.dumps(ref.warnings),
         "input_artifact_ids_json": json.dumps(sorted(ref.input_artifact_ids)),
+        "content_json": json.dumps(ref.content, sort_keys=True, default=str),
     }
     try:
         try:

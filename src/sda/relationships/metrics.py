@@ -43,6 +43,7 @@ def measure_join(
     child: Iterable[dict[str, Any]],
     parent_columns: tuple[str, ...],
     child_columns: tuple[str, ...],
+    match_option: str | None = None,
 ) -> JoinMetrics:
     parent_data = list(parent)
     child_rows = list(child)
@@ -77,6 +78,19 @@ def measure_join(
         )
         else ()
     )
+    partial_keys = any(
+        any(v is None for v in key) and not all(v is None for v in key)
+        for key in raw_child_keys
+    )
+    if (match_option or "").upper() == "FULL" and partial_keys:
+        # MATCH FULL requires a composite foreign key to be either entirely
+        # NULL or entirely populated.  Partial keys are invalid evidence and
+        # must not be treated as ordinary orphans/joins.
+        warnings = tuple(
+            dict.fromkeys(
+                (*warnings, "match_full_partial_key_invalid", "candidate_rejected")
+            )
+        )
     fanout = [child_reference_counts.get(key, 0) for key in pset]
     sorted_fanout = sorted(fanout)
     p95_index = min(len(sorted_fanout) - 1, int(len(sorted_fanout) * 0.95)) if sorted_fanout else 0

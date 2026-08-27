@@ -5,11 +5,12 @@ from datetime import UTC, datetime
 from typing import Any, overload
 
 from sda.artifacts.fingerprint import fingerprint
-from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType
+from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType, SourceReference
+from sda.patterns.actions import GenerationAction, ValidationAction
 from sda.patterns.candidates import generate_candidates
-from sda.patterns.conditionals import conditional_counts
+from sda.patterns.conditionals import conditional_counts, deterministic_fallback_plan
 from sda.patterns.conflicts import resolve_rule_conflicts
-from sda.patterns.correlations import pearson
+from sda.patterns.correlations import correlation_outlier_diagnostic, pearson, spearman
 from sda.patterns.fanout import fanout_by_segment
 from sda.patterns.loaders import load_pattern_inputs
 from sda.patterns.missingness import conditional_missingness
@@ -24,10 +25,14 @@ from sda.patterns.models import (
     PatternLifecycle,
     PatternOrigin,
 )
+from sda.patterns.numeric import numeric_by_group
 from sda.patterns.precedence import RulePrecedencePolicy
+from sda.patterns.roles import assign_roles
 from sda.patterns.rules import evaluate_rule
+from sda.patterns.safety import safe_pattern_value
 from sda.patterns.scoring import EvidenceQuality, PatternScoringPolicy
-from sda.patterns.temporal import temporal_order
+from sda.patterns.stability import stability
+from sda.patterns.temporal import ordered_events, temporal_order
 from sda.patterns.temporal_lags import lag_distribution
 from sda.patterns.transitions import state_transitions
 
@@ -112,6 +117,7 @@ class PatternDetector:
         if table is None:
             raise ValueError("table is required")
         rows = rows or []
+        self._sensitive_columns: set[str] = set()
         if len(rows) > self.config.max_rows_scanned:
             raise ValueError(
                 f"input rows exceed max_rows_scanned budget ({self.config.max_rows_scanned})"
@@ -150,6 +156,13 @@ class PatternDetector:
                 metric = pearson(
                     [pair[0] for pair in pairs],
                     [pair[1] for pair in pairs],
+                )
+                if self.config.include_spearman:
+                    metric["spearman"] = spearman(
+                        [pair[0] for pair in pairs], [pair[1] for pair in pairs]
+                    )
+                metric["correlation_outlier_diagnostic"] = correlation_outlier_diagnostic(
+                    [pair[0] for pair in pairs], [pair[1] for pair in pairs]
                 )
                 if (
                     metric["valid_pair_count"] < self.config.min_support_rows
@@ -255,6 +268,22 @@ class PatternDetector:
                             order_column=order,
                             max_states=self.config.max_segment_cardinality,
                         )
+                        ingestion = next(
+                            (
+                                name
+                                for name in names
+                                if name.lower()
+                                in {"ingested_at", "ingestion_at", "ingestion_time"}
+                            ),
+                            None,
+                        )
+                        metric["event_order"] = ordered_events(
+                            rows,
+                            entity_key=entity,
+                            event_time=order,
+                            state_column=state,
+                            ingestion_time=ingestion,
+                        )
                         support = sum(
                             int(item["transition_count"]) for item in metric["transitions"]
                         )
@@ -327,6 +356,17 @@ class PatternDetector:
             raise ValueError(
                 "coordinated pattern detection requires available input rows; received none"
             )
+        if self.config.mode == "quick" and self.config.sample_fraction < 1.0:
+            threshold = int(self.config.sample_fraction * 1_000_000)
+            rows = [
+                row
+                for row in rows
+                if int(fingerprint({"row": row, "seed": self.config.sample_seed})[:12], 16)
+                % 1_000_000
+                < threshold
+            ]
+            if not rows:
+                raise ValueError("quick-mode sample contains no rows")
         table = selected_tables[0] if selected_tables else "unknown.unknown.unknown"
         input_ids = (
             input_refs.metadata_artifact_id,
@@ -344,11 +384,22 @@ class PatternDetector:
                 "rules": tuple(sorted(getattr(rule, "rule_id", str(rule)) for rule in rules)),
             }
         )
+        upstream_artifacts: tuple[ArtifactRef, ...] = ()
+        self._source_compatible = True
         if self.artifact_registry is not None:
             # Validate every upstream artifact through the shared contract before
             # reuse or detection; callers may additionally provide the bounded
             # row evidence used by this local coordinator.
-            load_pattern_inputs(self.artifact_registry, input_refs, environment=environment)
+            upstream_artifacts = load_pattern_inputs(
+                self.artifact_registry, input_refs, environment=environment
+            )
+            snapshots: list[str] = [
+                reference.source_version
+                for artifact in upstream_artifacts
+                for reference in artifact.source_references
+                if reference.source_version is not None
+            ]
+            self._source_compatible = not snapshots or len(set(snapshots)) == 1
             reusable = self.artifact_registry.find_reusable(
                 artifact_type=ArtifactType.PATTERN_REGISTRY,
                 reuse_fingerprint=reuse_fingerprint,
@@ -358,7 +409,12 @@ class PatternDetector:
                 return PatternDetectionResult(
                     patterns=(),
                     artifact_ref=reusable,
-                    receipt=PatternExecutionReceipt(),
+                    receipt=PatternExecutionReceipt(
+                        source_tables_scanned=len(selected_tables),
+                        source_tables_reused=len(selected_tables),
+                        sample_fraction=self.config.sample_fraction,
+                        sample_seed=self.config.sample_seed,
+                    ),
                     warnings=("pattern_artifact_reused",),
                 )
         names = (
@@ -375,7 +431,50 @@ class PatternDetector:
             else "string"
             for name in names
         }
-        candidates = generate_candidates(table, types, config=self.config)
+        metadata_content: dict[str, Any] = upstream_artifacts[0].content if upstream_artifacts else {}
+        profile_content: dict[str, Any] = upstream_artifacts[1].content if len(upstream_artifacts) > 1 else {}
+        metadata_table = next(
+            (
+                item for item in metadata_content.get("tables", ())
+                if item.get("full_name") == table
+            ),
+        ) if isinstance(metadata_content.get("tables", ()), list) else None
+        raw_sensitivity = (
+            metadata_table.get("sensitivity_signals", {}) if metadata_table else
+            metadata_content.get("sensitivity_signals", {})
+        )
+        sensitivity = raw_sensitivity if isinstance(raw_sensitivity, dict) else {}
+        self._sensitive_columns = {
+            name for name, signals in sensitivity.items() if signals
+        }
+        role_columns = [
+            {"name": name, "data_type": types[name], "sensitivity": sensitivity.get(name, "")}
+            for name in names
+        ]
+        roles = assign_roles(role_columns)
+        profiled_columns = tuple(
+            {
+                "name": item.get("column_name", item.get("name")),
+                "data_type": item.get("declared_data_type", item.get("data_type", "")),
+                "sensitivity": item.get("sensitivity_signals", ()),
+            }
+            for item in profile_content.get("column_profiles", ())
+            if item.get("column_name", item.get("name"))
+        )
+        if profiled_columns:
+            roles = assign_roles(tuple(profiled_columns))
+        # Numeric columns are outcomes for correlation/distribution evidence;
+        # drivers may be categorical or numeric, while excluded/sensitive fields
+        # never enter either role.
+        excluded = set(roles.get("excluded", ()))
+        roles["outcome"] = tuple(
+            name for name in names if types.get(name) == "double" and name not in excluded
+        )
+        roles["driver"] = tuple(name for name in names if name not in excluded)
+        for override in role_overrides:
+            if override.table == table:
+                roles[override.role] = tuple(sorted(set(roles.get(override.role, ())) | {override.column}))
+        candidates = generate_candidates(table, types, roles=roles, config=self.config)
         candidate_count_by_family: dict[str, int] = {}
         for candidate in candidates:
             family = candidate.family.value
@@ -386,15 +485,25 @@ class PatternDetector:
             if pattern.family in {PatternFamily.CORRELATION, PatternFamily.TEMPORAL_ORDER}
         )
         # Add bounded conditional and lifecycle evidence to the same aggregate result.
-        categorical = [name for name in names if types.get(name) == "string"]
-        numeric = [name for name in names if types.get(name) == "double"]
+        categorical = [name for name in roles.get("driver", ()) if types.get(name) == "string"]
+        numeric = [name for name in roles.get("outcome", ()) if types.get(name) == "double"]
+        def supported(support: int, population: int | None = None) -> bool:
+            denominator = population if population is not None else len(rows)
+            return support >= self.config.min_support_rows and (
+                denominator == 0 or support / denominator >= self.config.min_support_rate
+            )
         for driver in categorical[: self.config.max_segment_cardinality]:
             for outcome in numeric[: self.config.max_candidates]:
                 cells = conditional_counts(
                     rows, (driver,), outcome, max_cells=self.config.max_candidates
                 )
                 for cell in cells:
-                    if cell["count"] >= self.config.min_support_rows:
+                    condition_rows = sum(
+                        1
+                        for row in rows
+                        if all(row.get(key) == value for key, value in cell["condition"].items())
+                    )
+                    if supported(cell["count"], condition_rows):
                         patterns += (
                             self._pattern(
                                 run_id,
@@ -407,6 +516,13 @@ class PatternDetector:
                                 {"conditional_rate": cell["rate"], "method": "exact"},
                             ),
                         )
+                for group in numeric_by_group(rows, group=driver, outcome=outcome):
+                    if supported(group["count"]):
+                        patterns += (self._pattern(
+                            run_id, table, PatternFamily.CONDITIONAL_DISTRIBUTION,
+                            (driver, outcome), {driver: group["group"]}, {"outcome": outcome},
+                            group["count"], {**group, "global_count": len(rows), "method": "exact"},
+                        ),)
         # Emit conditional-missingness findings for every bounded driver/outcome pair.
         for driver in categorical[: self.config.max_candidates]:
             driver_values = sorted({row.get(driver) for row in rows}, key=lambda value: str(value))[
@@ -439,6 +555,33 @@ class PatternDetector:
             transition_metric = state_transitions(
                 rows, entity_key=entity, state_column=state, order_column=order
             )
+            ingestion = next(
+                (
+                    name
+                    for name in names
+                    if name.lower() in {"ingested_at", "ingestion_at", "ingestion_time"}
+                ),
+                None,
+            )
+            event_order_metric = ordered_events(
+                rows,
+                entity_key=entity,
+                event_time=order,
+                state_column=state,
+                ingestion_time=ingestion,
+            )
+            transition_metric = {
+                **transition_metric,
+                "event_order": event_order_metric,
+                "warnings": tuple(
+                    dict.fromkeys(
+                        (
+                            *transition_metric.get("warnings", ()),
+                            *event_order_metric.get("warnings", ()),
+                        )
+                    )
+                ),
+            }
             for transition in transition_metric.get("transitions", ()):
                 if transition["transition_count"] >= self.config.min_support_rows:
                     patterns += (
@@ -473,6 +616,7 @@ class PatternDetector:
                             "satisfaction_rate": evaluation.satisfaction_rate,
                             "violation_rate": evaluation.violation_rate,
                             "method": evaluation.validation_mode,
+                            "rule": rule,
                         },
                         origin=rule.origin,
                     ),
@@ -537,20 +681,25 @@ class PatternDetector:
         rejected = sum(p.decision == "rejected" for p in patterns)
         insufficient = sum(p.decision == "insufficient_evidence" for p in patterns)
         rule_conflicts = resolve_rule_conflicts(list(rules), self.rule_precedence_policy)
+        emitted_by_family: dict[str, int] = {}
+        for pattern in patterns:
+            emitted_by_family[pattern.family.value] = emitted_by_family.get(pattern.family.value, 0) + 1
+        skipped_by_reason = {
+            f"{family}_insufficient_support": count - emitted_by_family.get(family, 0)
+            for family, count in candidate_count_by_family.items()
+            if count > emitted_by_family.get(family, 0)
+        }
         receipt = PatternExecutionReceipt(
             candidate_count_total=len(candidates),
             candidate_count_by_family=candidate_count_by_family,
+            candidate_skipped_by_reason=skipped_by_reason,
             patterns_emitted=len(patterns),
             patterns_accepted_for_planning=accepted,
             patterns_review_required=len(patterns) - accepted - rejected - insufficient,
             patterns_rejected=rejected,
             patterns_insufficient=insufficient,
             conflicts_found=len(rule_conflicts),
-            rules_evaluated=sum(
-                1
-                for rule in rules
-                if evaluate_rule(rows, rule).population_rows >= self.config.min_support_rows
-            ),
+            rules_evaluated=len(rules),
             source_tables_scanned=len(selected_tables),
             sample_fraction=self.config.sample_fraction,
             sample_seed=self.config.sample_seed,
@@ -571,7 +720,14 @@ class PatternDetector:
                 configuration_hash=self.config.configuration_hash,
                 primary_location=getattr(self.persistence, "registry_table", ""),
                 related_locations={"evidence": getattr(self.persistence, "evidence_table", "")},
-                source_references=(),
+                source_references=(
+                    tuple(
+                        reference
+                        for artifact in upstream_artifacts
+                        for reference in artifact.source_references
+                    )
+                    or (SourceReference(table, "TABLE", "best_effort", None, None, None),)
+                ),
                 checksum=reuse_fingerprint,
                 summary="SDA 07 pattern registry",
                 input_artifact_ids=tuple(sorted(input_ids)),
@@ -596,6 +752,7 @@ class PatternDetector:
                     "reason_code": "observed_candidate_rule_requires_domain_approval",
                 }
                 for p in patterns
+                if p.review_status == "required" or p.decision == "review_required"
             )
             + tuple(
                 {
@@ -620,22 +777,41 @@ class PatternDetector:
         support_rate: float | None = None,
         origin: PatternOrigin = PatternOrigin.OBSERVED,
     ) -> Pattern:
+        sensitive_columns: set[str] = getattr(self, "_sensitive_columns", set())
+        def protect(payload: dict[str, Any]) -> dict[str, Any]:
+            protected = dict(payload)
+            for key in tuple(protected):
+                if key in sensitive_columns:
+                    safe = safe_pattern_value(
+                        value=protected[key],
+                        column_policy=("redact_values" if self.config.sensitive_value_policy == "fingerprints_only" else "no_values"),
+                    )
+                    protected[key] = {"kind": safe.kind.value, "value": safe.value}
+            return protected
+        condition = protect(condition)
+        outcome = protect(outcome)
         pid = "pat_" + fingerprint(
             {
-                "analysis": analysis_id,
+                "analysis": self.config.configuration_hash,
                 "family": family.value,
                 "columns": columns,
                 "condition": condition,
             }
         )
+        stability_values = metric.get("stability_values")
+        stability_result = stability(list(stability_values)) if stability_values else None
         decision = self.scoring_policy.decide(
             support_rows=support,
             metric=metric.get("value"),
             quality=EvidenceQuality(
                 support_quality="sufficient",
                 validation_mode=metric.get("method", "exact"),
-                stability_quality="unknown",
-                source_quality="compatible",
+                stability_quality=(
+                    "stable" if stability_result is not None and stability_result.get("stable") is True
+                    else "unstable" if stability_result is not None
+                    else str(metric.get("stability", "unavailable"))
+                ),
+                source_quality=("compatible" if metric.get("source_compatible", getattr(self, "_source_compatible", True)) else "mismatch"),
             ),
             origin=origin,
         ).value
@@ -648,9 +824,10 @@ class PatternDetector:
             violation_rate = violation_rows / population_rows
         evidence_quality = {
             "validation_mode": metric.get("method", "exact"),
+            "source_quality": "compatible" if metric.get("source_compatible", getattr(self, "_source_compatible", True)) else "mismatch",
             "support_quality": "sufficient",
             "confidence": metric.get("confidence"),
-            "stability": metric.get("stability", "unknown"),
+            "stability": stability_result or metric.get("stability", "unavailable"),
             "population_rows": population_rows,
             "sampling": {
                 "fraction": self.config.sample_fraction,
@@ -660,6 +837,28 @@ class PatternDetector:
             "violation_rate": violation_rate,
             "limitations": tuple(metric.get("limitations", ())),
         }
+        generation_kind = {
+            PatternFamily.CORRELATION: "preserve_numeric_dependency",
+            PatternFamily.CONDITIONAL_DISTRIBUTION: "sample_conditional_distribution",
+            PatternFamily.CONDITIONAL_MISSINGNESS: "apply_conditional_missingness",
+            PatternFamily.FANOUT_BY_SEGMENT: "sample_child_count_by_parent_segment",
+            PatternFamily.TEMPORAL_ORDER: "sample_temporal_lag",
+            PatternFamily.TEMPORAL_LAG: "sample_temporal_lag",
+            PatternFamily.STATE_TRANSITION: "sample_next_state",
+        }.get(family, "review_pattern")
+        validation_kind = {
+            PatternFamily.CORRELATION: "compare_correlation",
+            PatternFamily.CONDITIONAL_DISTRIBUTION: "compare_conditional_distribution",
+            PatternFamily.CONDITIONAL_MISSINGNESS: "compare_null_probability",
+            PatternFamily.TEMPORAL_ORDER: "compare_lag_distribution",
+            PatternFamily.TEMPORAL_LAG: "compare_lag_distribution",
+            PatternFamily.STATE_TRANSITION: "compare_transition_probabilities",
+        }.get(family, "review_pattern")
+        fallback = deterministic_fallback_plan(
+            tuple(condition),
+            min_support_rows=self.config.min_support_rows,
+            min_support_rate=self.config.min_support_rate,
+        )
         return Pattern(
             pid,
             analysis_id,
@@ -677,29 +876,21 @@ class PatternDetector:
             warnings=("observed_pattern_requires_review",)
             if family is PatternFamily.BUSINESS_RULE
             else (),
-            generation_action={
-                "kind": {
-                    PatternFamily.CORRELATION: "preserve_numeric_dependency",
-                    PatternFamily.CONDITIONAL_DISTRIBUTION: "sample_conditional_distribution",
-                    PatternFamily.CONDITIONAL_MISSINGNESS: "apply_conditional_missingness",
-                    PatternFamily.FANOUT_BY_SEGMENT: "sample_child_count_by_parent_segment",
-                    PatternFamily.TEMPORAL_ORDER: "sample_temporal_lag",
-                    PatternFamily.TEMPORAL_LAG: "sample_temporal_lag",
-                    PatternFamily.STATE_TRANSITION: "sample_next_state",
-                }.get(family, "review_pattern"),
-                "evidence_pattern_id": pid,
-            },
-            validation_action={
-                "kind": {
-                    PatternFamily.CORRELATION: "compare_correlation",
-                    PatternFamily.CONDITIONAL_DISTRIBUTION: "compare_conditional_distribution",
-                    PatternFamily.CONDITIONAL_MISSINGNESS: "compare_null_probability",
-                    PatternFamily.TEMPORAL_ORDER: "compare_lag_distribution",
-                    PatternFamily.TEMPORAL_LAG: "compare_lag_distribution",
-                    PatternFamily.STATE_TRANSITION: "compare_transition_probabilities",
-                }.get(family, "review_pattern")
-            },
+            generation_action=GenerationAction(
+                kind=generation_kind, evidence_pattern_id=pid,
+                condition=tuple(condition),
+                fallback_levels=tuple(level.condition_columns for level in fallback.levels),
+            ).to_dict(),
+            validation_action=ValidationAction(
+                kind=validation_kind, evidence_pattern_id=pid,
+                metric=family.value, tolerance=metric.get("tolerance"),
+            ).to_dict(),
             review_status="required" if family is PatternFamily.BUSINESS_RULE else "not_required",
+            rule_strength=(
+                metric["rule"].strength.name.lower()
+                if metric.get("rule") is not None
+                else "probabilistic_pattern"
+            ),
             lifecycle=(
                 PatternLifecycle.REJECTED
                 if decision == "rejected"

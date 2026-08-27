@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 from sda.patterns.detector import PatternDetector
 from sda.patterns.models import PatternConfig
+from sda.patterns.roles import assign_roles
 from sda.runtime.identifiers import QualifiedName
 
 
@@ -44,13 +45,31 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--relationship-registry-table", default="")
     p.add_argument("--dependency-graph-registry-table", default="")
     p.add_argument("--dependency-graph-artifact-id", default="")
+    p.add_argument("--fanout-parent-table", default="")
+    p.add_argument("--fanout-child-table", default="")
+    p.add_argument("--fanout-parent-key", default="")
+    p.add_argument("--fanout-child-key", default="")
+    p.add_argument("--fanout-segment", default="")
     p.add_argument("--selected-tables", default="")
     p.add_argument("--min-support-rows", type=int, default=100)
     p.add_argument("--min-support-rate", type=float, default=0.001)
     p.add_argument("--sample-fraction", type=float, default=0.1)
     p.add_argument("--sample-seed", type=int, default=1729)
     p.add_argument("--max-rows-scanned", type=int, default=100_000)
+    p.add_argument("--include-spearman", nargs="?", const=True, default=False, type=_bool_arg)
+    p.add_argument("--allow-best-effort-snapshot", nargs="?", const=True, default=False, type=_bool_arg)
     return p.parse_args()
+
+
+def _bool_arg(value: str | bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError("expected a boolean value")
 
 
 def main() -> None:
@@ -98,18 +117,42 @@ def main() -> None:
         )
         if value
     )
-    from sda.artifacts.models import ArtifactType
+    from sda.artifacts.models import ArtifactRef, ArtifactType
     from sda.artifacts.registry import SparkArtifactRegistry
+    from sda.patterns.loaders import load_pattern_inputs
+    from sda.patterns.models import PatternInputRefs
+
+    upstream_refs: tuple[ArtifactRef, ...] = ()
 
     if input_ids and not args.artifact_registry_table:
         raise SystemExit("pattern runs require an artifact registry table")
     if args.artifact_registry_table and input_ids:
         registry = SparkArtifactRegistry(spark, args.artifact_registry_table)
+        # Use the same fail-closed input contract as the local coordinator.
+        # Legacy relationship/graph registries remain an explicit compatibility
+        # fallback for deployments that have not migrated those artifacts.
+        if all((args.metadata_artifact_id, args.relationship_artifact_id,
+                args.dependency_graph_artifact_id)) and profile_ids:
+            try:
+                upstream_refs = load_pattern_inputs(
+                    registry,
+                    PatternInputRefs(
+                        args.metadata_artifact_id,
+                        profile_ids,
+                        args.relationship_artifact_id,
+                        args.dependency_graph_artifact_id,
+                    ),
+                    environment=args.environment,
+                )
+            except Exception as exc:
+                if not (args.relationship_registry_table or args.dependency_graph_registry_table):
+                    raise SystemExit(f"unable to validate pattern inputs: {exc}") from exc
         expected_types = (
-            ArtifactType.METADATA_INVENTORY,
-            *(ArtifactType.TABLE_PROFILE for _ in profile_ids),
-            ArtifactType.RELATIONSHIP_ANALYSIS,
-            ArtifactType.DEPENDENCY_GRAPH,
+            (ArtifactType.METADATA_INVENTORY,) if args.metadata_artifact_id else ()
+        ) + tuple(ArtifactType.TABLE_PROFILE for _ in profile_ids) + (
+            (ArtifactType.RELATIONSHIP_ANALYSIS,) if args.relationship_artifact_id else ()
+        ) + (
+            (ArtifactType.DEPENDENCY_GRAPH,) if args.dependency_graph_artifact_id else ()
         )
         for artifact_id, expected_type in zip(input_ids, expected_types, strict=True):
             try:
@@ -137,7 +180,48 @@ def main() -> None:
                 )
     from pyspark.sql import functions as F
 
-    source = spark.table(source_name.quoted)
+    source_version = None
+    snapshot_kind = "best_effort"
+    snapshot_timestamp = None
+    try:
+        history = (
+            spark.sql(f"DESCRIBE HISTORY {source_name.quoted}")
+            .select("version", "timestamp", "operation")
+            .orderBy("version", ascending=False)
+            .limit(100)
+            .collect()
+        )
+        if history:
+            source_version = str(history[0]["version"])
+            snapshot_timestamp = str(history[0]["timestamp"])
+            snapshot_kind = "delta_version"
+    except Exception as exc:
+        if not args.allow_best_effort_snapshot:
+            raise SystemExit(
+                "reproducible source snapshot unavailable; pass --allow-best-effort-snapshot"
+            ) from exc
+    if source_version is None and not args.allow_best_effort_snapshot:
+        raise SystemExit(
+            "reproducible source snapshot unavailable; pass --allow-best-effort-snapshot"
+        )
+    upstream_versions = {
+        reference.source_version
+        for ref in upstream_refs
+        for reference in ref.source_references
+        if reference.full_name == source_table
+        and reference.snapshot_kind == "delta_version"
+        and reference.source_version
+    }
+    if source_version is not None and upstream_versions and upstream_versions != {source_version}:
+        raise SystemExit(
+            "upstream artifacts are not compatible with the source snapshot: "
+            f"source version {source_version}, upstream versions {sorted(upstream_versions)}"
+        )
+    source = (
+        spark.sql(f"SELECT * FROM {source_name.quoted} VERSION AS OF {int(source_version)}")
+        if source_version is not None
+        else spark.table(source_name.quoted)
+    )
     if args.mode == "quick" and args.sample_fraction < 1:
         source = source.sample(
             withReplacement=False,
@@ -148,10 +232,32 @@ def main() -> None:
     if source_count > args.max_rows_scanned:
         raise SystemExit(f"source rows exceed max_rows_scanned budget ({args.max_rows_scanned})")
     columns = {field.name: field.dataType.simpleString() for field in source.schema.fields}
+    role_columns = [
+        {
+            "name": field.name,
+            "data_type": field.dataType.simpleString(),
+            "sensitivity": (),
+        }
+        for field in source.schema.fields
+    ]
+    roles = assign_roles(role_columns)
+    upstream_sensitivity: set[str] = set()
+    for ref in upstream_refs:
+        content: dict[str, object] = ref.content if isinstance(ref.content, dict) else {}
+        signals: object = content.get("sensitivity_signals", {})
+        if isinstance(signals, dict):
+            upstream_sensitivity.update(name for name, value in signals.items() if value)
+        profiles = content.get("column_profiles", ())
+        for profile in profiles if isinstance(profiles, (list, tuple)) else ():
+            if isinstance(profile, dict) and profile.get("sensitivity_signals"):
+                upstream_sensitivity.add(str(profile.get("column_name", "")))
+    if upstream_sensitivity:
+        roles["excluded"] = tuple(sorted(set(roles.get("excluded", ())) | upstream_sensitivity))
+    excluded = set(roles.get("excluded", ()))
     numeric = [
         name
         for name, dtype in columns.items()
-        if dtype in {"double", "float", "int", "bigint", "decimal"}
+        if dtype in {"double", "float", "int", "bigint", "decimal"} and name not in excluded
     ]
     detector = PatternDetector(
         PatternConfig(
@@ -167,7 +273,9 @@ def main() -> None:
     from sda.patterns.spark_metrics import (
         spark_conditional_distribution,
         spark_conditional_missingness,
+        spark_fanout_by_segment,
         spark_pearson,
+        spark_spearman,
         spark_state_transitions,
         spark_temporal_order,
     )
@@ -202,6 +310,22 @@ def main() -> None:
                         row,
                     )
                 )
+            if args.include_spearman:
+                spearman_rows = (
+                    spark_spearman(source, left, right)
+                    .where(F.col("valid_pair_count") >= args.min_support_rows)
+                    .limit(1)
+                    .collect()
+                )
+                if spearman_rows:
+                    row = spearman_rows[0].asDict()
+                    if row["value"] is not None and int(row["valid_pair_count"]) / max(source_count, 1) >= args.min_support_rate:
+                        row["association_name"] = "spearman"
+                        patterns.append(detector._pattern(
+                            analysis_id or "pattern-run", source_table,
+                            PatternFamily.CORRELATION, (left, right), {}, {"outcome": right},
+                            int(row["valid_pair_count"]), row,
+                        ))
     # Execute the remaining table-local families on bounded aggregate results.
     categorical = [
         name
@@ -323,6 +447,30 @@ def main() -> None:
                         data,
                     )
                 )
+    if all((args.fanout_parent_table, args.fanout_child_table, args.fanout_parent_key,
+            args.fanout_child_key, args.fanout_segment)):
+        parent = spark.table(QualifiedName.parse(args.fanout_parent_table).quoted)
+        child = spark.table(QualifiedName.parse(args.fanout_child_table).quoted)
+        fanout_rows = spark_fanout_by_segment(
+            parent, child,
+            parent_keys=tuple(args.fanout_parent_key.split(",")),
+            child_keys=tuple(args.fanout_child_key.split(",")),
+            segments=tuple(args.fanout_segment.split(",")),
+        ).where(F.col("parent_count") >= args.min_support_rows).collect()
+        parent_count = parent.count()
+        for row in fanout_rows:
+            data = row.asDict()
+            support = int(data.pop("parent_count"))
+            if support / max(parent_count, 1) < args.min_support_rate:
+                continue
+            segments = tuple(args.fanout_segment.split(","))
+            condition = {segment: data.pop(segment) for segment in segments}
+            patterns.append(detector._pattern(
+                analysis_id or "pattern-run", source_table, PatternFamily.FANOUT_BY_SEGMENT,
+                segments, condition,
+                {"child_count": tuple(args.fanout_child_key.split(","))}, support, data,
+            ))
+
     # Multiple families can describe the same finding; persist one content-id row.
     patterns = [
         replace(pattern, support_rate=pattern.support_rows / source_count)
@@ -356,9 +504,9 @@ def main() -> None:
                 "evidence": args.pattern_evidence_table,
                 "registry": args.artifact_registry_table,
             },
-            source_references=(
-                SourceReference(source_table, "TABLE", "best_effort", None, None, None),
-            ),
+            source_references=(SourceReference(
+                source_table, "TABLE", snapshot_kind, source_version, snapshot_timestamp, None
+            ),),
             checksum=fingerprint([pattern.to_dict() for pattern in patterns]),
             summary="Spark-native pattern registry",
             input_artifact_ids=input_ids,
@@ -388,7 +536,14 @@ def main() -> None:
             )
     print(
         json.dumps(
-            {"pattern_count": len(patterns), "pattern_ids": [p.pattern_id for p in patterns]},
+            {
+                "pattern_count": len(patterns),
+                "pattern_ids": [p.pattern_id for p in patterns],
+                "family_counts": {
+                    family: sum(pattern.family.value == family for pattern in patterns)
+                    for family in sorted({pattern.family.value for pattern in patterns})
+                },
+            },
             sort_keys=True,
         )
     )

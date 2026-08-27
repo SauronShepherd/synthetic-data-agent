@@ -2,6 +2,9 @@ bundle:
   name: synthetic-data-agent
   databricks_cli_version: ">= 0.250.0"
 
+experimental:
+  skip_artifact_cleanup: true
+
 include:
   - bundle/resources.yml
   - bundle/targets/*.yml

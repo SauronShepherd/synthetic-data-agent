@@ -13,30 +13,34 @@ targets:
       - group_name: ${var.observer_group_name}
         level: CAN_VIEW
     variables:
-      sda_profile_catalog: sda_staging
-      sda_profile_schema: profiles
-      sda_metadata_inventory_table: sda_staging.profiles.metadata_inventory
-      sda_manifest_table: sda_staging.profiles.run_manifests
-      sda_artifact_registry_table: sda_staging.profiles.artifact_registry
-      sda_pattern_registry_table: sda_staging.profiles.pattern_registry
-      sda_pattern_evidence_table: sda_staging.profiles.pattern_evidence
+      runtime_service_principal_name: 5d652ec6-3ac4-45c1-903f-f684d737da28
+      platform_admin_group_name: sda-platform-admins
+      operator_group_name: sda-operators
+      observer_group_name: sda-observers
+      sda_profile_catalog: workspace
+      sda_profile_schema: sda_staging
+      sda_metadata_inventory_table: workspace.sda_staging.metadata_inventory
+      sda_manifest_table: workspace.sda_staging.run_manifests
+      sda_artifact_registry_table: workspace.sda_staging.artifact_registry
+      sda_pattern_registry_table: workspace.sda_staging.pattern_registry
+      sda_pattern_evidence_table: workspace.sda_staging.pattern_evidence
       sda_pattern_mode: full
       sda_pattern_min_support_rows: "100"
       sda_pattern_min_support_rate: "0.001"
       sda_pattern_sample_fraction: "0.1"
       sda_pattern_sample_seed: "1729"
       sda_pattern_max_rows_scanned: "100000"
-      sda_scope_catalog: sda_staging
-      sda_scope_schema: sample_source
-      sda_relationship_parent_table: __REQUIRED_CONTROLLED_PARENT_TABLE__
-      sda_relationship_child_table: __REQUIRED_CONTROLLED_CHILD_TABLE__
-      sda_relationship_output_table: sda_staging.profiles.relationship_analysis_scope
-      sda_graph_output_table: sda_staging.profiles.dependency_graph_scope
-      catalog_name: sda_staging
+      sda_scope_catalog: workspace
+      sda_scope_schema: sda_staging
+      sda_relationship_parent_table: workspace.sda_staging.controlled_users
+      sda_relationship_child_table: workspace.sda_staging.controlled_bookings
+      sda_relationship_output_table: workspace.sda_staging.relationship_analysis_scope
+      sda_graph_output_table: workspace.sda_staging.dependency_graph_scope
+      catalog_name: workspace
       sda_allow_best_effort_snapshot: "false"
       sda_allow_profile_schema_create: "false"
-      sda_profile_source_table: __REQUIRED_CONTROLLED_PROFILE_TABLE__
-      sda_catalog_allowlist: sda_staging
+      sda_profile_source_table: workspace.sda_staging.controlled_profile
+      sda_catalog_allowlist: workspace
       sda_schema_allowlist: ""
       sda_table_patterns: ""
       sda_max_metadata_objects: "100"

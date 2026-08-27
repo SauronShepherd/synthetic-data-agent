@@ -24,6 +24,10 @@ def _create_delta_table(spark: object, name: str, columns: Sequence[str]) -> Non
     spark.sql(  # type: ignore[attr-defined]
         f"CREATE TABLE IF NOT EXISTS {qualified} ({definitions}) USING DELTA"
     )
+    existing = {column.lower() for column in spark.table(name).columns}  # type: ignore[attr-defined]
+    for column in columns:
+        if column.lower() not in existing:
+            spark.sql(f"ALTER TABLE {qualified} ADD COLUMNS (`{column}` STRING)")  # type: ignore[attr-defined]
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -62,6 +66,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             "source_references_json",
             "warnings_json",
             "input_artifact_ids_json",
+            "content_json",
         ),
     )
     print(f"Initialized Delta artifact tables: {args.metadata_table}, {args.registry_table}")

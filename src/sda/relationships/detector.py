@@ -94,7 +94,11 @@ class RelationshipDetector:
                 )
                 continue
             metrics = measure_join(
-                rows[c.parent_table], rows[c.child_table], c.parent_columns, c.child_columns
+                rows[c.parent_table],
+                rows[c.child_table],
+                c.parent_columns,
+                c.child_columns,
+                match_option=c.match_option,
             )
             verified += 1
             scored = score_relationship(
@@ -116,6 +120,7 @@ class RelationshipDetector:
                     "parent_columns": list(c.parent_columns),
                     "origin": c.origin,
                     "declared_constraint": c.declared_constraint,
+                    "match_option": c.match_option,
                     "validation_status": "complete",
                     "system_decision": scored["decision"],
                     "review_status": (
@@ -142,9 +147,23 @@ class RelationshipDetector:
             parents_by_child.setdefault(relationship["child_table"], set()).add(
                 relationship["parent_table"]
             )
-        bridge_tables = sorted(
-            table for table, parents in parents_by_child.items() if len(parents) >= 2
-        )
+        bridge_validation: dict[str, dict[str, Any]] = {}
+        bridge_tables: list[str] = []
+        for child, parents in parents_by_child.items():
+            child_relationships = [r for r in accepted if r["child_table"] == child]
+            link_columns = tuple(
+                column
+                for relationship in child_relationships
+                for column in relationship["child_columns"]
+            )
+            links = [tuple(row.get(column) for column in link_columns) for row in rows.get(child, ())]
+            # A bridge requires a unique combined FK link for each row; parent
+            # count alone is insufficient evidence.
+            unique = len(links) == len(set(links)) if links else False
+            duplicate_rate = 1 - (len(set(links)) / len(links)) if links else 1.0
+            bridge_validation[child] = {"pair_unique": unique, "duplicate_rate": duplicate_rate}
+            if len(parents) >= 2 and unique:
+                bridge_tables.append(child)
         cycles = graph.cycles()
         cycle_nodes = list(graph.blocked_by_cycles())
         payload = {
@@ -177,6 +196,7 @@ class RelationshipDetector:
             "blocked_by_cycle": cycle_nodes,
             "unresolved_cycle": bool(cycles),
             "bridge_tables": bridge_tables,
+            "bridge_validation": bridge_validation,
             "warnings": [
                 warning
                 for warning in (

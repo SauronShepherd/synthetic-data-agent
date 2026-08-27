@@ -372,6 +372,7 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                 ),
                 checksum=fingerprint(relationship_rows),
                 summary="Scope relationship evidence",
+                content={"relationships": relationship_rows},
                 input_artifact_ids=tuple(
                     item["profile_id"] for item in metadata_summary.get("profiled_tables", [])
                 ),
@@ -453,6 +454,9 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                         ),
                         "pair_unique": total_rows == distinct_links,
                     }
+                bridge_tables = [
+                    table for table in bridge_tables if bridge_validation[table]["pair_unique"]
+                ]
                 from sda.relationships.graph import DependencyGraph
 
                 dependency_graph = DependencyGraph()
@@ -490,6 +494,7 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     related_locations={"relationship_analysis_id": relationship_id},
                     checksum=fingerprint(graph_rows),
                     summary="Scope dependency graph",
+                    content={"graph": graph_rows},
                     input_artifact_ids=(relationship_id,),
                 )
                 completed_graph = persist_artifact_lifecycle(

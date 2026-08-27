@@ -212,4 +212,5 @@ def _ref_from_mapping(raw: Mapping[str, Any]) -> ArtifactRef:
         ),
         error_code=raw.get("error_code"),
         error_message_safe=raw.get("error_message_safe"),
+        content=dict(decoded("content", decoded("content_json", {}))),
     )

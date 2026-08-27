@@ -13,12 +13,12 @@ targets:
       sda_schema_allowlist: ""
       sda_table_patterns: ""
       sda_max_metadata_objects: "100"
-      sda_profile_source_table: samples.bakehouse.sales_transactions
+      sda_profile_source_table: samples.wanderbricks.bookings
       sda_scope_catalog: samples
-      sda_scope_schema: bakehouse
-      sda_scope_tables: sales_franchises,sales_transactions
-      sda_relationship_parent_table: samples.bakehouse.sales_franchises
-      sda_relationship_child_table: samples.bakehouse.sales_transactions
+      sda_scope_schema: wanderbricks
+      sda_scope_tables: users,bookings
+      sda_relationship_parent_table: samples.wanderbricks.users
+      sda_relationship_child_table: samples.wanderbricks.bookings
       sda_relationship_output_table: workspace.profiles.relationship_analysis_scope
       sda_graph_output_table: workspace.profiles.dependency_graph_scope
       sda_metadata_inventory_table: workspace.profiles.metadata_inventory

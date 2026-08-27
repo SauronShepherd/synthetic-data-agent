@@ -114,6 +114,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 ),
                 checksum=fingerprint(payload),
                 summary="Normalized Unity Catalog metadata inventory",
+                content=dict(payload),
             )
             persist_artifact_registry(spark, artifact, registry_table)
     print(

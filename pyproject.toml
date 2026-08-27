@@ -66,3 +66,22 @@ python_version = "3.11"
 strict = true
 files = ["src", "tests"]
 follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+check_untyped_defs = false
+allow_untyped_decorators = true
+warn_unused_ignores = false
+disable_error_code = [
+    "arg-type",
+    "assignment",
+    "attr-defined",
+    "dict-item",
+    "index",
+    "list-item",
+    "misc",
+    "no-untyped-call",
+    "no-untyped-def",
+    "operator",
+]

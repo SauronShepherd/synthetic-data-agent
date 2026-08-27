@@ -119,6 +119,21 @@ def test_standalone_detection_emits_state_transition_patterns() -> None:
     assert transitions[0].metric["transitions"][0]["transition_count"] == 1
 
 
+def test_state_transition_evidence_preserves_event_vs_ingestion_order() -> None:
+    patterns = PatternDetector(PatternConfig(min_support_rows=1)).detect(
+        [
+            {"id": "a", "status": "new", "event_at": 1, "ingested_at": 2},
+            {"id": "a", "status": "active", "event_at": 2, "ingested_at": 1},
+        ],
+        table="main.events",
+    )
+    transition = next(
+        pattern for pattern in patterns if pattern.family is PatternFamily.STATE_TRANSITION
+    )
+    assert transition.metric["event_order"]["late_arrival_entity_count"] == 1
+    assert "ingestion_order_differs_from_event_order" in transition.metric["event_order"]["warnings"]
+
+
 def test_coordinator_requires_all_upstream_artifacts_and_reports_receipt() -> None:
     refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
@@ -253,6 +268,63 @@ def test_coordinator_emits_conditional_distributions_for_each_pair() -> None:
         ("segment_b", "amount_a"),
         ("segment_b", "amount_b"),
     }
+
+
+def test_coordinator_multi_family_acceptance_fixture() -> None:
+    rows = []
+    for entity in range(60):
+        segment = "premium" if entity % 2 == 0 else "standard"
+        for event, status in ((1, "new"), (2, "active")):
+            rows.append(
+                {
+                    "customer_id": f"c{entity}",
+                    "segment": segment,
+                    "status": status,
+                    "amount": entity + event,
+                    "amount_2": (entity + event) * 2,
+                    "start_at": event,
+                    "end_at": event + 1,
+                    "cancel_at": None if segment == "premium" else event,
+                }
+            )
+    rule_a = BusinessRule(
+        "observed-rule", "main.orders", ({"column": "status", "value": "active", "role": "outcome"},),
+        origin=PatternOrigin.OBSERVED,
+    )
+    rule_b = BusinessRule(
+        "user-rule", "main.orders", ({"column": "status", "value": "cancelled", "role": "outcome"},),
+        origin=PatternOrigin.USER_PROVIDED,
+    )
+    result = PatternDetector(PatternConfig(min_support_rows=10, max_candidates=500)).detect(
+        rows,
+        table="main.orders",
+        input_refs=PatternInputRefs("meta", ("profile",), "rel", "graph"),
+        run_id="multi-family",
+        environment="dev",
+        selected_tables=("main.orders",),
+        rules=(rule_a, rule_b),
+        fanout_inputs=(
+            {
+                "parents": [{"customer_id": f"c{i}", "segment": "premium" if i % 2 == 0 else "standard"} for i in range(60)],
+                "children": [{"customer_id": f"c{i}"} for i in range(0, 60, 2)],
+                "parent_key": "customer_id",
+                "child_key": "customer_id",
+                "segment": "segment",
+            },
+        ),
+    )
+    families = {pattern.family for pattern in result.patterns}
+    assert {
+        PatternFamily.CORRELATION,
+        PatternFamily.CONDITIONAL_DISTRIBUTION,
+        PatternFamily.CONDITIONAL_MISSINGNESS,
+        PatternFamily.FANOUT_BY_SEGMENT,
+        PatternFamily.TEMPORAL_ORDER,
+        PatternFamily.STATE_TRANSITION,
+        PatternFamily.BUSINESS_RULE,
+    } <= families
+    assert result.receipt.conflicts_found == 1
+    assert all(pattern.metric for pattern in result.patterns)
 
 
 def test_coordinator_emits_segment_fanout_from_authorized_relationship_rows() -> None:

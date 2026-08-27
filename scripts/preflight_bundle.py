@@ -40,7 +40,11 @@ FQN_OUTPUT_VARIABLES = (
 
 
 def validate_output_prefixes(target: str, values: dict[str, str]) -> list[str]:
-    expected = {"dev": "sda_dev.", "staging": "sda_staging.", "prod": "sda_prod."}[target]
+    expected = {
+        "dev": "sda_dev.",
+        "staging": "workspace.sda_staging.",
+        "prod": "workspace.sda_prod.",
+    }[target]
     return [
         name
         for name in FQN_OUTPUT_VARIABLES

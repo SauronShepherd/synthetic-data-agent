@@ -23,6 +23,8 @@ release-check:
 
 bundle-validate:
 	python scripts/validate_bundle_config.py --target dev
+	python scripts/validate_bundle_config.py --target staging
+	python scripts/validate_bundle_config.py --target prod
 
 spark-test:
 	python -m pytest -m spark

@@ -1,5 +1,86 @@
 resources:
   jobs:
+    uc_fixture:
+      name: "[${bundle.target}] SDA UC Integration Fixture"
+      max_concurrent_runs: 1
+      timeout_seconds: 1800
+      tags:
+        workload: sda
+        stage: integration-fixture
+      parameters:
+        - name: catalog
+          default: workspace
+        - name: schema
+          default: sda_integration
+        - name: suffix
+          default: ci
+        - name: mode
+          default: create
+      tasks:
+        - task_key: fixture
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/uc_fixture_spark.py
+            parameters:
+              - --catalog
+              - "{{job.parameters.catalog}}"
+              - --schema
+              - "{{job.parameters.schema}}"
+              - --suffix
+              - "{{job.parameters.suffix}}"
+              - --mode
+              - "{{job.parameters.mode}}"
+          environment_key: uc_fixture_environment
+      environments:
+        - environment_key: uc_fixture_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+    spark_contract_smoke:
+      name: "[${bundle.target}] SDA Spark Contract Smoke"
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+      tags:
+        workload: sda
+        stage: verification
+      parameters:
+        - name: source_table
+          default: ${var.sda_profile_source_table}
+        - name: parent_table
+          default: ${var.sda_relationship_parent_table}
+        - name: child_table
+          default: ${var.sda_relationship_child_table}
+        - name: parent_key
+          default: id
+        - name: child_key
+          default: customer_id
+        - name: segment
+          default: segment
+      tasks:
+        - task_key: spark_contract_smoke
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/spark_contract_smoke.py
+            parameters:
+              - --source-table
+              - "{{job.parameters.source_table}}"
+              - --parent-table
+              - "{{job.parameters.parent_table}}"
+              - --child-table
+              - "{{job.parameters.child_table}}"
+              - --parent-key
+              - "{{job.parameters.parent_key}}"
+              - --child-key
+              - "{{job.parameters.child_key}}"
+              - --segment
+              - "{{job.parameters.segment}}"
+          environment_key: spark_contract_smoke_environment
+      environments:
+        - environment_key: spark_contract_smoke_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
     uc_metadata_reader:
       name: "[${bundle.target}] SDA UC Metadata Reader"
       max_concurrent_runs: 1
@@ -222,9 +303,9 @@ resources:
         - name: child_table
           default: ${var.sda_relationship_child_table}
         - name: parent_columns
-          default: franchiseID
+          default: user_id
         - name: child_columns
-          default: franchiseID
+          default: user_id
         - name: output_table
           default: ${var.sda_relationship_output_table}
         - name: artifact_registry_table
@@ -377,6 +458,10 @@ resources:
           default: ${var.sda_pattern_sample_seed}
         - name: max_rows_scanned
           default: ${var.sda_pattern_max_rows_scanned}
+        - name: include_spearman
+          default: "false"
+        - name: allow_best_effort_snapshot
+          default: ${var.sda_allow_best_effort_snapshot}
       tasks:
         - task_key: detect_patterns
           spark_python_task:
@@ -420,6 +505,10 @@ resources:
               - "{{job.parameters.sample_seed}}"
               - --max-rows-scanned
               - "{{job.parameters.max_rows_scanned}}"
+              - --include-spearman
+              - "{{job.parameters.include_spearman}}"
+              - --allow-best-effort-snapshot
+              - "{{job.parameters.allow_best_effort_snapshot}}"
           environment_key: pattern_detector_environment
       environments:
         - environment_key: pattern_detector_environment
@@ -565,3 +654,4 @@ resources:
             environment_version: "2"
             dependencies:
               - ../dist/*.whl
+

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -91,6 +91,7 @@ class ArtifactRef:
     input_artifact_ids: tuple[str, ...] = ()
     error_code: str | None = None
     error_message_safe: str | None = None
+    content: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -130,6 +131,7 @@ class ArtifactRef:
         object.__setattr__(self, "source_references", tuple(self.source_references))
         object.__setattr__(self, "warnings", tuple(self.warnings))
         object.__setattr__(self, "input_artifact_ids", tuple(self.input_artifact_ids))
+        object.__setattr__(self, "content", dict(self.content))
         for field_name, enum_type in (("artifact_type", ArtifactType), ("status", ArtifactStatus)):
             value = getattr(self, field_name)
             if not isinstance(value, enum_type):

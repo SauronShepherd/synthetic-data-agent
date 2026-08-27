@@ -47,6 +47,7 @@ def spark_metric(frame: Any, metric: str, **kwargs: Any) -> Any:
         return unsupported_metric_result("unknown", "metric name must not be empty")
     handlers = {
         "pearson": spark_pearson,
+        "spearman": spark_spearman,
         "conditional_distribution": spark_conditional_distribution,
         "conditional_missingness": spark_conditional_missingness,
         "temporal_order": spark_temporal_order,
@@ -57,6 +58,20 @@ def spark_metric(frame: Any, metric: str, **kwargs: Any) -> Any:
     handler = cast(Any, handlers.get(metric))
     if handler is None:
         return unsupported_metric_result(metric, "metric is not implemented by the Spark adapter")
+    required_by_metric = {
+        "spearman": ("left", "right"),
+        "pearson": ("left", "right"),
+        "temporal_lag": ("earlier", "later"),
+    }
+    missing_kwargs = [name for name in required_by_metric.get(metric, ()) if name not in kwargs]
+    if missing_kwargs:
+        if metric == "spearman" and not kwargs:
+            return unsupported_metric_result(
+                metric, "metric is not implemented by the Spark adapter"
+            )
+        return unsupported_metric_result(
+            metric, "missing required arguments: " + ", ".join(missing_kwargs)
+        )
     try:
         return handler(frame, **kwargs)
     except (TypeError, ValueError) as exc:
@@ -105,11 +120,33 @@ def spark_pearson(frame: Any, left: str, right: str) -> Any:
     )
 
 
+def spark_spearman(frame: Any, left: str, right: str) -> Any:
+    """Compute Spearman using SQL window ranks (safe on Databricks Connect)."""
+    _require_columns(frame, (left, right), metric="spark_spearman")
+    from pyspark.sql import functions as F
+    from pyspark.sql.window import Window
+
+    valid = frame.where(F.col(left).isNotNull() & F.col(right).isNotNull())
+    ranked = (
+        valid.withColumn("__sda_left_rank", F.percent_rank().over(Window.orderBy(F.col(left))))
+        .withColumn("__sda_right_rank", F.percent_rank().over(Window.orderBy(F.col(right))))
+    )
+    return (
+        ranked.agg(
+            F.count(F.lit(1)).alias("valid_pair_count"),
+            F.count(F.lit(1)).alias("population_count"),
+            F.corr(F.col("__sda_left_rank"), F.col("__sda_right_rank")).alias("value"),
+        )
+        .withColumn("method", F.lit("spearman"))
+        .withColumn("validation_mode", F.lit("exact"))
+    )
+
+
 def spark_conditional_distribution(frame: Any, drivers: tuple[str, ...], outcome: str) -> Any:
-    F = _functions()
     if not drivers:
         raise ValueError("at least one driver column is required")
     _require_columns(frame, (*drivers, outcome), metric="spark_conditional_distribution")
+    F = _functions()
     grouped = frame.groupBy(*(F.col(column) for column in drivers), F.col(outcome)).count()
     totals = (
         frame.groupBy(*(F.col(column) for column in drivers))
@@ -202,8 +239,8 @@ def spark_temporal_order(frame: Any, earlier: str, later: str) -> Any:
 
 def spark_temporal_lag(frame: Any, earlier: str, later: str) -> Any:
     """Return bounded lag distribution aggregates without collecting timestamps."""
-    F = _functions()
     _require_columns(frame, (earlier, later), metric="spark_temporal_lag")
+    F = _functions()
     earlier_ts = F.col(earlier).cast("timestamp")
     later_ts = F.col(later).cast("timestamp")
     eligible = frame.where(earlier_ts.isNotNull() & later_ts.isNotNull())
@@ -238,7 +275,6 @@ def spark_state_transitions(
     event_time: str,
     tie_breakers: tuple[str, ...] = (),
 ) -> Any:
-    F = _functions()
     if not entity_keys:
         raise ValueError("spark_state_transitions requires at least one entity key")
     _require_columns(
@@ -246,6 +282,7 @@ def spark_state_transitions(
         (*entity_keys, state_column, event_time, *tie_breakers),
         metric="spark_state_transitions",
     )
+    F = _functions()
     from pyspark.sql.window import Window
 
     ordering = [

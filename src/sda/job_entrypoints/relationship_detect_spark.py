@@ -81,6 +81,7 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
             ),
             checksum=fingerprint(record),
             summary="Spark-native relationship evidence",
+            content=record,
         )
         persist_artifact_lifecycle(
             spark,
