@@ -101,6 +101,65 @@ def test_generation_action_records_bounded_fallback_to_global_without_activation
     assert pattern.origin is PatternOrigin.OBSERVED
 
 
+def test_tiny_segment_with_perfect_support_is_not_emitted() -> None:
+    rows = [{"segment": "common", "status": "open"} for _ in range(20)]
+    rows.extend({"segment": "tiny", "status": "closed"} for _ in range(4))
+
+    patterns = PatternDetector(PatternConfig(min_support_rows=5)).detect(
+        rows,
+        table="main.s.orders",
+        columns={"segment": "string", "status": "string"},
+    )
+
+    assert not any(pattern.condition.get("segment") == "tiny" for pattern in patterns)
+
+
+def test_multiple_testing_noise_is_descriptive_and_never_auto_promoted() -> None:
+    rows = [
+        {
+            "x1": index % 7,
+            "x2": (index * 3) % 11,
+            "x3": (index * 5 + 1) % 13,
+            "x4": (index * 7 + 2) % 17,
+        }
+        for index in range(120)
+    ]
+    patterns = PatternDetector(PatternConfig(min_support_rows=20, max_candidates=100)).detect(
+        rows,
+        table="main.s.noise",
+        columns={name: "int" for name in rows[0]},
+    )
+
+    assert patterns
+    assert all(pattern.origin is PatternOrigin.OBSERVED for pattern in patterns)
+    assert all(pattern.lifecycle is not PatternLifecycle.APPROVED_RULE for pattern in patterns)
+    assert all(pattern.rule_strength != "hard_constraint" for pattern in patterns)
+    assert all(
+        pattern.evidence_quality["statistical_screening"]
+        == {
+            "policy": "descriptive_no_p_values",
+            "p_values_used": False,
+            "multiple_testing_correction": "not_applicable",
+        }
+        for pattern in patterns
+    )
+
+
+def test_p_value_evidence_fails_closed_without_multiple_testing_policy() -> None:
+    detector = PatternDetector(PatternConfig(min_support_rows=1))
+    with pytest.raises(ValueError, match="multiple-testing policy"):
+        detector._pattern(
+            "analysis",
+            "main.s.t",
+            PatternFamily.CORRELATION,
+            ("x", "y"),
+            {},
+            {"outcome": "y"},
+            10,
+            {"value": 0.8, "p_value": 0.001},
+        )
+
+
 def test_pattern_identity_distinguishes_outcomes_and_is_repeatable() -> None:
     detector = PatternDetector(PatternConfig(min_support_rows=1))
     approved = detector._pattern(

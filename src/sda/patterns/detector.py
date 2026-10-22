@@ -918,6 +918,10 @@ class PatternDetector:
         support_rate: float | None = None,
         origin: PatternOrigin = PatternOrigin.OBSERVED,
     ) -> Pattern:
+        if "p_value" in metric:
+            raise ValueError(
+                "p-value evidence requires an explicitly implemented multiple-testing policy"
+            )
         sensitive_columns: set[str] = getattr(self, "_sensitive_columns", set())
 
         def protect(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1023,6 +1027,11 @@ class PatternDetector:
             "violation_count": violation_rows,
             "violation_rate": violation_rate,
             "limitations": tuple(metric.get("limitations", ())),
+            "statistical_screening": {
+                "policy": self.config.statistical_screening_policy,
+                "p_values_used": False,
+                "multiple_testing_correction": "not_applicable",
+            },
         }
         generation_kind = {
             PatternFamily.CORRELATION: "preserve_numeric_dependency",

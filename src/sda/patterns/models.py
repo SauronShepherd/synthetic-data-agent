@@ -235,6 +235,7 @@ class PatternConfig:
     max_candidates: int = 500
     max_category_values: int = 100
     include_spearman: bool = False
+    statistical_screening_policy: str = "descriptive_no_p_values"
     sensitive_value_policy: str = "no_values"
     detector_version: str = "sda07-v2"
     scoring_version: str = "sda07-policy-v1"
@@ -252,6 +253,7 @@ class PatternConfig:
     def __post_init__(self) -> None:
         if (
             self.mode not in {"quick", "full"}
+            or self.statistical_screening_policy != "descriptive_no_p_values"
             or self.sensitive_value_policy not in {"no_values", "fingerprints_only"}
             or self.min_support_rows < 1
             or not 0 <= self.min_support_rate <= 1

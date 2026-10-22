@@ -27,6 +27,9 @@ def test_pattern_config_rejects_unknown_sensitive_value_policy() -> None:
     with pytest.raises(ValueError):
         PatternConfig(sensitive_value_policy="raw_values")
 
+    with pytest.raises(ValueError):
+        PatternConfig(statistical_screening_policy="p_values_without_correction")
+
 
 def test_pattern_config_rejects_duplicate_or_unbounded_stability_dimensions() -> None:
     with pytest.raises(ValueError, match="stability slice columns"):
