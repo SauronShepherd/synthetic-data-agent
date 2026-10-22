@@ -64,7 +64,8 @@ def test_table_profiler_handles_decimal_iqr_outliers(spark) -> None:
         "amount decimal(10,2)",
     )
     profile = TableProfiler(
-        TableProfileRequest(metadata.full_name, mode=ProfileMode.FULL), metadata
+        TableProfileRequest(metadata.full_name, mode=ProfileMode.FULL, sample_fraction=1.0),
+        metadata,
     ).profile_spark(frame)
     amount = next(column for column in profile.column_profiles if column.column_name == "amount")
     iqr = next(finding for finding in amount.outlier_findings if finding["method"] == "iqr")
