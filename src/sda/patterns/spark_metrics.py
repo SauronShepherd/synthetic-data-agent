@@ -167,6 +167,54 @@ def spark_correlation_outlier_diagnostic(frame: Any, left: str, right: str) -> A
     )
 
 
+def spark_correlation_by_slice(
+    frame: Any,
+    left: str,
+    right: str,
+    *,
+    slice_column: str,
+    method: str = "pearson",
+    time_grain: str = "month",
+    min_support_rows: int = 1,
+    max_slices: int = 100,
+) -> Any:
+    """Compute bounded correlation aggregates independently within each slice."""
+    if method not in {"pearson", "spearman"}:
+        raise ValueError("correlation stability method must be pearson or spearman")
+    if min_support_rows < 1 or max_slices < 2:
+        raise ValueError("correlation slice support and cap must be positive")
+    _require_columns(frame, (left, right, slice_column), metric="spark_correlation_by_slice")
+    F = _functions()
+    field = next(field for field in frame.schema.fields if field.name == slice_column)
+    slice_ref = f"`{slice_column.replace('`', '``')}`"
+    slice_expression = F.col(slice_ref)
+    if field.dataType.__class__.__name__ in {"DateType", "TimestampType", "TimestampNTZType"}:
+        if time_grain not in {"day", "week", "month", "quarter", "year"}:
+            raise ValueError("time_grain must be day, week, month, quarter, or year")
+        slice_expression = F.date_trunc(time_grain, slice_expression.cast("timestamp"))
+    valid = frame.where(F.col(left).isNotNull() & F.col(right).isNotNull())
+    if method == "spearman":
+        from pyspark.sql.window import Window
+
+        window = Window.partitionBy(slice_expression).orderBy
+        valid = valid.withColumn(
+            "__sda_left_rank", F.percent_rank().over(window(F.col(left)))
+        ).withColumn("__sda_right_rank", F.percent_rank().over(window(F.col(right))))
+        left_value, right_value = F.col("__sda_left_rank"), F.col("__sda_right_rank")
+    else:
+        left_value, right_value = F.col(left), F.col(right)
+    return (
+        valid.groupBy(slice_expression.alias("_slice"))
+        .agg(
+            F.count(F.lit(1)).alias("valid_pair_count"),
+            F.corr(left_value, right_value).alias("value"),
+        )
+        .where(F.col("valid_pair_count") >= min_support_rows)
+        .orderBy(F.col("_slice").asc_nulls_first())
+        .limit(max_slices + 1)
+    )
+
+
 def spark_conditional_distribution(frame: Any, drivers: tuple[str, ...], outcome: str) -> Any:
     if not drivers:
         raise ValueError("at least one driver column is required")

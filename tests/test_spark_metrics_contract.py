@@ -7,16 +7,22 @@ from pathlib import Path
 
 import pytest
 
-from sda.job_entrypoints.pattern_detect_spark import _candidate_columns, _conditional_stability
+from sda.job_entrypoints.pattern_detect_spark import (
+    _candidate_columns,
+    _conditional_stability,
+    _correlation_stability,
+)
 from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
 from sda.patterns.spark_metrics import (
     spark_conditional_distribution,
     spark_conditional_missingness,
     spark_conditional_slice_rates,
+    spark_correlation_by_slice,
     spark_fanout_by_segment,
     spark_metric,
     spark_numeric_by_group,
     spark_pearson,
+    spark_spearman,
     spark_state_transitions,
     spark_temporal_lag,
     spark_temporal_order,
@@ -345,6 +351,54 @@ def test_conditional_slice_rates_detect_monthly_drift_and_enforce_support(spark)
     ).collect()
     assert len(null_rates) == 3
     assert all(0 <= row["rate"] <= 1 for row in null_rates)
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_correlation_stability_detects_sign_reversal_by_month(spark) -> None:
+    rows = [
+        (datetime(2026, month, 1), float(value), float(value) * slope)
+        for month, slope in ((1, 1.0), (2, 1.0), (3, -1.0))
+        for value in range(10)
+    ]
+    frame = spark.createDataFrame(rows, "event_time timestamp, x double, y double")
+    slices = spark_correlation_by_slice(
+        frame,
+        "x",
+        "y",
+        slice_column="event_time",
+        method="pearson",
+        min_support_rows=5,
+        max_slices=10,
+    ).collect()
+    assert [row["value"] for row in slices] == pytest.approx([1.0, 1.0, -1.0])
+    rank_slices = spark_correlation_by_slice(
+        frame,
+        "x",
+        "y",
+        slice_column="event_time",
+        method="spearman",
+        min_support_rows=5,
+        max_slices=10,
+    ).collect()
+    assert [row["value"] for row in rank_slices] == pytest.approx([1.0, 1.0, -1.0])
+    global_spearman = spark_spearman(frame, "x", "y").first()
+    assert global_spearman["valid_pair_count"] == 30
+    assert global_spearman["value"] is not None
+    summary = _correlation_stability(
+        frame,
+        left="x",
+        right="y",
+        method="pearson",
+        global_value=0.0,
+        slice_columns=("event_time",),
+        min_support_rows=5,
+        min_slices=3,
+        max_slices=10,
+        max_spread=0.1,
+        time_grain="month",
+    )
+    assert summary["event_time:month"]["stable"] is False
+    assert summary["event_time:month"]["sign_flip_count"] == 1
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]

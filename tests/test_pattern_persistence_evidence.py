@@ -31,6 +31,26 @@ def test_pattern_registry_rows_preserve_population_baseline_and_stability():
     assert json.loads(row["stability_json"]) == {"quality": "stable"}
 
 
+def test_pattern_registry_preserves_spearman_association_name():
+    pattern = Pattern(
+        pattern_id="p-spearman",
+        analysis_id="a1",
+        family=PatternFamily.CORRELATION,
+        origin=PatternOrigin.OBSERVED,
+        primary_table="main.s.t",
+        columns=("x", "y"),
+        condition={},
+        outcome={},
+        support_rows=100,
+        support_rate=1.0,
+        metric={"value": 0.7, "method": "spearman", "association_name": "spearman"},
+        evidence_quality={"validation_mode": "exact"},
+    )
+    row = registry_rows((pattern,))[0]
+    assert row["association_name"] == "spearman"
+    assert row["validation_mode"] == "exact"
+
+
 def test_pattern_registry_rows_preserve_complete_evidence_contract():
     pattern = Pattern(
         pattern_id="p2",

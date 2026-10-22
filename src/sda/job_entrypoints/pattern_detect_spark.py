@@ -181,6 +181,56 @@ def _conditional_stability(
     return result
 
 
+def _correlation_stability(
+    frame: Any,
+    *,
+    left: str,
+    right: str,
+    method: str,
+    global_value: float | None,
+    slice_columns: tuple[str, ...],
+    min_support_rows: int,
+    min_slices: int,
+    max_slices: int,
+    max_spread: float,
+    time_grain: str,
+) -> dict[str, dict[str, Any]]:
+    if not slice_columns:
+        return {}
+    from math import nan
+
+    from sda.patterns.spark_metrics import spark_correlation_by_slice
+    from sda.patterns.stability import stability
+
+    result: dict[str, dict[str, Any]] = {}
+    fields = {field.name: field.dataType.__class__.__name__ for field in frame.schema.fields}
+    for column in slice_columns:
+        temporal = fields[column] in {"DateType", "TimestampType", "TimestampNTZType"}
+        dimension = f"{column}:{time_grain}" if temporal else column
+        rows = spark_correlation_by_slice(
+            frame,
+            left,
+            right,
+            slice_column=column,
+            method=method,
+            time_grain=time_grain,
+            min_support_rows=min_support_rows,
+            max_slices=max_slices,
+        ).collect()
+        bounded_rows = rows[:max_slices]
+        result[dimension] = stability(
+            [float(row["value"]) if row["value"] is not None else nan for row in bounded_rows],
+            support_counts=[int(row["valid_pair_count"]) for row in bounded_rows],
+            min_support_rows=min_support_rows,
+            min_slices=min_slices,
+            max_spread=max_spread,
+            dimension=dimension,
+            truncated=len(rows) > max_slices,
+            global_value=global_value,
+        )
+    return result
+
+
 def _bounded_driver_sets(
     drivers: Sequence[str], *, max_depth: int, max_columns: int = 10
 ) -> tuple[tuple[str, ...], ...]:
@@ -510,6 +560,22 @@ def main() -> None:
                 >= args.min_support_rate
             ):
                 row = summary[0].asDict()
+                row["stability"] = (
+                    _correlation_stability(
+                        source,
+                        left=left,
+                        right=right,
+                        method="pearson",
+                        global_value=row["value"],
+                        slice_columns=stability_slice_columns,
+                        min_support_rows=args.stability_min_support_rows,
+                        min_slices=args.stability_min_slices,
+                        max_slices=args.stability_max_slices,
+                        max_spread=args.stability_max_spread,
+                        time_grain=args.stability_time_grain,
+                    )
+                    or "unavailable"
+                )
                 diagnostic = (
                     spark_correlation_outlier_diagnostic(source, left, right).limit(1).collect()
                 )
@@ -542,6 +608,22 @@ def main() -> None:
                         >= args.min_support_rate
                     ):
                         row["association_name"] = "spearman"
+                        row["stability"] = (
+                            _correlation_stability(
+                                source,
+                                left=left,
+                                right=right,
+                                method="spearman",
+                                global_value=row["value"],
+                                slice_columns=stability_slice_columns,
+                                min_support_rows=args.stability_min_support_rows,
+                                min_slices=args.stability_min_slices,
+                                max_slices=args.stability_max_slices,
+                                max_spread=args.stability_max_spread,
+                                time_grain=args.stability_time_grain,
+                            )
+                            or "unavailable"
+                        )
                         patterns.append(
                             detector._pattern(
                                 analysis_id,

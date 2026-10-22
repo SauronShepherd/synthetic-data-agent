@@ -119,6 +119,48 @@ def test_pattern_identity_distinguishes_outcomes_and_is_repeatable() -> None:
     assert approved.pattern_id == repeated.pattern_id
 
 
+def test_pattern_identity_distinguishes_association_methods() -> None:
+    detector = PatternDetector(PatternConfig(min_support_rows=1))
+    shared = (
+        "analysis",
+        "main.sales.orders",
+        PatternFamily.CORRELATION,
+        ("x", "y"),
+        {},
+        {"outcome": "y"},
+        100,
+    )
+    pearson = detector._pattern(*shared, {"value": 0.8, "method": "pearson"})
+    spearman = detector._pattern(
+        *shared,
+        {"value": 0.7, "method": "spearman", "association_name": "spearman"},
+    )
+    repeated = detector._pattern(*shared, {"value": 0.9, "method": "pearson"})
+    assert pearson.pattern_id != spearman.pattern_id
+    assert pearson.pattern_id == repeated.pattern_id
+
+
+def test_correlation_method_does_not_masquerade_as_validation_mode() -> None:
+    detector = PatternDetector(PatternConfig(min_support_rows=1))
+    pattern = detector._pattern(
+        "analysis",
+        "main.s.t",
+        PatternFamily.CORRELATION,
+        ("x", "y"),
+        {},
+        {"outcome": "y"},
+        100,
+        {
+            "value": 0.8,
+            "method": "pearson",
+            "validation_mode": "exact",
+            "stability": {"month": {"stable": True}},
+        },
+    )
+    assert pattern.evidence_quality["validation_mode"] == "exact"
+    assert pattern.decision == "accepted_for_planning"
+
+
 def test_standalone_detection_emits_conditional_missingness_patterns() -> None:
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
         [

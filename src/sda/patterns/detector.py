@@ -931,6 +931,7 @@ class PatternDetector:
                 "columns": columns,
                 "condition": condition,
                 "outcome": outcome,
+                "metric_identity": metric.get("association_name", metric.get("method")),
             }
         )
         stability_values = metric.get("stability_values")
@@ -961,7 +962,7 @@ class PatternDetector:
             metric=metric.get("value"),
             quality=EvidenceQuality(
                 support_quality="sufficient",
-                validation_mode=metric.get("method", "exact"),
+                validation_mode=metric.get("validation_mode", metric.get("method", "exact")),
                 stability_quality=stability_quality,
                 source_quality=(
                     "compatible"
@@ -992,7 +993,7 @@ class PatternDetector:
             if key in metric
         }
         evidence_quality = {
-            "validation_mode": metric.get("method", "exact"),
+            "validation_mode": metric.get("validation_mode", metric.get("method", "exact")),
             "source_quality": "compatible"
             if metric.get("source_compatible", getattr(self, "_source_compatible", True))
             else "mismatch",

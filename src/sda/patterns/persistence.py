@@ -153,7 +153,11 @@ def registry_rows(
             ),
             "support_rows": p.support_rows,
             "support_rate": p.support_rate,
-            "association_name": _ASSOCIATION_NAMES.get(p.family.value, "pattern_metric"),
+            "association_name": (
+                p.metric.get("association_name", p.metric.get("method", "pearson"))
+                if p.family.value == "correlation"
+                else _ASSOCIATION_NAMES.get(p.family.value, "pattern_metric")
+            ),
             "association_value": p.metric.get("value"),
             "baseline_json": json.dumps(
                 _safe_payload(p.evidence_quality.get("baseline", {})), sort_keys=True
