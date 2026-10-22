@@ -35,6 +35,7 @@ def main() -> None:
             "fanout_stability_child",
             "temporal_order_stability",
             "temporal_lag_stability",
+            "transition_stability",
         ):
             spark.sql(f"DROP TABLE IF EXISTS {prefix}_{name}")
         spark.sql(f"DROP SCHEMA IF EXISTS {schema}")
@@ -150,11 +151,38 @@ def main() -> None:
                  event_time) AS finished_at
         FROM dated"""
     )
+    spark.sql(
+        f"""CREATE OR REPLACE TABLE {prefix}_transition_stability USING DELTA AS
+        WITH base AS (
+          SELECT CAST(FLOOR(id / 30) AS INT) AS month_index,
+                 CAST(id % 30 AS INT) AS entity_index
+          FROM range(90)
+        )
+        SELECT CONCAT(CAST(month_index AS STRING), '-', CAST(entity_index AS STRING)) AS entity_id,
+               CONCAT('source-', CAST(entity_index % 2 AS STRING)) AS source_system,
+               CONCAT('partition-', CAST(month_index AS STRING)) AS partition_name,
+               CASE month_index WHEN 0 THEN 'open' ELSE 'open' END AS status,
+               ADD_MONTHS(TIMESTAMP '2026-01-01 00:00:00', month_index) AS event_time,
+               (month_index * 1000) + (entity_index * 2) AS event_id
+        FROM base
+        UNION ALL
+        SELECT CONCAT(CAST(month_index AS STRING), '-', CAST(entity_index AS STRING)) AS entity_id,
+               CONCAT('source-', CAST(entity_index % 2 AS STRING)) AS source_system,
+               CONCAT('partition-', CAST(month_index AS STRING)) AS partition_name,
+               CASE month_index WHEN 1 THEN 'open' ELSE 'closed' END AS status,
+               TIMESTAMPADD(
+                 DAY,
+                 CASE month_index WHEN 0 THEN 1 WHEN 1 THEN 1 ELSE 10 END,
+                 ADD_MONTHS(TIMESTAMP '2026-01-01 00:00:00', month_index)
+               ) AS event_time,
+               (month_index * 1000) + (entity_index * 2) + 1 AS event_id
+        FROM base"""
+    )
     print(
         f"SDA07_FIXTURE_CREATED {prefix}_customers {prefix}_orders "
         f"{prefix}_missingness_stability {prefix}_fanout_stability_parent "
         f"{prefix}_fanout_stability_child {prefix}_temporal_order_stability "
-        f"{prefix}_temporal_lag_stability"
+        f"{prefix}_temporal_lag_stability {prefix}_transition_stability"
     )
 
 

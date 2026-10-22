@@ -626,9 +626,16 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
             start = datetime(2026, month, 1)
             rows.extend(
                 [
-                    (f"{month}-{entity_index}", "open", start, 1),
                     (
                         f"{month}-{entity_index}",
+                        f"source-{entity_index % 2}",
+                        "open",
+                        start,
+                        1,
+                    ),
+                    (
+                        f"{month}-{entity_index}",
+                        f"source-{entity_index % 2}",
                         state,
                         start + timedelta(days=duration_days),
                         2,
@@ -637,7 +644,7 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
             )
     frame = spark.createDataFrame(
         rows,
-        "entity string, status string, event_time timestamp, sequence int",
+        "entity string, source_system string, status string, event_time timestamp, sequence int",
     )
     sliced = spark_state_transitions_by_slice(
         frame,
@@ -657,7 +664,7 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
         tie_breakers=("sequence",),
         ingestion_time=None,
         global_pairs=(("open", "closed"),),
-        slice_columns=("event_time",),
+        slice_columns=("event_time", "source_system"),
         min_support_rows=5,
         min_slices=3,
         max_slices=10,
@@ -670,6 +677,7 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
     duration = result[("open", "closed")]["event_time:month:p50_time_in_state_seconds"]
     assert duration["stable"] is None
     assert duration["warning"] == "insufficient_or_truncated_slices"
+    assert result[("open", "closed")]["source_system:transition_probability"]["stable"] is False
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]
