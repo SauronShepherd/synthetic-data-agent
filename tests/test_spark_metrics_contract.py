@@ -11,6 +11,7 @@ from sda.job_entrypoints.pattern_detect_spark import (
     _candidate_columns,
     _conditional_stability,
     _correlation_stability,
+    _fanout_stability,
     _numeric_conditional_stability,
 )
 from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
@@ -20,6 +21,7 @@ from sda.patterns.spark_metrics import (
     spark_conditional_slice_rates,
     spark_correlation_by_slice,
     spark_fanout_by_segment,
+    spark_fanout_slice_metrics,
     spark_metric,
     spark_numeric_by_group,
     spark_numeric_slice_means,
@@ -549,3 +551,51 @@ def test_spark_fanout_requires_segment_columns(spark) -> None:
     frame = spark.createDataFrame([("p1",)], "id string")
     with pytest.raises(ValueError, match="segment column"):
         spark_fanout_by_segment(frame, frame, parent_keys=("id",), child_keys=("id",), segments=())
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_fanout_stability_detects_monthly_zero_child_and_mean_drift(spark) -> None:
+    parent_rows = [
+        (f"{month}-{index}", "west", datetime(2026, month, 1))
+        for month in (1, 2, 3)
+        for index in range(10)
+    ]
+    parents = spark.createDataFrame(
+        parent_rows,
+        "id string, region string, event_time timestamp",
+    )
+    child_rows = []
+    for month in (1, 2, 3):
+        for index in range(10):
+            child_count = (
+                (1 if month == 1 else 2 if month == 2 else 3) if index >= (month - 1) * 5 else 0
+            )
+            child_rows.extend((f"{month}-{index}",) for _ in range(child_count))
+    children = spark.createDataFrame(child_rows, "parent_id string")
+    sliced = spark_fanout_slice_metrics(
+        parents,
+        children,
+        parent_keys=("id",),
+        child_keys=("parent_id",),
+        condition={"region": "west"},
+        slice_column="event_time",
+        time_grain="month",
+        min_support_rows=5,
+        max_slices=10,
+    ).collect()
+    assert [row["zero_child_rate"] for row in sliced] == pytest.approx([0.0, 0.5, 1.0])
+    result = _fanout_stability(
+        parents,
+        children,
+        parent_keys=("id",),
+        child_keys=("parent_id",),
+        condition={"region": "west"},
+        slice_columns=("event_time",),
+        min_support_rows=5,
+        min_slices=3,
+        max_slices=10,
+        max_spread=0.1,
+        time_grain="month",
+    )
+    assert result["event_time:month:zero_child_rate"]["stable"] is False
+    assert result["event_time:month:relative_mean_child_count"]["stable"] is False

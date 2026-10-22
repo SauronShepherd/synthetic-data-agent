@@ -290,6 +290,87 @@ def _numeric_conditional_stability(
     return result
 
 
+def _fanout_stability(
+    parent: Any,
+    child: Any,
+    *,
+    parent_keys: tuple[str, ...],
+    child_keys: tuple[str, ...],
+    condition: dict[str, Any],
+    slice_columns: tuple[str, ...],
+    min_support_rows: int,
+    min_slices: int,
+    max_slices: int,
+    max_spread: float,
+    time_grain: str,
+) -> dict[str, dict[str, Any]]:
+    if not slice_columns:
+        return {}
+    from math import nan
+
+    from sda.patterns.spark_metrics import spark_fanout_slice_metrics
+    from sda.patterns.stability import stability
+
+    result: dict[str, dict[str, Any]] = {}
+    fields = {field.name: field.dataType.__class__.__name__ for field in parent.schema.fields}
+    for column in slice_columns:
+        temporal = fields[column] in {"DateType", "TimestampType", "TimestampNTZType"}
+        dimension = f"{column}:{time_grain}" if temporal else column
+        rows = spark_fanout_slice_metrics(
+            parent,
+            child,
+            parent_keys=parent_keys,
+            child_keys=child_keys,
+            condition=condition,
+            slice_column=column,
+            time_grain=time_grain,
+            min_support_rows=min_support_rows,
+            max_slices=max_slices,
+        ).collect()
+        bounded_rows = rows[:max_slices]
+        truncated = len(rows) > max_slices
+        support = [int(row["support_rows"]) for row in bounded_rows]
+        zero_rates = [float(row["zero_child_rate"]) for row in bounded_rows]
+        global_zero_rate = (
+            float(bounded_rows[0]["global_zero_child_rate"]) if bounded_rows else None
+        )
+        zero_result = stability(
+            zero_rates,
+            support_counts=support,
+            min_support_rows=min_support_rows,
+            min_slices=min_slices,
+            max_spread=max_spread,
+            dimension=f"{dimension}:zero_child_rate",
+            truncated=truncated,
+            global_value=global_zero_rate,
+        )
+        zero_result["metric_name"] = "zero_child_rate"
+        result[f"{dimension}:zero_child_rate"] = zero_result
+
+        global_mean = float(bounded_rows[0]["global_mean_child_count"]) if bounded_rows else None
+        relative_means = [
+            float(row["mean_child_count"]) / global_mean
+            if global_mean is not None and global_mean > 0
+            else 1.0
+            if float(row["mean_child_count"]) == 0
+            else nan
+            for row in bounded_rows
+        ]
+        mean_result = stability(
+            relative_means,
+            support_counts=support,
+            min_support_rows=min_support_rows,
+            min_slices=min_slices,
+            max_spread=max_spread,
+            dimension=f"{dimension}:relative_mean_child_count",
+            truncated=truncated,
+            global_value=1.0,
+        )
+        mean_result["metric_name"] = "relative_mean_child_count"
+        result[f"{dimension}:relative_mean_child_count"] = mean_result
+    return result
+
+
 def _bounded_driver_sets(
     drivers: Sequence[str], *, max_depth: int, max_columns: int = 10
 ) -> tuple[tuple[str, ...], ...]:
@@ -969,15 +1050,43 @@ def main() -> None:
         parent_count = parent.count()
         if parent_count > args.max_rows_scanned or child.count() > args.max_rows_scanned:
             raise SystemExit("fanout source rows exceed max_rows_scanned budget")
-        segments = tuple(value.strip() for value in args.fanout_segment.split(","))
+        segments = tuple(value.strip() for value in args.fanout_segment.split(",") if value.strip())
+        if not segments or len(segments) != len(set(segments)):
+            raise SystemExit("fanout segments must be non-empty and unique")
+        parent_columns = set(parent.columns)
+        unavailable_fanout_columns = (set(segments) | set(stability_slice_columns)) - parent_columns
+        if unavailable_fanout_columns:
+            raise SystemExit(
+                "fanout segment or stability columns are unavailable in the parent table: "
+                f"{sorted(unavailable_fanout_columns)}"
+            )
+        sensitive_tokens = ("email", "ssn", "password", "token")
+        sensitive_fanout_columns = {
+            column
+            for column in (*segments, *stability_slice_columns)
+            if any(token in column.lower() for token in sensitive_tokens)
+        }
+        if sensitive_fanout_columns:
+            raise SystemExit(
+                f"sensitive columns cannot be used for fanout analysis: {sorted(sensitive_fanout_columns)}"
+            )
+        parent_keys = tuple(value.strip() for value in args.fanout_parent_key.split(","))
+        child_keys = tuple(value.strip() for value in args.fanout_child_key.split(","))
+        if (
+            not parent_keys
+            or any(not value for value in (*parent_keys, *child_keys))
+            or len(set(parent_keys)) != len(parent_keys)
+            or len(set(child_keys)) != len(child_keys)
+        ):
+            raise SystemExit("fanout parent and child keys must be non-empty and unique")
         if set(segments) & excluded and args.fanout_parent_table == source_table:
             raise SystemExit("fanout segments include excluded columns")
         fanout_rows = (
             spark_fanout_by_segment(
                 parent,
                 child,
-                parent_keys=tuple(args.fanout_parent_key.split(",")),
-                child_keys=tuple(args.fanout_child_key.split(",")),
+                parent_keys=parent_keys,
+                child_keys=child_keys,
                 segments=segments,
             )
             .where(F.col("parent_count") >= args.min_support_rows)
@@ -990,6 +1099,22 @@ def main() -> None:
             if support / max(parent_count, 1) < args.min_support_rate:
                 continue
             condition = {segment: data.pop(segment) for segment in segments}
+            data["stability"] = (
+                _fanout_stability(
+                    parent,
+                    child,
+                    parent_keys=parent_keys,
+                    child_keys=child_keys,
+                    condition=condition,
+                    slice_columns=stability_slice_columns,
+                    min_support_rows=args.stability_min_support_rows,
+                    min_slices=args.stability_min_slices,
+                    max_slices=args.stability_max_slices,
+                    max_spread=args.stability_max_spread,
+                    time_grain=args.stability_time_grain,
+                )
+                or "unavailable"
+            )
             patterns.append(
                 detector._pattern(
                     analysis_id,
@@ -997,7 +1122,7 @@ def main() -> None:
                     PatternFamily.FANOUT_BY_SEGMENT,
                     segments,
                     condition,
-                    {"child_count": tuple(args.fanout_child_key.split(","))},
+                    {"child_count": child_keys},
                     support,
                     data,
                     support_rate=support / max(parent_count, 1),

@@ -27,7 +27,13 @@ def main() -> None:
     prefix = f"{schema}.sda07_{suffix}"
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     if args.mode == "cleanup":
-        for name in ("orders", "customers", "missingness_stability"):
+        for name in (
+            "orders",
+            "customers",
+            "missingness_stability",
+            "fanout_stability_parent",
+            "fanout_stability_child",
+        ):
             spark.sql(f"DROP TABLE IF EXISTS {prefix}_{name}")
         spark.sql(f"DROP SCHEMA IF EXISTS {schema}")
         print(f"SDA07_FIXTURE_CLEANED {schema}")
@@ -72,8 +78,40 @@ def main() -> None:
                END AS nullable_value
         FROM rows"""
     )
+    spark.sql(
+        f"""CREATE OR REPLACE TABLE {prefix}_fanout_stability_parent USING DELTA AS
+        SELECT CONCAT(CAST(month_index AS STRING), '-', CAST(row_index AS STRING)) AS parent_id,
+               'west' AS region,
+               ADD_MONTHS(TIMESTAMP '2026-01-01 00:00:00', month_index) AS event_time
+        FROM (
+          SELECT CAST(FLOOR(id / 10) AS INT) AS month_index,
+                 CAST(id % 10 AS INT) AS row_index
+          FROM range(30)
+        )"""
+    )
+    spark.sql(
+        f"""CREATE OR REPLACE TABLE {prefix}_fanout_stability_child USING DELTA AS
+        WITH parent_counts AS (
+          SELECT CONCAT(CAST(month_index AS STRING), '-', CAST(row_index AS STRING)) AS parent_id,
+                 CASE
+                   WHEN row_index < (month_index * 5) THEN 0
+                   ELSE month_index + 1
+                 END AS child_count
+          FROM (
+            SELECT CAST(FLOOR(id / 10) AS INT) AS month_index,
+                   CAST(id % 10 AS INT) AS row_index
+            FROM range(30)
+          )
+        )
+        SELECT parent_id
+        FROM parent_counts
+        LATERAL VIEW EXPLODE(SEQUENCE(1, child_count)) expanded AS child_number
+        WHERE child_count > 0"""
+    )
     print(
-        f"SDA07_FIXTURE_CREATED {prefix}_customers {prefix}_orders {prefix}_missingness_stability"
+        f"SDA07_FIXTURE_CREATED {prefix}_customers {prefix}_orders "
+        f"{prefix}_missingness_stability {prefix}_fanout_stability_parent "
+        f"{prefix}_fanout_stability_child"
     )
 
 

@@ -458,6 +458,77 @@ def spark_fanout_by_segment(
     )
 
 
+def spark_fanout_slice_metrics(
+    parent: Any,
+    child: Any,
+    *,
+    parent_keys: tuple[str, ...],
+    child_keys: tuple[str, ...],
+    condition: dict[str, Any],
+    slice_column: str,
+    time_grain: str = "month",
+    min_support_rows: int = 1,
+    max_slices: int = 100,
+) -> Any:
+    """Return bounded fan-out distributions by a parent slice for one segment."""
+    F = _functions()
+    if len(parent_keys) != len(child_keys) or not parent_keys:
+        raise ValueError("parent and child key widths must match")
+    if not condition or min_support_rows < 1 or max_slices < 2:
+        raise ValueError("fan-out stability requires a condition and positive resource bounds")
+    _require_columns(
+        parent,
+        (*parent_keys, *condition, slice_column),
+        metric="spark_fanout_slice_metrics parent",
+    )
+    _require_columns(child, child_keys, metric="spark_fanout_slice_metrics child")
+    counts = child.groupBy(*child_keys).agg(F.count(F.lit(1)).alias("child_count"))
+    join_condition = [
+        F.col(f"parent.{left}") == F.col(f"counts.{right}")
+        for left, right in zip(parent_keys, child_keys, strict=True)
+    ]
+    filtered = parent
+    for name, value in condition.items():
+        filtered = filtered.where(F.col(f"`{name.replace('`', '``')}`").eqNullSafe(F.lit(value)))
+    population = (
+        filtered.alias("parent")
+        .join(counts.alias("counts"), reduce(and_, join_condition), "left")
+        .select(
+            F.col(f"parent.`{slice_column.replace('`', '``')}`").alias("__slice_raw"),
+            F.coalesce(F.col("counts.child_count"), F.lit(0)).alias("child_count"),
+        )
+    )
+    slice_field = next(field for field in parent.schema.fields if field.name == slice_column)
+    slice_expression = F.col("__slice_raw")
+    if slice_field.dataType.__class__.__name__ in {
+        "DateType",
+        "TimestampType",
+        "TimestampNTZType",
+    }:
+        if time_grain not in {"day", "week", "month", "quarter", "year"}:
+            raise ValueError("time_grain must be day, week, month, quarter, or year")
+        slice_expression = F.date_trunc(time_grain, slice_expression.cast("timestamp"))
+    grouped = population.groupBy(slice_expression.alias("_slice")).agg(
+        F.count(F.lit(1)).alias("support_rows"),
+        F.avg("child_count").alias("mean_child_count"),
+        (F.sum(F.when(F.col("child_count") == 0, 1).otherwise(0)) / F.count(F.lit(1))).alias(
+            "zero_child_rate"
+        ),
+    )
+    baseline = population.agg(
+        F.avg("child_count").alias("global_mean_child_count"),
+        (F.sum(F.when(F.col("child_count") == 0, 1).otherwise(0)) / F.count(F.lit(1))).alias(
+            "global_zero_child_rate"
+        ),
+    )
+    return (
+        grouped.crossJoin(baseline)
+        .where(F.col("support_rows") >= min_support_rows)
+        .orderBy(F.col("_slice").asc_nulls_first())
+        .limit(max_slices + 1)
+    )
+
+
 def spark_temporal_order(frame: Any, earlier: str, later: str) -> Any:
     F = _functions()
     _require_columns(frame, (earlier, later), metric="spark_temporal_order")
