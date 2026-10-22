@@ -73,5 +73,44 @@ def require_pattern_inputs(
                     "supported_versions": ",".join(sorted(supported)),
                 },
             )
+    for profile in selected[1:]:
+        inventory_ids = {
+            value
+            for value in (
+                profile.content.get("metadata_inventory_id"),
+                *(source.metadata_inventory_id for source in profile.source_references),
+            )
+            if value
+        }
+        if inventory_ids and inventory_ids != {requested.metadata_artifact_id}:
+            raise ArtifactCompatibilityError(
+                "pattern input references a different metadata inventory",
+                details={"artifact_id": profile.artifact_id},
+            )
+    relationship, graph = selected[-2:]
+    graph_relationship_ids = {
+        value
+        for value in (
+            graph.related_locations.get("relationship_analysis_id"),
+            *graph.input_artifact_ids,
+        )
+        if value
+    }
+    if graph_relationship_ids and graph_relationship_ids != {relationship.artifact_id}:
+        raise ArtifactCompatibilityError(
+            "dependency graph references a different relationship analysis",
+            details={"artifact_id": graph.artifact_id},
+        )
+    source_versions: dict[str, set[str]] = {}
+    for ref in selected:
+        for source in ref.source_references:
+            if source.snapshot_kind == "delta_version" and source.source_version:
+                source_versions.setdefault(source.full_name, set()).add(source.source_version)
+    incompatible = sorted(table for table, versions in source_versions.items() if len(versions) > 1)
+    if incompatible:
+        raise ArtifactCompatibilityError(
+            "pattern inputs reference incompatible source versions",
+            details={"source_tables": ",".join(incompatible)},
+        )
     require_same_environment(*selected)
     return selected

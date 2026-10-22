@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any
 
@@ -61,16 +62,18 @@ def persist_rows(
             frame.createOrReplaceTempView("__sda_artifact_write")
             target = DeltaTable.forName(spark, location)
             target_columns = {column.lower() for column in target.toDF().columns}
+            missing_columns = {column.lower() for column in frame.columns} - target_columns
+            if missing_columns:
+                raise PersistenceError(
+                    "Delta artifact table is missing required columns",
+                    details={"location": location, "columns": ",".join(sorted(missing_columns))},
+                )
             merge_condition = (
                 "target.artifact_id = source.artifact_id AND target.status = source.status"
             )
             if "evidence_id" in target_columns:
                 merge_condition += " AND target.evidence_id = source.evidence_id"
-            insert_values = {
-                column: f"source.{column}"
-                for column in frame.columns
-                if column.lower() in target_columns
-            }
+            insert_values = {column: f"source.{column}" for column in frame.columns}
             (
                 target.alias("target")
                 .merge(
@@ -162,6 +165,7 @@ def persist_artifact_lifecycle(
     *,
     evidence_location: str,
     registry_location: str,
+    before_complete: Callable[[], None] | None = None,
 ) -> ArtifactRef:
     """Publish one idempotent COMPLETE publication for bounded evidence.
 
@@ -181,6 +185,8 @@ def persist_artifact_lifecycle(
             artifact_id=completed.artifact_id,
             status=ArtifactStatus.COMPLETE.value,
         )
+        if before_complete is not None:
+            before_complete()
         persist_artifact_registry(spark, completed, registry_location)
         return completed
     except Exception as exc:
@@ -195,12 +201,43 @@ def persist_artifact_lifecycle(
 def persist_distributed_evidence(
     spark: Any, frame: Any, location: str, *, analysis_id: str
 ) -> None:
-    """Persist a Spark DataFrame without collecting distributed evidence to the driver."""
+    """Idempotently persist distributed evidence without collecting source rows."""
     if not location or "." not in location:
         raise ValueError("location must be a qualified table name")
     try:
-        frame.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(
-            location
+        required = {"analysis_id", "evidence_id"}
+        if not required.issubset(set(frame.columns)):
+            raise PersistenceError(
+                "distributed evidence requires stable row identity",
+                details={"location": location, "analysis_id": analysis_id},
+            )
+        from delta.tables import DeltaTable
+
+        try:
+            target = DeltaTable.forName(spark, location)
+        except Exception as exc:
+            if not _is_missing_table_error(exc):
+                raise
+            frame.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(
+                location
+            )
+            return
+        target_columns = {column.lower() for column in target.toDF().columns}
+        missing = {column.lower() for column in frame.columns} - target_columns
+        if missing:
+            raise PersistenceError(
+                "distributed evidence table is missing required columns",
+                details={"location": location, "columns": ",".join(sorted(missing))},
+            )
+        (
+            target.alias("target")
+            .merge(
+                frame.alias("source"),
+                "target.analysis_id = source.analysis_id "
+                "AND target.evidence_id = source.evidence_id",
+            )
+            .whenNotMatchedInsertAll()
+            .execute()
         )
     except Exception as exc:
         raise PersistenceError(

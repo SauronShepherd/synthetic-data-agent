@@ -15,6 +15,35 @@ from sda.patterns.roles import assign_roles
 from sda.runtime.identifiers import QualifiedName
 
 
+def _analysis_id(
+    requested: str,
+    *,
+    input_artifact_ids: tuple[str, ...],
+    source_table: str,
+    snapshot_kind: str,
+    source_version: str | None,
+    snapshot_timestamp: str | None,
+    configuration_hash: str,
+    run_id: str,
+    started_at: str,
+) -> str:
+    if requested:
+        return requested
+    from sda.artifacts.fingerprint import fingerprint
+
+    identity: dict[str, object] = {
+        "input_artifact_ids": sorted(input_artifact_ids),
+        "source_table": source_table,
+        "snapshot_kind": snapshot_kind,
+        "source_version": source_version,
+        "snapshot_timestamp": snapshot_timestamp,
+        "configuration_hash": configuration_hash,
+    }
+    if snapshot_kind != "delta_version":
+        identity["run_id"] = run_id or started_at
+    return f"pattern_analysis_{fingerprint(identity)}"
+
+
 def _profile_ids(raw: str) -> tuple[str, ...]:
     """Parse JSON IDs plus the escaped single-item form from job parameters."""
     try:
@@ -155,7 +184,7 @@ def main() -> None:
         )
         if value
     )
-    from sda.artifacts.models import ArtifactRef, ArtifactType
+    from sda.artifacts.models import ArtifactRef
     from sda.artifacts.registry import SparkArtifactRegistry
     from sda.patterns.loaders import load_pattern_inputs
     from sda.patterns.models import PatternInputRefs
@@ -164,65 +193,40 @@ def main() -> None:
 
     if input_ids and not args.artifact_registry_table:
         raise SystemExit("pattern runs require an artifact registry table")
-    if args.artifact_registry_table and input_ids:
+    if input_ids and not all(
+        (
+            args.metadata_artifact_id,
+            profile_ids,
+            args.relationship_artifact_id,
+            args.dependency_graph_artifact_id,
+        )
+    ):
+        raise SystemExit("pattern runs require a complete upstream artifact set")
+    if input_ids:
         registry = SparkArtifactRegistry(spark, args.artifact_registry_table)
-        # Use the same fail-closed input contract as the local coordinator.
-        # Legacy relationship/graph registries remain an explicit compatibility
-        # fallback for deployments that have not migrated those artifacts.
-        if (
-            all(
-                (
+        try:
+            upstream_refs = load_pattern_inputs(
+                registry,
+                PatternInputRefs(
                     args.metadata_artifact_id,
+                    profile_ids,
                     args.relationship_artifact_id,
                     args.dependency_graph_artifact_id,
-                )
+                ),
+                environment=args.environment,
+                relationship_legacy=(
+                    SparkArtifactRegistry(spark, args.relationship_registry_table)
+                    if args.relationship_registry_table
+                    else None
+                ),
+                dependency_graph_legacy=(
+                    SparkArtifactRegistry(spark, args.dependency_graph_registry_table)
+                    if args.dependency_graph_registry_table
+                    else None
+                ),
             )
-            and profile_ids
-        ):
-            try:
-                upstream_refs = load_pattern_inputs(
-                    registry,
-                    PatternInputRefs(
-                        args.metadata_artifact_id,
-                        profile_ids,
-                        args.relationship_artifact_id,
-                        args.dependency_graph_artifact_id,
-                    ),
-                    environment=args.environment,
-                )
-            except Exception as exc:
-                if not (args.relationship_registry_table or args.dependency_graph_registry_table):
-                    raise SystemExit(f"unable to validate pattern inputs: {exc}") from exc
-        expected_types = (
-            ((ArtifactType.METADATA_INVENTORY,) if args.metadata_artifact_id else ())
-            + tuple(ArtifactType.TABLE_PROFILE for _ in profile_ids)
-            + ((ArtifactType.RELATIONSHIP_ANALYSIS,) if args.relationship_artifact_id else ())
-            + ((ArtifactType.DEPENDENCY_GRAPH,) if args.dependency_graph_artifact_id else ())
-        )
-        for artifact_id, expected_type in zip(input_ids, expected_types, strict=True):
-            try:
-                ref = registry.require_complete(artifact_id)
-            except Exception as exc:
-                legacy_table = (
-                    args.relationship_registry_table
-                    if expected_type is ArtifactType.RELATIONSHIP_ANALYSIS
-                    else args.dependency_graph_registry_table
-                    if expected_type is ArtifactType.DEPENDENCY_GRAPH
-                    else ""
-                )
-                if legacy_table:
-                    ref = SparkArtifactRegistry(spark, legacy_table).require_latest_complete(
-                        artifact_id
-                    )
-                else:
-                    raise SystemExit(
-                        f"unable to resolve upstream artifact {artifact_id!r}: {exc}"
-                    ) from exc
-            if ref.artifact_type is not expected_type:
-                raise SystemExit(
-                    f"upstream artifact {artifact_id} has type {ref.artifact_type}, "
-                    f"expected {expected_type}"
-                )
+        except Exception as exc:
+            raise SystemExit(f"unable to validate pattern inputs: {exc}") from exc
     from pyspark.sql import functions as F
 
     source_version = None
@@ -277,40 +281,15 @@ def main() -> None:
     if source_count > args.max_rows_scanned:
         raise SystemExit(f"source rows exceed max_rows_scanned budget ({args.max_rows_scanned})")
     columns = {field.name: field.dataType.simpleString() for field in source.schema.fields}
-    profile_by_column: dict[str, dict[str, object]] = {}
-    for ref in upstream_refs:
-        content = ref.content if isinstance(ref.content, dict) else {}
-        profile_rows = content.get("column_profiles", ())
-        if isinstance(profile_rows, (list, tuple)):
-            for profile in profile_rows:
-                if isinstance(profile, dict):
-                    name = profile.get("column_name", profile.get("name"))
-                    if name:
-                        profile_by_column[str(name)] = profile
-    role_columns = []
-    for field in source.schema.fields:
-        profile = profile_by_column.get(field.name, {})
-        role_columns.append(
-            {
-                "name": field.name,
-                "data_type": profile.get("declared_data_type", field.dataType.simpleString()),
-                "profile_kind": profile.get("profile_kind", ""),
-                "sensitivity": profile.get("sensitivity_signals", ()),
-            }
-        )
+    from sda.patterns.upstream import scoped_role_columns
+
+    try:
+        role_columns, unprofiled = scoped_role_columns(source_table, columns, upstream_refs)
+    except ValueError as exc:
+        raise SystemExit(f"unable to scope pattern columns: {exc}") from exc
     roles = assign_roles(role_columns)
-    upstream_sensitivity: set[str] = set()
-    for ref in upstream_refs:
-        artifact_content: dict[str, object] = ref.content if isinstance(ref.content, dict) else {}
-        signals: object = artifact_content.get("sensitivity_signals", {})
-        if isinstance(signals, dict):
-            upstream_sensitivity.update(name for name, value in signals.items() if value)
-        profiles = artifact_content.get("column_profiles", ())
-        for profile in profiles if isinstance(profiles, (list, tuple)) else ():
-            if isinstance(profile, dict) and profile.get("sensitivity_signals"):
-                upstream_sensitivity.add(str(profile.get("column_name", "")))
-    if upstream_sensitivity:
-        roles["excluded"] = tuple(sorted(set(roles.get("excluded", ())) | upstream_sensitivity))
+    if unprofiled:
+        roles["excluded"] = tuple(sorted(set(roles.get("excluded", ())) | unprofiled))
     excluded = set(roles.get("excluded", ()))
     numeric, categorical, temporal, entity_candidates = _candidate_columns(columns, roles, excluded)
     detector = PatternDetector(
@@ -322,6 +301,18 @@ def main() -> None:
             sample_seed=args.sample_seed,
             max_rows_scanned=args.max_rows_scanned,
         )
+    )
+    analysis_started_at = datetime.now(UTC).isoformat()
+    analysis_id = _analysis_id(
+        args.analysis_id,
+        input_artifact_ids=input_ids,
+        source_table=source_table,
+        snapshot_kind=snapshot_kind,
+        source_version=source_version,
+        snapshot_timestamp=snapshot_timestamp,
+        configuration_hash=detector.config.configuration_hash,
+        run_id=args.run_id,
+        started_at=analysis_started_at,
     )
     from sda.patterns.models import Pattern, PatternFamily
     from sda.patterns.spark_metrics import (
@@ -337,7 +328,6 @@ def main() -> None:
         spark_temporal_order,
     )
 
-    analysis_id = args.analysis_id or None
     patterns: list[Pattern] = []
     # Only aggregate rows are collected; source values never leave Spark.
     correlation_numeric = [
@@ -369,7 +359,7 @@ def main() -> None:
                     row["correlation_outlier_diagnostic"] = diagnostic[0].asDict()
                 patterns.append(
                     detector._pattern(
-                        analysis_id or "pattern-run",
+                        analysis_id,
                         source_table,
                         PatternFamily.CORRELATION,
                         (left, right),
@@ -396,7 +386,7 @@ def main() -> None:
                         row["association_name"] = "spearman"
                         patterns.append(
                             detector._pattern(
-                                analysis_id or "pattern-run",
+                                analysis_id,
                                 source_table,
                                 PatternFamily.CORRELATION,
                                 (left, right),
@@ -434,7 +424,7 @@ def main() -> None:
                 outcome_value = data.pop(outcome)
                 patterns.append(
                     detector._pattern(
-                        analysis_id or "pattern-run",
+                        analysis_id,
                         source_table,
                         PatternFamily.CONDITIONAL_DISTRIBUTION,
                         (driver, outcome),
@@ -467,7 +457,7 @@ def main() -> None:
                 condition = {driver: data.pop(driver)}
                 patterns.append(
                     detector._pattern(
-                        analysis_id or "pattern-run",
+                        analysis_id,
                         source_table,
                         PatternFamily.CONDITIONAL_DISTRIBUTION,
                         (driver, outcome),
@@ -497,7 +487,7 @@ def main() -> None:
                 condition = {driver: data.pop(driver)}
                 patterns.append(
                     detector._pattern(
-                        analysis_id or "pattern-run",
+                        analysis_id,
                         source_table,
                         PatternFamily.CONDITIONAL_MISSINGNESS,
                         (driver, outcome),
@@ -521,7 +511,7 @@ def main() -> None:
             support = int(data["eligible_rows"])
             patterns.append(
                 detector._pattern(
-                    analysis_id or "pattern-run",
+                    analysis_id,
                     source_table,
                     PatternFamily.TEMPORAL_ORDER,
                     (earlier, later),
@@ -536,7 +526,7 @@ def main() -> None:
                 if lag and int(lag[0]["count"] or 0) >= args.min_support_rows:
                     patterns.append(
                         detector._pattern(
-                            analysis_id or "pattern-run",
+                            analysis_id,
                             source_table,
                             PatternFamily.TEMPORAL_LAG,
                             (earlier, later),
@@ -588,7 +578,7 @@ def main() -> None:
             ):
                 patterns.append(
                     detector._pattern(
-                        analysis_id or "pattern-run",
+                        analysis_id,
                         source_table,
                         PatternFamily.STATE_TRANSITION,
                         (state_candidates[0],),
@@ -635,7 +625,7 @@ def main() -> None:
             condition = {segment: data.pop(segment) for segment in segments}
             patterns.append(
                 detector._pattern(
-                    analysis_id or "pattern-run",
+                    analysis_id,
                     source_table,
                     PatternFamily.FANOUT_BY_SEGMENT,
                     segments,
@@ -660,7 +650,7 @@ def main() -> None:
                 table=source_table,
                 as_of=date.today(),
                 detector=detector,
-                analysis_id=analysis_id or "pattern-run",
+                analysis_id=analysis_id,
             )
         )
     except (ValueError, KeyError, TypeError) as exc:
@@ -677,11 +667,13 @@ def main() -> None:
         from sda.artifacts.delta import persist_artifact_lifecycle, persist_distributed_evidence
         from sda.artifacts.fingerprint import fingerprint
         from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType, SourceReference
-        from sda.patterns.persistence import evidence_rows, registry_rows
-
-        artifact_id = analysis_id or (
-            f"pattern_registry_{fingerprint(input_ids + (source_table,))}"
+        from sda.patterns.persistence import (
+            ensure_pattern_registry_columns,
+            evidence_rows,
+            registry_rows,
         )
+
+        artifact_id = analysis_id
         artifact = ArtifactRef(
             artifact_id=artifact_id,
             artifact_type=ArtifactType.PATTERN_REGISTRY,
@@ -692,7 +684,7 @@ def main() -> None:
             strategy_version="spark-pattern-v1",
             run_id=args.run_id or artifact_id,
             environment=args.environment,
-            created_at=datetime.now(UTC).isoformat(),
+            created_at=analysis_started_at,
             configuration_hash=detector.config.configuration_hash,
             primary_location=args.output_table,
             related_locations={
@@ -709,28 +701,33 @@ def main() -> None:
             input_artifact_ids=input_ids,
         )
 
+        rows = registry_rows(
+            tuple(patterns),
+            configuration_hash=detector.config.configuration_hash,
+            input_artifact_ids=input_ids,
+            source_references=artifact.source_references,
+            detector_version=detector.config.detector_version,
+            scoring_policy_version=detector.config.scoring_version,
+        )
+        ensure_pattern_registry_columns(spark, args.output_table, rows)
+        evidence = evidence_rows(tuple(patterns))
         persist_artifact_lifecycle(
             spark,
             artifact,
-            registry_rows(
-                tuple(patterns),
-                configuration_hash=detector.config.configuration_hash,
-                input_artifact_ids=input_ids,
-                source_references=artifact.source_references,
-                detector_version=detector.config.detector_version,
-                scoring_policy_version=detector.config.scoring_version,
-            ),
+            rows,
             evidence_location=args.output_table,
             registry_location=args.artifact_registry_table,
-        )
-        evidence = evidence_rows(tuple(patterns))
-        if evidence:
-            persist_distributed_evidence(
-                spark,
-                spark.createDataFrame(evidence),
-                args.pattern_evidence_table,
-                analysis_id=artifact_id,
+            before_complete=(
+                lambda: persist_distributed_evidence(
+                    spark,
+                    spark.createDataFrame(evidence),
+                    args.pattern_evidence_table,
+                    analysis_id=artifact_id,
+                )
             )
+            if evidence
+            else None,
+        )
     print(
         json.dumps(
             {

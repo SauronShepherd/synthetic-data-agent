@@ -1,3 +1,5 @@
+import pytest
+
 from sda.artifacts.delta import persist_artifact_lifecycle
 from sda.artifacts.models import ArtifactRef, ArtifactStatus, ArtifactType
 from sda.runtime.errors import PersistenceError
@@ -92,3 +94,55 @@ def test_lifecycle_failure_is_typed_and_not_marked_complete() -> None:
         pass
     else:
         raise AssertionError("persistence failure must be typed")
+
+
+def test_lifecycle_waits_for_distributed_evidence_before_complete_header() -> None:
+    ref = ArtifactRef(
+        artifact_id="a",
+        artifact_type=ArtifactType.PATTERN_REGISTRY,
+        artifact_schema_version="1.0",
+        status=ArtifactStatus.WRITING,
+        tool_name="pattern_detector",
+        tool_version="sda07-v1",
+        run_id="run",
+        environment="dev",
+        created_at="now",
+        configuration_hash="cfg",
+        primary_location="main.evidence.patterns",
+        related_locations={},
+        source_references=(),
+        checksum="checksum",
+        summary="summary",
+    )
+    spark = Spark()
+    seen: list[str] = []
+
+    def write_evidence() -> None:
+        seen.extend(status for _, status in spark.calls)
+
+    persist_artifact_lifecycle(
+        spark,
+        ref,
+        [{"value": 1}],
+        evidence_location="main.evidence.patterns",
+        registry_location="main.evidence.registry",
+        before_complete=write_evidence,
+    )
+    assert seen == ["writing", "complete"]
+    assert [status for _, status in spark.calls] == ["writing", "complete", "complete"]
+
+    failed_spark = Spark()
+
+    def fail_evidence() -> None:
+        raise RuntimeError("evidence write failed")
+
+    with pytest.raises(PersistenceError, match="failed to persist artifact lifecycle"):
+        persist_artifact_lifecycle(
+            failed_spark,
+            ref,
+            [{"value": 1}],
+            evidence_location="main.evidence.patterns",
+            registry_location="main.evidence.registry",
+            before_complete=fail_evidence,
+        )
+    assert [status for _, status in failed_spark.calls] == ["writing", "complete", "failed"]

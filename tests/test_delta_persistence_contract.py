@@ -1,6 +1,11 @@
+import sys
+from types import ModuleType
 from typing import Any
 
+import pytest
+
 from sda.artifacts.delta import persist_rows
+from sda.runtime.errors import PersistenceError
 
 
 class Writer:
@@ -41,3 +46,40 @@ def test_controlled_artifact_fields_cannot_be_overwritten() -> None:
     )
     assert writer.rows[0]["artifact_id"] == "safe"
     assert writer.rows[0]["status"] == "complete"
+
+
+def test_delta_merge_rejects_missing_columns_instead_of_dropping_them(monkeypatch: Any) -> None:
+    class FakeTarget:
+        def toDF(self) -> Any:
+            return type("TargetFrame", (), {"columns": ["artifact_id", "status", "evidence_id"]})()
+
+    class FakeDeltaTable:
+        @staticmethod
+        def forName(spark: Any, location: str) -> FakeTarget:
+            return FakeTarget()
+
+    delta = ModuleType("delta")
+    tables = ModuleType("delta.tables")
+    tables.DeltaTable = FakeDeltaTable  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "delta", delta)
+    monkeypatch.setitem(sys.modules, "delta.tables", tables)
+
+    class FakeFrame(Writer.Frame):
+        columns = ["artifact_id", "status", "evidence_id", "new_evidence"]
+
+        def createOrReplaceTempView(self, name: str) -> None:
+            return None
+
+    class FakeSpark(Writer):
+        def createDataFrame(self, rows: list[dict[str, Any]], schema: Any = None) -> FakeFrame:
+            return FakeFrame(self)
+
+    with pytest.raises(PersistenceError, match="failed to persist Delta artifact") as error:
+        persist_rows(
+            FakeSpark(),
+            [{"new_evidence": "must not disappear"}],
+            "main.evidence.artifacts",
+            artifact_id="a",
+        )
+    assert isinstance(error.value.__cause__, PersistenceError)
+    assert "new_evidence" in error.value.__cause__.details["columns"]

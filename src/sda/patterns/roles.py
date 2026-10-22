@@ -25,6 +25,10 @@ def assign_roles(columns: Sequence[Mapping[str, object]]) -> dict[str, tuple[str
             token in name.lower() for token in ("email", "ssn", "password", "token")
         ):
             roles["excluded"].append(name)
+        elif str(col.get("profile_kind") or "").lower() in {"string", "identifier_like"}:
+            # A profiled free-text or high-cardinality identifier is not a safe
+            # default explanatory variable, even when its Spark type is STRING.
+            roles["excluded"].append(name)
         elif "timestamp" in kind or "date" in kind or name.lower().endswith(("_at", "_date")):
             roles["lifecycle"].append(name)
         elif name.lower() == "id" or name.lower().endswith(("_id", "_key")):

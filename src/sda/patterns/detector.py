@@ -962,6 +962,9 @@ class PatternDetector:
         violation_rate = metric.get("violation_rate")
         if violation_rate is None and population_rows:
             violation_rate = violation_rows / population_rows
+        baseline = {key: value for key, value in metric.items() if key.startswith("global_")}
+        if isinstance(metric.get("baseline"), dict):
+            baseline.update(metric["baseline"])
         evidence_quality = {
             "validation_mode": metric.get("method", "exact"),
             "source_quality": "compatible"
@@ -970,6 +973,7 @@ class PatternDetector:
             "support_quality": "sufficient",
             "confidence": metric.get("confidence"),
             "stability": stability_result or metric.get("stability", "unavailable"),
+            "baseline": baseline,
             "population_rows": population_rows,
             "sampling": {
                 "fraction": self.config.sample_fraction,

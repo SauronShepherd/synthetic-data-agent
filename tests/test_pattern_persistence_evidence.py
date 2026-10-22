@@ -92,3 +92,23 @@ def test_registry_redacts_strings_in_nested_evidence_and_actions():
         "validation_action_json",
     ):
         assert set(json.loads(row[field])["label"]) == {"fingerprint"}
+
+
+def test_registry_exposes_unavailable_stability_explicitly() -> None:
+    pattern = Pattern(
+        pattern_id="p4",
+        analysis_id="a1",
+        family=PatternFamily.CONDITIONAL_DISTRIBUTION,
+        origin=PatternOrigin.OBSERVED,
+        primary_table="main.s.t",
+        columns=("x", "y"),
+        condition={},
+        outcome={},
+        support_rows=10,
+        support_rate=1.0,
+        metric={"value": 0.5},
+        evidence_quality={"stability": "unavailable", "baseline": {"global_rate": 0.3}},
+    )
+    row = registry_rows((pattern,))[0]
+    assert json.loads(row["stability_json"]) == {"status": "unavailable"}
+    assert json.loads(row["baseline_json"]) == {"global_rate": 0.3}

@@ -145,6 +145,8 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     source_table=table.full_name,
                     mode=ProfileMode.QUICK,
                     allow_best_effort_snapshot=False,
+                    profile_catalog=args.profile_catalog,
+                    profile_schema=args.profile_schema,
                 )
                 profile_target = f"`{args.profile_catalog}`.`{args.profile_schema}`.profile"
                 reusable = find_reusable_profile(

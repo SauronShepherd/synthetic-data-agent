@@ -9,10 +9,11 @@ upstream IDs, configuration, and detector/scoring/precedence versions.
 
 ## Rule-evaluation boundary
 
-Structured business rules are evaluated by the local coordinator, where the
-governed `BusinessRule` object and precedence policy are available. The Spark
-entrypoint intentionally does not accept ad-hoc rule expressions: it evaluates
-distributed statistical families and persists their evidence, while rule
-evaluation is performed in the coordinator after approved rules are supplied.
-This prevents ungoverned job parameters from becoming executable hard
-constraints; a future Spark rule task must consume a governed rule artifact.
+Both the local coordinator and the Spark entrypoint evaluate structured
+`BusinessRule` objects. The Spark job accepts a JSON list of rules, parses it
+into the same typed model, and compiles only a closed predicate vocabulary;
+it never executes arbitrary SQL from the JSON. Effective dates and conflicts
+are checked before aggregate evaluation. Spark-emitted rule findings remain
+`review_required`, even when a supplied rule says `approved`: job parameters
+are not authority to activate a hard generation constraint. A governed rule
+artifact with owner/reviewer approval is still needed for that promotion.

@@ -7,8 +7,9 @@ from typing import Any, cast
 from sda.artifacts.delta import persist_artifact_lifecycle, persist_distributed_evidence
 from sda.artifacts.fingerprint import fingerprint
 from sda.patterns.models import Pattern
+from sda.runtime.identifiers import QualifiedName, quote_identifier
 
-PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v1"
+PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v2"
 PATTERN_EVIDENCE_SCHEMA_VERSION = "sda07-pattern-evidence-v1"
 
 _ASSOCIATION_NAMES = {
@@ -42,6 +43,8 @@ def _safe_payload(value: Any) -> Any:
 
 
 def _safe_stability(value: Any) -> Any:
+    if value == "unavailable":
+        return {"status": "unavailable"}
     safe = _safe_payload(value)
     if (
         isinstance(value, dict)
@@ -66,25 +69,47 @@ class PatternPersistence:
     def persist(
         self, ref: Any, patterns: tuple[Pattern, ...], evidence_frame: Any | None = None
     ) -> Any:
+        rows = registry_rows(
+            patterns,
+            configuration_hash=ref.configuration_hash,
+            input_artifact_ids=ref.input_artifact_ids,
+            source_references=ref.source_references,
+            detector_version=ref.tool_version,
+            scoring_policy_version=getattr(ref, "strategy_version", "sda07-policy-v1"),
+        )
+        ensure_pattern_registry_columns(self.spark, self.registry_table, rows)
         completed = persist_artifact_lifecycle(
             self.spark,
             ref,
-            registry_rows(
-                patterns,
-                configuration_hash=ref.configuration_hash,
-                input_artifact_ids=ref.input_artifact_ids,
-                source_references=ref.source_references,
-                detector_version=ref.tool_version,
-                scoring_policy_version=getattr(ref, "strategy_version", "sda07-policy-v1"),
-            ),
+            rows,
             evidence_location=self.registry_table,
             registry_location=self.artifact_registry_table,
-        )
-        if evidence_frame is not None:
-            persist_distributed_evidence(
-                self.spark, evidence_frame, self.evidence_table, analysis_id=ref.artifact_id
+            before_complete=(
+                lambda: persist_distributed_evidence(
+                    self.spark, evidence_frame, self.evidence_table, analysis_id=ref.artifact_id
+                )
             )
+            if evidence_frame is not None
+            else None,
+        )
         return completed
+
+
+def ensure_pattern_registry_columns(spark: Any, table: str, rows: list[dict[str, Any]]) -> None:
+    """Add v2 evidence fields to an existing v1 registry before publishing rows."""
+    name = QualifiedName.parse(table)
+    if not rows or not spark.catalog.tableExists(name.full_name):
+        return
+    existing = {column.lower() for column in spark.table(name.quoted).columns}
+    missing = [column for column in rows[0] if column.lower() not in existing]
+    if missing:
+        definitions = ", ".join(f"{quote_identifier(column)} STRING" for column in missing)
+        spark.sql(f"ALTER TABLE {name.quoted} ADD COLUMNS ({definitions})")
+    remaining = {column.lower() for column in rows[0]} - {
+        column.lower() for column in spark.table(name.quoted).columns
+    }
+    if remaining:
+        raise ValueError(f"pattern registry schema is missing required fields: {sorted(remaining)}")
 
 
 def registry_rows(
