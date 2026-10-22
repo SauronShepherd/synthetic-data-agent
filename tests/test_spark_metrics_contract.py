@@ -667,9 +667,9 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
     probability = result[("open", "closed")]["event_time:month:transition_probability"]
     assert probability["stable"] is False
     assert probability["unseen_transition_slice_count"] == 1
-    assert (
-        result[("open", "closed")]["event_time:month:p50_time_in_state_seconds"]["stable"] is False
-    )
+    duration = result[("open", "closed")]["event_time:month:p50_time_in_state_seconds"]
+    assert duration["stable"] is None
+    assert duration["warning"] == "insufficient_or_truncated_slices"
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]
