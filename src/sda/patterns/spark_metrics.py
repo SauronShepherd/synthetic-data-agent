@@ -49,6 +49,7 @@ def spark_metric(frame: Any, metric: str, **kwargs: Any) -> Any:
         "pearson": spark_pearson,
         "spearman": spark_spearman,
         "conditional_distribution": spark_conditional_distribution,
+        "numeric_by_group": spark_numeric_by_group,
         "conditional_missingness": spark_conditional_missingness,
         "temporal_order": spark_temporal_order,
         "temporal_lag": spark_temporal_lag,
@@ -181,18 +182,64 @@ def spark_conditional_distribution(frame: Any, drivers: tuple[str, ...], outcome
         .count()
         .withColumnRenamed("count", "support_rows")
     )
-    join_columns = [F.col(f"groups.{column}") == F.col(f"totals.{column}") for column in drivers]
+    baseline = frame.groupBy(F.col(outcome)).count().withColumnRenamed("count", "global_count")
+    join_columns = [
+        F.col(f"groups.{column}").eqNullSafe(F.col(f"totals.{column}")) for column in drivers
+    ]
     return (
         grouped.alias("groups")
         .join(totals.alias("totals"), reduce(and_, join_columns), "left")
+        .join(
+            baseline.alias("baseline"),
+            F.col(f"groups.{outcome}").eqNullSafe(F.col(f"baseline.{outcome}")),
+            "left",
+        )
         .select(
             *[F.col(f"groups.{column}").alias(column) for column in drivers],
             F.col(f"groups.{outcome}").alias(outcome),
             F.col("groups.count").alias("outcome_count"),
             F.col("totals.support_rows"),
+            F.col("baseline.global_count"),
         )
         .withColumn("conditional_rate", F.col("outcome_count") / F.col("support_rows"))
     )
+
+
+def spark_numeric_by_group(frame: Any, drivers: tuple[str, ...], outcome: str) -> Any:
+    """Numeric conditional summaries with a global non-null outcome baseline."""
+    if not drivers:
+        raise ValueError("at least one driver column is required")
+    _require_columns(frame, (*drivers, outcome), metric="spark_numeric_by_group")
+    F = _functions()
+    numeric_types = {
+        "ByteType",
+        "ShortType",
+        "IntegerType",
+        "LongType",
+        "FloatType",
+        "DoubleType",
+        "DecimalType",
+    }
+    field = next(field for field in frame.schema.fields if field.name == outcome)
+    if field.dataType.__class__.__name__ not in numeric_types:
+        raise ValueError("spark_numeric_by_group requires a numeric outcome")
+    valid = frame.where(F.col(outcome).isNotNull())
+    aggregates = (
+        F.count(F.lit(1)).alias("count"),
+        F.expr(f"percentile_approx(`{outcome.replace('`', '``')}`, 0.5, 10000)").alias("p50"),
+        F.min(F.col(outcome)).alias("min"),
+        F.max(F.col(outcome)).alias("max"),
+        F.avg(F.col(outcome)).alias("mean"),
+    )
+    groups = valid.groupBy(*(F.col(column) for column in drivers)).agg(*aggregates)
+    baseline = valid.agg(*aggregates).select(
+        F.col("count").alias("global_count"),
+        F.col("p50").alias("global_p50"),
+        F.col("min").alias("global_min"),
+        F.col("max").alias("global_max"),
+        F.col("mean").alias("global_mean"),
+    )
+    return groups.crossJoin(baseline)
 
 
 def spark_conditional_missingness(frame: Any, drivers: tuple[str, ...], outcome: str) -> Any:
@@ -317,19 +364,43 @@ def spark_state_transitions(
         F.col(event_time).asc_nulls_last(),
         *(F.col(column).asc_nulls_last() for column in tie_breakers),
     ]
-    if not tie_breakers:
-        # Equal event times are retained as ambiguous evidence rather than ordered arbitrarily.
-        duplicate_times = frame.groupBy(*entity_keys, event_time).count().where(F.col("count") > 1)
-        if duplicate_times.limit(1).count():
-            raise ValueError("temporal_tie_breaker_missing")
-    window = Window.partitionBy(*entity_keys).orderBy(*ordering)
-    transitions = frame.withColumn("to_state", F.lead(F.col(state_column)).over(window)).where(
-        F.col("to_state").isNotNull()
+    duplicate_order = (
+        frame.groupBy(*entity_keys, event_time, *tie_breakers)
+        .count()
+        .where(F.col("count") > 1)
     )
-    counts = transitions.groupBy(F.col(state_column).alias("from_state"), F.col("to_state")).count()
+    if duplicate_order.limit(1).count():
+        raise ValueError(
+            "temporal_tie_breaker_missing" if not tie_breakers else "temporal_tie_breaker_not_unique"
+        )
+    window = Window.partitionBy(*entity_keys).orderBy(*ordering)
+    ordered = (
+        frame.withColumn("__sda_time", F.col(event_time).cast("timestamp"))
+        .withColumn("from_state", F.col(state_column))
+        .withColumn("to_state", F.lead(F.col(state_column)).over(window))
+        .withColumn("__sda_next_time", F.lead("__sda_time").over(window))
+        .withColumn("__sda_has_next", F.lead(F.lit(1)).over(window).isNotNull())
+    )
+    censored = ordered.where(~F.col("__sda_has_next")).groupBy("from_state").agg(
+        F.count(F.lit(1)).alias("right_censored_count")
+    )
+    transitions = ordered.where(F.col("__sda_has_next"))
+    transitions = transitions.withColumn(
+        "__sda_duration", F.col("__sda_next_time").cast("long") - F.col("__sda_time").cast("long")
+    )
+    counts = transitions.groupBy("from_state", "to_state").agg(
+        F.count(F.lit(1)).alias("count"),
+        F.avg("__sda_duration").alias("mean_time_in_state_seconds"),
+        F.expr("percentile_approx(__sda_duration, 0.5, 10000)").alias("p50_time_in_state_seconds"),
+        F.max("__sda_duration").alias("max_time_in_state_seconds"),
+    )
     outgoing = counts.groupBy("from_state").agg(F.sum("count").alias("outgoing_count"))
     return (
         counts.join(outgoing, "from_state")
+        .join(censored, "from_state", "left")
+        .fillna({"right_censored_count": 0})
+        .withColumn("transition_count", F.col("count"))
         .withColumn("transition_probability", F.col("count") / F.col("outgoing_count"))
-        .withColumn("self_transition", F.col("from_state") == F.col("to_state"))
+        .withColumn("self_transition", F.col("from_state").eqNullSafe(F.col("to_state")))
+        .withColumn("warnings", F.array(F.lit("unseen_transition_not_assumed_invalid")))
     )

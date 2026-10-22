@@ -460,6 +460,18 @@ resources:
           default: ${var.sda_pattern_max_rows_scanned}
         - name: include_spearman
           default: "false"
+        - name: business_rules_json
+          default: "[]"
+        - name: fanout_parent_table
+          default: ""
+        - name: fanout_child_table
+          default: ""
+        - name: fanout_parent_key
+          default: ""
+        - name: fanout_child_key
+          default: ""
+        - name: fanout_segment
+          default: ""
         - name: allow_best_effort_snapshot
           default: ${var.sda_allow_best_effort_snapshot}
       tasks:
@@ -507,6 +519,18 @@ resources:
               - "{{job.parameters.max_rows_scanned}}"
               - --include-spearman
               - "{{job.parameters.include_spearman}}"
+              - --business-rules-json
+              - "{{job.parameters.business_rules_json}}"
+              - --fanout-parent-table
+              - "{{job.parameters.fanout_parent_table}}"
+              - --fanout-child-table
+              - "{{job.parameters.fanout_child_table}}"
+              - --fanout-parent-key
+              - "{{job.parameters.fanout_parent_key}}"
+              - --fanout-child-key
+              - "{{job.parameters.fanout_child_key}}"
+              - --fanout-segment
+              - "{{job.parameters.fanout_segment}}"
               - --allow-best-effort-snapshot
               - "{{job.parameters.allow_best_effort_snapshot}}"
           environment_key: pattern_detector_environment

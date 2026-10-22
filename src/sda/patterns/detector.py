@@ -355,6 +355,8 @@ class PatternDetector:
             raise ValueError(
                 "coordinated pattern detection requires available input rows; received none"
             )
+        if len(rows) > self.config.max_rows_scanned:
+            raise ValueError("input rows exceed max_rows_scanned budget")
         if self.config.mode == "quick" and self.config.sample_fraction < 1.0:
             threshold = int(self.config.sample_fraction * 1_000_000)
             rows = [
@@ -380,7 +382,9 @@ class PatternDetector:
                 "input_artifact_ids": sorted(input_ids),
                 "tables": tuple(sorted(selected_tables)),
                 "config": self.config.configuration_hash,
-                "rules": tuple(sorted(getattr(rule, "rule_id", str(rule)) for rule in rules)),
+                "rules": tuple(sorted(fingerprint(rule) for rule in rules)),
+                "scoring_policy": fingerprint(self.scoring_policy),
+                "precedence_policy": fingerprint(self.rule_precedence_policy),
             }
         )
         upstream_artifacts: tuple[ArtifactRef, ...] = ()
@@ -487,7 +491,27 @@ class PatternDetector:
                 roles[override.role] = tuple(
                     sorted(set(roles.get(override.role, ())) | {override.column})
                 )
-        candidates = generate_candidates(table, types, roles=roles, config=self.config)
+        structural = tuple(
+            name
+            for name in names
+            if name.lower() == "id"
+            or name.lower().endswith("_id")
+            or name.lower() in {"status", "state", "stage"}
+            or name.endswith(("_at", "_date", "_time", "_ts"))
+        )
+        candidate_roles = {
+            **roles,
+            "outcome": tuple(dict.fromkeys((*roles.get("outcome", ()), *structural))),
+        }
+        candidates = generate_candidates(table, types, roles=candidate_roles, config=self.config)
+        candidate_pairs = {
+            (candidate.family, candidate.driver_columns, candidate.outcome_columns)
+            for candidate in candidates
+        }
+
+        def selected(family: PatternFamily, driver: str, outcome: str) -> bool:
+            return (family, (driver,), (outcome,)) in candidate_pairs
+
         candidate_count_by_family: dict[str, int] = {}
         for candidate in candidates:
             family = candidate.family.value
@@ -506,6 +530,11 @@ class PatternDetector:
                 rows, table=table, columns=analytical_types, analysis_id=run_id
             )
             if pattern.family in {PatternFamily.CORRELATION, PatternFamily.TEMPORAL_ORDER}
+            and len(pattern.columns) == 2
+            and (
+                selected(pattern.family, *pattern.columns)
+                or selected(pattern.family, *reversed(pattern.columns))
+            )
         )
         # Add bounded conditional and lifecycle evidence to the same aggregate result.
         categorical = [name for name in roles.get("driver", ()) if types.get(name) == "string"]
@@ -519,6 +548,8 @@ class PatternDetector:
 
         for driver in categorical[: self.config.max_segment_cardinality]:
             for outcome in numeric[: self.config.max_candidates]:
+                if not selected(PatternFamily.CONDITIONAL_DISTRIBUTION, driver, outcome):
+                    continue
                 cells = conditional_counts(
                     rows, (driver,), outcome, max_cells=self.config.max_candidates
                 )
@@ -538,7 +569,13 @@ class PatternDetector:
                                 cell["condition"],
                                 {"outcome": outcome},
                                 cell["count"],
-                                {"conditional_rate": cell["rate"], "method": "exact"},
+                                {
+                                    "conditional_rate": cell["rate"],
+                                    "population_rows": condition_rows,
+                                    "global_rate": cell["count"] / len(rows),
+                                    "method": "exact",
+                                },
+                                support_rate=cell["count"] / condition_rows,
                             ),
                         )
                 for group in numeric_by_group(rows, group=driver, outcome=outcome):
@@ -552,20 +589,32 @@ class PatternDetector:
                                 {driver: group["group"]},
                                 {"outcome": outcome},
                                 group["count"],
-                                {**group, "global_count": len(rows), "method": "exact"},
+                                {
+                                    **group,
+                                    "global_count": len(rows),
+                                    "population_rows": len(rows),
+                                    "method": "exact",
+                                },
                             ),
                         )
         # Emit conditional-missingness findings for every bounded driver/outcome pair.
         for driver in categorical[: self.config.max_candidates]:
+            outcomes = tuple(
+                outcome
+                for outcome in roles.get("outcome", ())
+                if selected(PatternFamily.CONDITIONAL_MISSINGNESS, driver, outcome)
+            )
+            if not outcomes:
+                continue
             driver_values = sorted({row.get(driver) for row in rows}, key=lambda value: str(value))[
                 : self.config.max_segment_cardinality
             ]
             for driver_value in driver_values:
-                for outcome in roles.get("outcome", ()):
+                for outcome in outcomes:
                     if outcome in excluded:
                         continue
                     metric = conditional_missingness(rows, {driver: driver_value}, outcome)
-                    if metric.get("support_rows", 0) >= self.config.min_support_rows:
+                    if supported(int(metric.get("support_rows", 0))):
                         patterns += (
                             self._pattern(
                                 run_id,
@@ -586,6 +635,14 @@ class PatternDetector:
         )
         order = next((name for name in names if name.endswith(("_at", "_date"))), None)
         if entity and state and order:
+            transition_selected = (
+                PatternFamily.STATE_TRANSITION,
+                (entity, state, order),
+                (),
+            ) in candidate_pairs
+        else:
+            transition_selected = False
+        if transition_selected and entity is not None and state is not None and order is not None:
             transition_metric = state_transitions(
                 rows, entity_key=entity, state_column=state, order_column=order
             )
@@ -631,30 +688,66 @@ class PatternDetector:
                         ),
                     )
         # Evaluate approved/user rules and preserve their review semantics.
+        today = datetime.now(UTC).date()
+        active_rules = []
         for rule in rules:
+            if rule.table != table:
+                continue
+            try:
+                starts = (
+                    datetime.fromisoformat(rule.effective_from).date()
+                    if rule.effective_from
+                    else None
+                )
+                ends = (
+                    datetime.fromisoformat(rule.effective_to).date() if rule.effective_to else None
+                )
+            except ValueError as exc:
+                raise ValueError(f"invalid effective date for rule {rule.rule_id}") from exc
+            if starts and ends and starts > ends:
+                raise ValueError(f"inverted effective dates for rule {rule.rule_id}")
+            if (starts and today < starts) or (ends and today > ends):
+                continue
+            active_rules.append(rule)
+        rule_conflicts = resolve_rule_conflicts(active_rules, self.rule_precedence_policy)
+        conflicted_ids = {
+            rule_id
+            for conflict in rule_conflicts
+            if conflict.requires_review
+            for rule_id in (conflict.left_rule_id, conflict.right_rule_id)
+        }
+        for rule in active_rules:
             evaluation = evaluate_rule(rows, rule)
             if evaluation.population_rows >= self.config.min_support_rows:
-                patterns += (
-                    self._pattern(
-                        run_id,
-                        table,
-                        PatternFamily.BUSINESS_RULE,
-                        tuple(sorted({p["column"] for p in rule.predicates})),
-                        {"rule_id": rule.rule_id},
-                        {"strength": rule.strength.name},
-                        evaluation.population_rows,
-                        {
-                            "population_rows": evaluation.population_rows,
-                            "satisfying_rows": evaluation.satisfying_rows,
-                            "violation_rows": evaluation.violation_rows,
-                            "satisfaction_rate": evaluation.satisfaction_rate,
-                            "violation_rate": evaluation.violation_rate,
-                            "method": evaluation.validation_mode,
-                            "rule": rule,
-                        },
-                        origin=rule.origin,
-                    ),
+                rule_pattern = self._pattern(
+                    run_id,
+                    table,
+                    PatternFamily.BUSINESS_RULE,
+                    tuple(sorted({p["column"] for p in rule.predicates})),
+                    {"rule_id": rule.rule_id},
+                    {"strength": rule.strength.name},
+                    evaluation.population_rows,
+                    {
+                        "population_rows": evaluation.population_rows,
+                        "satisfying_rows": evaluation.satisfying_rows,
+                        "violation_rows": evaluation.violation_rows,
+                        "satisfaction_rate": evaluation.satisfaction_rate,
+                        "violation_rate": evaluation.violation_rate,
+                        "method": evaluation.validation_mode,
+                        "rule": rule,
+                    },
+                    support_rate=evaluation.condition_support_rate,
+                    origin=rule.origin,
                 )
+                if rule.rule_id in conflicted_ids:
+                    rule_pattern = replace(
+                        rule_pattern,
+                        decision="review_required",
+                        lifecycle=PatternLifecycle.REVIEW_REQUIRED,
+                        review_status="required",
+                        warnings=(*rule_pattern.warnings, "rule_conflict_requires_review"),
+                    )
+                patterns += (rule_pattern,)
         # Relationship evidence is supplied as already-authorized bounded rows;
         # this stage never reads raw child rows implicitly.
         for relation in fanout_inputs:
@@ -714,7 +807,6 @@ class PatternDetector:
         accepted = sum(p.decision == "accepted_for_planning" for p in patterns)
         rejected = sum(p.decision == "rejected" for p in patterns)
         insufficient = sum(p.decision == "insufficient_evidence" for p in patterns)
-        rule_conflicts = resolve_rule_conflicts(list(rules), self.rule_precedence_policy)
         emitted_by_family: dict[str, int] = {}
         for pattern in patterns:
             emitted_by_family[pattern.family.value] = (
@@ -735,7 +827,7 @@ class PatternDetector:
             patterns_rejected=rejected,
             patterns_insufficient=insufficient,
             conflicts_found=len(rule_conflicts),
-            rules_evaluated=len(rules),
+            rules_evaluated=len(active_rules),
             source_tables_scanned=len(selected_tables),
             sample_fraction=self.config.sample_fraction,
             sample_seed=self.config.sample_seed,

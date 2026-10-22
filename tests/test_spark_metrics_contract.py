@@ -5,17 +5,55 @@ from pathlib import Path
 
 import pytest
 
+from sda.job_entrypoints.pattern_detect_spark import _candidate_columns
 from sda.patterns.spark_metrics import (
     spark_conditional_distribution,
     spark_conditional_missingness,
     spark_fanout_by_segment,
     spark_metric,
+    spark_numeric_by_group,
     spark_pearson,
     spark_state_transitions,
     spark_temporal_lag,
     spark_temporal_order,
     unsupported_metric_result,
 )
+
+
+def test_spark_entrypoint_candidates_respect_roles_and_exclusions() -> None:
+    columns = {
+        "account_id": "string",
+        "amount": "decimal(12,2)",
+        "small": "smallint",
+        "segment": "string",
+        "secret": "string",
+        "created_at": "timestamp",
+        "closed_at": "timestamp",
+        "status": "string",
+    }
+    roles = {
+        "driver": ("amount", "small", "segment", "secret", "status"),
+        "outcome": ("amount", "small", "segment", "secret", "status"),
+        "entity": ("account_id",),
+        "lifecycle": ("created_at", "closed_at"),
+    }
+    numeric, categorical, temporal, entity = _candidate_columns(
+        columns, roles, {"secret", "closed_at"}
+    )
+    assert numeric == ["amount", "small"]
+    assert categorical == ["segment", "status"]
+    assert temporal == ["created_at"]
+    assert entity == ["account_id"]
+
+
+def test_candidates_include_single_role_conditional_columns() -> None:
+    numeric, categorical, _, _ = _candidate_columns(
+        {"segment": "string", "amount": "double", "secret": "string"},
+        {"driver": ("segment", "secret"), "outcome": ("amount",)},
+        {"secret"},
+    )
+    assert numeric == ["amount"]
+    assert categorical == ["segment"]
 
 
 @pytest.fixture(scope="module")
@@ -189,6 +227,55 @@ def test_spark_dispatcher_handles_partitions_skew_and_nulls(spark) -> None:
     assert {row["support_rows"] for row in missing.collect()} == {2, 240}
     unsupported = spark_metric(frame, "pearson", left="status", right="value")
     assert not unsupported.supported
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_numeric_by_group_baseline_and_null_driver_join(spark) -> None:
+    frame = spark.createDataFrame(
+        [(None, 2.0, "open"), (None, 4.0, "closed"), ("a", 10.0, "open"), ("a", None, "open")],
+        "segment string, value double, status string",
+    )
+    groups = {
+        row["segment"]: row.asDict()
+        for row in spark_numeric_by_group(frame, ("segment",), "value").collect()
+    }
+    assert groups[None]["count"] == 2
+    assert groups[None]["mean"] == 3.0
+    assert groups[None]["global_count"] == 3
+    assert groups[None]["global_mean"] == pytest.approx(16 / 3)
+    assert groups["a"]["min"] == 10.0
+    assert (
+        spark_metric(frame, "numeric_by_group", drivers=("segment",), outcome="value").count() == 2
+    )
+    distribution = spark_conditional_distribution(frame, ("segment",), "status").collect()
+    assert all(row["support_rows"] == 2 for row in distribution)
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_state_transitions_ties_censoring_and_duration(spark) -> None:
+    frame = spark.createDataFrame(
+        [
+            ("a", "open", "2024-01-01 00:00:00", 1),
+            ("a", "open", "2024-01-01 00:00:00", 2),
+            ("a", "closed", "2024-01-01 00:01:00", 3),
+            ("b", "open", "2024-01-01 00:00:00", 1),
+            ("c", "closed", "2024-01-01 00:00:00", 1),
+        ],
+        "entity string, status string, event_time string, sequence int",
+    )
+    with pytest.raises(ValueError, match="temporal_tie_breaker_missing"):
+        spark_state_transitions(frame, entity_keys=("entity",), state_column="status", event_time="event_time")
+    with pytest.raises(ValueError, match="temporal_tie_breaker_not_unique"):
+        spark_state_transitions(frame.withColumn("sequence", frame.sequence * 0), entity_keys=("entity",), state_column="status", event_time="event_time", tie_breakers=("sequence",))
+    rows = {
+        (row["from_state"], row["to_state"]): row.asDict()
+        for row in spark_state_transitions(frame.repartition(2), entity_keys=("entity",), state_column="status", event_time="event_time", tie_breakers=("sequence",)).collect()
+    }
+    assert rows[("open", "open")]["self_transition"] is True
+    assert rows[("open", "open")]["mean_time_in_state_seconds"] == 0
+    assert rows[("open", "closed")]["mean_time_in_state_seconds"] == 60
+    assert rows[("open", "closed")]["right_censored_count"] == 1
+    assert rows[("open", "closed")]["transition_probability"] == 0.5
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]

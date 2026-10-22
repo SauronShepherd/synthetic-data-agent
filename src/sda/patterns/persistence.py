@@ -41,6 +41,17 @@ def _safe_payload(value: Any) -> Any:
     return {"fingerprint": fingerprint(value)}
 
 
+def _safe_stability(value: Any) -> Any:
+    safe = _safe_payload(value)
+    if (
+        isinstance(value, dict)
+        and isinstance(value.get("quality"), str)
+        and value["quality"] in {"stable", "unstable"}
+    ):
+        safe["quality"] = value["quality"]
+    return safe
+
+
 class PatternPersistence:
     """Adapter that keeps compact registry rows and large evidence separate."""
 
@@ -108,9 +119,13 @@ def registry_rows(
             "support_rate": p.support_rate,
             "association_name": _ASSOCIATION_NAMES.get(p.family.value, "pattern_metric"),
             "association_value": p.metric.get("value"),
-            "baseline_json": json.dumps(p.evidence_quality.get("baseline", {}), sort_keys=True),
+            "baseline_json": json.dumps(
+                _safe_payload(p.evidence_quality.get("baseline", {})), sort_keys=True
+            ),
             "validation_mode": p.evidence_quality.get("validation_mode", "unknown"),
-            "stability_json": json.dumps(p.evidence_quality.get("stability", {}), sort_keys=True),
+            "stability_json": json.dumps(
+                _safe_stability(p.evidence_quality.get("stability", {})), sort_keys=True
+            ),
             "evidence_quality_json": json.dumps(_safe_payload(p.evidence_quality), sort_keys=True),
             "confidence": p.evidence_quality.get("confidence"),
             "violation_count": p.evidence_quality.get("violation_count", 0),
@@ -121,8 +136,12 @@ def registry_rows(
             "limitations_json": json.dumps(
                 _safe_payload(p.evidence_quality.get("limitations", ())), sort_keys=True
             ),
-            "generation_action_json": json.dumps(p.generation_action, sort_keys=True),
-            "validation_action_json": json.dumps(p.validation_action, sort_keys=True),
+            "generation_action_json": json.dumps(
+                _safe_payload(p.generation_action), sort_keys=True
+            ),
+            "validation_action_json": json.dumps(
+                _safe_payload(p.validation_action), sort_keys=True
+            ),
             "decision": p.decision,
             "review_status": p.review_status,
             "lifecycle": p.lifecycle.value,

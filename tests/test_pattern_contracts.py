@@ -182,6 +182,38 @@ def test_coordinator_fails_closed_when_input_rows_are_unavailable() -> None:
         )
 
 
+def test_coordinator_honors_candidate_and_scan_budgets() -> None:
+    refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
+    rows = [{"x": i, "y": i * 2, "z": i * 3} for i in range(4)]
+    detector = PatternDetector(PatternConfig(min_support_rows=2, max_candidates=1))
+    result = detector.detect(rows, input_refs=refs, selected_tables=("main.s.t",))
+    assert result.receipt.candidate_count_total == 1
+    assert len([p for p in result.patterns if p.family is PatternFamily.CORRELATION]) == 1
+    with pytest.raises(ValueError, match="max_rows_scanned"):
+        PatternDetector(PatternConfig(max_rows_scanned=2)).detect(
+            rows, input_refs=refs, selected_tables=("main.s.t",)
+        )
+
+
+def test_coordinator_respects_rule_scope_dates_and_conflict_review() -> None:
+    refs = PatternInputRefs("meta", ("profile",), "rel", "graph")
+    rows = [{"status": "A"} for _ in range(3)]
+    rules = (
+        BusinessRule("a", "main.s.t", ({"column": "status", "value": "A", "role": "requirement"},)),
+        BusinessRule("b", "main.s.t", ({"column": "status", "value": "B", "role": "requirement"},)),
+        BusinessRule("future", "main.s.t", ({"column": "status", "value": "C"},), effective_from="2999-01-01"),
+        BusinessRule("other", "main.other", ({"column": "status", "value": "D"},)),
+    )
+    result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
+        rows, input_refs=refs, selected_tables=("main.s.t",), rules=rules
+    )
+    rule_patterns = [p for p in result.patterns if p.family is PatternFamily.BUSINESS_RULE]
+    assert {p.condition["rule_id"] for p in rule_patterns} == {"a", "b"}
+    assert all(p.lifecycle is PatternLifecycle.REVIEW_REQUIRED for p in rule_patterns)
+    assert result.receipt.rules_evaluated == 2
+    assert result.receipt.conflicts_found == 1
+
+
 def test_pattern_input_refs_reject_whitespace_artifact_ids() -> None:
     with pytest.raises(ValueError, match="upstream pattern artifacts"):
         PatternInputRefs(" ", ("profile",), "relationship", "graph")
@@ -386,6 +418,19 @@ def test_empty_sensitivity_signals_do_not_exclude_columns() -> None:
     )
     assert "segment" not in roles["excluded"]
     assert "amount" not in roles["excluded"]
+
+
+def test_roles_fall_back_to_declared_type_and_keep_id_as_entity() -> None:
+    roles = assign_roles(
+        [
+            {"name": "id", "profile_kind": "", "data_type": "bigint"},
+            {"name": "amount", "profile_kind": "", "data_type": "double"},
+            {"name": "segment", "profile_kind": "", "data_type": "string"},
+        ]
+    )
+    assert roles["entity"] == ("id",)
+    assert roles["driver"] == ("amount", "segment")
+    assert roles["outcome"] == ("amount", "segment")
 
 
 def test_candidates_are_bounded_and_deterministic() -> None:
@@ -868,6 +913,33 @@ def test_conflict_detection_deduplicates_repeated_predicate_pairs() -> None:
     )
     conflicts = detect_rule_conflicts([left, right])
     assert len(conflicts) == 1
+
+
+def test_conflict_detection_respects_condition_and_effective_scope() -> None:
+    def rule(rule_id: str, status: str, required: bool, **dates: str) -> BusinessRule:
+        return BusinessRule(
+            rule_id=rule_id,
+            table="main.s.t",
+            predicates=(
+                {"column": "status", "operator": "eq", "value": status, "role": "condition"},
+                {
+                    "column": "cancel_at",
+                    "operator": "is_not_null" if required else "is_null",
+                    "role": "requirement",
+                },
+            ),
+            **dates,
+        )
+
+    left = rule("left", "cancelled", True)
+    assert detect_rule_conflicts([left, rule("other-status", "new", False)]) == ()
+    assert detect_rule_conflicts([left, rule("same-status", "cancelled", False)])
+    assert detect_rule_conflicts(
+        [
+            rule("old", "cancelled", True, effective_to="2024-12-31"),
+            rule("new", "cancelled", False, effective_from="2025-01-01"),
+        ]
+    ) == ()
 
 
 def test_profile_index_and_relationship_identity_are_reusable() -> None:

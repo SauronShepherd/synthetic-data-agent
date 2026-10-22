@@ -14,7 +14,7 @@ def assign_roles(columns: Sequence[Mapping[str, object]]) -> dict[str, tuple[str
     }
     for col in columns:
         name = str(col.get("name", col.get("column_name", "")))
-        kind = str(col.get("profile_kind", col.get("data_type", ""))).lower()
+        kind = str(col.get("profile_kind") or col.get("data_type", "")).lower()
         raw_sensitivity = col.get("sensitivity", "")
         sensitivity = (
             bool(raw_sensitivity)
@@ -27,7 +27,7 @@ def assign_roles(columns: Sequence[Mapping[str, object]]) -> dict[str, tuple[str
             roles["excluded"].append(name)
         elif "timestamp" in kind or "date" in kind or name.lower().endswith(("_at", "_date")):
             roles["lifecycle"].append(name)
-        elif name.lower().endswith(("_id", "_key")):
+        elif name.lower() == "id" or name.lower().endswith(("_id", "_key")):
             roles["entity"].append(name)
         elif any(
             token in kind for token in ("numeric", "categor", "string", "boolean")

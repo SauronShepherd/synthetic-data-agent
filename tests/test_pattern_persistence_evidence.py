@@ -60,3 +60,30 @@ def test_pattern_registry_rows_preserve_complete_evidence_contract():
     limitations = json.loads(row["limitations_json"])
     assert len(limitations) == 1
     assert set(limitations[0]) == {"fingerprint"}
+
+
+def test_registry_redacts_strings_in_nested_evidence_and_actions():
+    pattern = Pattern(
+        pattern_id="p3",
+        analysis_id="a1",
+        family=PatternFamily.CORRELATION,
+        origin=PatternOrigin.OBSERVED,
+        primary_table="main.s.t",
+        columns=("x", "y"),
+        condition={},
+        outcome={},
+        support_rows=1,
+        support_rate=1.0,
+        metric={"value": 1.0},
+        evidence_quality={
+            "baseline": {"label": "secret-baseline"},
+            "stability": {"label": "secret-stability"},
+        },
+        generation_action={"label": "secret-generation"},
+        validation_action={"label": "secret-validation"},
+    )
+    row = registry_rows((pattern,))[0]
+    for value in ("secret-baseline", "secret-stability", "secret-generation", "secret-validation"):
+        assert value not in str(row)
+    for field in ("baseline_json", "stability_json", "generation_action_json", "validation_action_json"):
+        assert set(json.loads(row[field])["label"]) == {"fingerprint"}

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import warnings
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -51,6 +53,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--fanout-child-key", default="")
     p.add_argument("--fanout-segment", default="")
     p.add_argument("--selected-tables", default="")
+    p.add_argument("--business-rules-json", default="[]")
     p.add_argument("--min-support-rows", type=int, default=100)
     p.add_argument("--min-support-rate", type=float, default=0.001)
     p.add_argument("--sample-fraction", type=float, default=0.1)
@@ -72,6 +75,39 @@ def _bool_arg(value: str | bool) -> bool:
     if normalized in {"0", "false", "no", "n", "off"}:
         return False
     raise argparse.ArgumentTypeError("expected a boolean value")
+
+
+def _candidate_columns(
+    columns: Mapping[str, str], roles: Mapping[str, Sequence[str]], excluded: set[str]
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Keep role and sensitivity exclusions in every table-local family."""
+    numeric_types = {
+        "byte",
+        "short",
+        "smallint",
+        "int",
+        "integer",
+        "long",
+        "bigint",
+        "float",
+        "double",
+    }
+    allowed = (set(roles.get("driver", ())) | set(roles.get("outcome", ()))) - excluded
+    numeric = [
+        name
+        for name, dtype in columns.items()
+        if name in allowed and (dtype in numeric_types or dtype.startswith("decimal("))
+    ]
+    categorical = [
+        name
+        for name, dtype in columns.items()
+        if name in allowed and dtype in {"string", "boolean"}
+    ]
+    temporal = [
+        name for name in roles.get("lifecycle", ()) if name in columns and name not in excluded
+    ]
+    entity = [name for name in roles.get("entity", ()) if name in columns and name not in excluded]
+    return numeric, categorical, temporal, entity
 
 
 def main() -> None:
@@ -276,11 +312,7 @@ def main() -> None:
     if upstream_sensitivity:
         roles["excluded"] = tuple(sorted(set(roles.get("excluded", ())) | upstream_sensitivity))
     excluded = set(roles.get("excluded", ()))
-    numeric = [
-        name
-        for name, dtype in columns.items()
-        if dtype in {"double", "float", "int", "bigint", "decimal"} and name not in excluded
-    ]
+    numeric, categorical, temporal, entity_candidates = _candidate_columns(columns, roles, excluded)
     detector = PatternDetector(
         PatternConfig(
             mode=args.mode,
@@ -291,23 +323,32 @@ def main() -> None:
             max_rows_scanned=args.max_rows_scanned,
         )
     )
-    from sda.patterns.models import PatternFamily
+    from sda.patterns.models import Pattern, PatternFamily
     from sda.patterns.spark_metrics import (
         spark_conditional_distribution,
         spark_conditional_missingness,
         spark_correlation_outlier_diagnostic,
         spark_fanout_by_segment,
+        spark_numeric_by_group,
         spark_pearson,
         spark_spearman,
         spark_state_transitions,
+        spark_temporal_lag,
         spark_temporal_order,
     )
 
     analysis_id = args.analysis_id or None
-    patterns = []
+    patterns: list[Pattern] = []
     # Only aggregate rows are collected; source values never leave Spark.
-    for index, left in enumerate(numeric[:50]):
-        for right in numeric[index + 1 : 50]:
+    correlation_numeric = [
+        name
+        for name in numeric
+        if name in roles.get("driver", ()) and name in roles.get("outcome", ())
+    ]
+    for index, left in enumerate(correlation_numeric[:50]):
+        for right in correlation_numeric[index + 1 : 50]:
+            if len(patterns) >= detector.config.max_candidates:
+                break
             summary = (
                 spark_pearson(source, left, right)
                 .where(F.col("valid_pair_count") >= args.min_support_rows)
@@ -338,7 +379,7 @@ def main() -> None:
                         row,
                     )
                 )
-            if args.include_spearman:
+            if args.include_spearman and len(patterns) < detector.config.max_candidates:
                 spearman_rows = (
                     spark_spearman(source, left, right)
                     .where(F.col("valid_pair_count") >= args.min_support_rows)
@@ -366,25 +407,31 @@ def main() -> None:
                             )
                         )
     # Execute the remaining table-local families on bounded aggregate results.
-    categorical = [
-        name
-        for name, dtype in columns.items()
-        if dtype in {"string", "boolean"} and name not in numeric
-    ]
-    for driver in categorical[:10]:
-        for outcome in categorical[:10]:
-            if driver == outcome:
+    categorical_drivers = [name for name in categorical if name in roles.get("driver", ())]
+    categorical_outcomes = [name for name in categorical if name in roles.get("outcome", ())]
+    numeric_outcomes = [name for name in numeric if name in roles.get("outcome", ())]
+    for driver in categorical_drivers[:10]:
+        for outcome in categorical_outcomes[:10]:
+            if driver == outcome or len(patterns) >= detector.config.max_candidates:
                 continue
             rows = (
                 spark_conditional_distribution(source, (driver,), outcome)
                 .where(F.col("support_rows") >= args.min_support_rows)
                 .where(F.col("support_rows") / F.lit(max(source_count, 1)) >= args.min_support_rate)
-                .limit(detector.config.max_candidates)
+                .where(F.col("outcome_count") >= args.min_support_rows)
+                .orderBy(
+                    F.col("support_rows").desc(),
+                    F.col(driver).asc_nulls_first(),
+                    F.col(outcome).asc_nulls_first(),
+                )
+                .limit(max(0, detector.config.max_candidates - len(patterns)))
                 .collect()
             )
             for row in rows:
                 data = row.asDict()
-                support = int(data.pop("support_rows"))
+                condition_rows = int(data.pop("support_rows"))
+                support = int(data.pop("outcome_count"))
+                outcome_value = data.pop(outcome)
                 patterns.append(
                     detector._pattern(
                         analysis_id or "pattern-run",
@@ -392,42 +439,56 @@ def main() -> None:
                         PatternFamily.CONDITIONAL_DISTRIBUTION,
                         (driver, outcome),
                         {driver: data.pop(driver)},
-                        {"outcome": outcome},
+                        {"outcome": outcome, "value": outcome_value},
                         support,
-                        data,
+                        {
+                            **data,
+                            "outcome_count": support,
+                            "condition_rows": condition_rows,
+                            "global_rate": int(data["global_count"] or 0) / max(source_count, 1),
+                        },
+                        support_rate=support / condition_rows,
                     )
                 )
-        for outcome in numeric[:10]:
+        for outcome in numeric_outcomes[:10]:
+            if driver == outcome or len(patterns) >= detector.config.max_candidates:
+                continue
             rows = (
-                spark_conditional_distribution(source, (driver,), outcome)
-                .where(F.col("support_rows") >= args.min_support_rows)
-                .where(F.col("support_rows") / F.lit(max(source_count, 1)) >= args.min_support_rate)
-                .limit(detector.config.max_candidates)
+                spark_numeric_by_group(source, (driver,), outcome)
+                .where(F.col("count") >= args.min_support_rows)
+                .where(F.col("count") / F.lit(max(source_count, 1)) >= args.min_support_rate)
+                .orderBy(F.col("count").desc(), F.col(driver).asc_nulls_first())
+                .limit(max(0, detector.config.max_candidates - len(patterns)))
                 .collect()
             )
             for row in rows:
                 data = row.asDict()
-                support = int(data.pop("support_rows"))
+                support = int(data.pop("count"))
+                condition = {driver: data.pop(driver)}
                 patterns.append(
                     detector._pattern(
                         analysis_id or "pattern-run",
                         source_table,
                         PatternFamily.CONDITIONAL_DISTRIBUTION,
                         (driver, outcome),
-                        {driver: data.pop(driver)},
+                        condition,
                         {"outcome": outcome},
                         support,
-                        {**data, "outcome_kind": "numeric", "method": "exact"},
+                        {**data, "count": support, "method": "exact"},
                     )
                 )
-    for outcome in columns:
-        for driver in categorical[:10]:
+    for outcome in (
+        name for name in columns if name not in excluded and name in roles.get("outcome", ())
+    ):
+        for driver in categorical_drivers[:10]:
+            if driver == outcome or len(patterns) >= detector.config.max_candidates:
+                continue
             rows = (
                 spark_conditional_missingness(source, (driver,), outcome)
                 .where(F.col("support_rows") >= args.min_support_rows)
                 .where(F.col("support_rows") / F.lit(max(source_count, 1)) >= args.min_support_rate)
                 .where(F.col("null_rate") > 0)
-                .limit(detector.config.max_candidates)
+                .limit(max(0, detector.config.max_candidates - len(patterns)))
                 .collect()
             )
             for row in rows:
@@ -446,12 +507,9 @@ def main() -> None:
                         data,
                     )
                 )
-    temporal = [
-        name
-        for name, dtype in columns.items()
-        if "timestamp" in dtype or dtype == "date" or name.endswith(("_at", "_date"))
-    ]
     for earlier, later in zip(temporal, temporal[1:], strict=False):
+        if len(patterns) >= detector.config.max_candidates:
+            break
         summary = spark_temporal_order(source, earlier, later).limit(1).collect()
         if (
             summary
@@ -473,13 +531,36 @@ def main() -> None:
                     data,
                 )
             )
+            if len(patterns) < detector.config.max_candidates:
+                lag = spark_temporal_lag(source, earlier, later).limit(1).collect()
+                if lag and int(lag[0]["count"] or 0) >= args.min_support_rows:
+                    patterns.append(
+                        detector._pattern(
+                            analysis_id or "pattern-run",
+                            source_table,
+                            PatternFamily.TEMPORAL_LAG,
+                            (earlier, later),
+                            {},
+                            {"later": later},
+                            int(lag[0]["count"]),
+                            lag[0].asDict(),
+                        )
+                    )
     state_candidates = [
         name
         for name in categorical
         if name.lower() in {"status", "state", "stage", "lifecycle_state"}
     ]
-    entity_candidates = [name for name in columns if name.lower().endswith(("_id", "id"))]
-    if state_candidates and entity_candidates and temporal:
+    if (
+        state_candidates
+        and entity_candidates
+        and temporal
+        and len(patterns) < detector.config.max_candidates
+    ):
+        tie_breakers = tuple(
+            name for name in ("ingested_at", "ingestion_at", "ingestion_time", "event_id")
+            if name in columns and name not in excluded and name not in {entity_candidates[0], temporal[0]}
+        )
         try:
             transition_rows = (
                 spark_state_transitions(
@@ -487,16 +568,21 @@ def main() -> None:
                     entity_keys=(entity_candidates[0],),
                     state_column=state_candidates[0],
                     event_time=temporal[0],
+                    tie_breakers=tie_breakers,
                 )
-                .limit(detector.config.max_candidates)
+                .limit(max(0, detector.config.max_candidates - len(patterns)))
                 .collect()
             )
-        except ValueError:
+        except ValueError as exc:
+            warnings.warn(f"state transition evidence unavailable: {exc}", stacklevel=1)
             transition_rows = []
         for row in transition_rows:
             data = row.asDict()
             support = int(data.get("count", 0))
-            if support >= args.min_support_rows:
+            if (
+                support >= args.min_support_rows
+                and support / max(source_count, 1) >= args.min_support_rate
+            ):
                 patterns.append(
                     detector._pattern(
                         analysis_id or "pattern-run",
@@ -509,7 +595,7 @@ def main() -> None:
                         data,
                     )
                 )
-    if all(
+    if len(patterns) < detector.config.max_candidates and all(
         (
             args.fanout_parent_table,
             args.fanout_child_table,
@@ -520,24 +606,29 @@ def main() -> None:
     ):
         parent = spark.table(QualifiedName.parse(args.fanout_parent_table).quoted)
         child = spark.table(QualifiedName.parse(args.fanout_child_table).quoted)
+        parent_count = parent.count()
+        if parent_count > args.max_rows_scanned or child.count() > args.max_rows_scanned:
+            raise SystemExit("fanout source rows exceed max_rows_scanned budget")
+        segments = tuple(value.strip() for value in args.fanout_segment.split(","))
+        if set(segments) & excluded and args.fanout_parent_table == source_table:
+            raise SystemExit("fanout segments include excluded columns")
         fanout_rows = (
             spark_fanout_by_segment(
                 parent,
                 child,
                 parent_keys=tuple(args.fanout_parent_key.split(",")),
                 child_keys=tuple(args.fanout_child_key.split(",")),
-                segments=tuple(args.fanout_segment.split(",")),
+                segments=segments,
             )
             .where(F.col("parent_count") >= args.min_support_rows)
+            .limit(max(0, detector.config.max_candidates - len(patterns)))
             .collect()
         )
-        parent_count = parent.count()
         for row in fanout_rows:
             data = row.asDict()
             support = int(data.pop("parent_count"))
             if support / max(parent_count, 1) < args.min_support_rate:
                 continue
-            segments = tuple(args.fanout_segment.split(","))
             condition = {segment: data.pop(segment) for segment in segments}
             patterns.append(
                 detector._pattern(
@@ -549,8 +640,28 @@ def main() -> None:
                     {"child_count": tuple(args.fanout_child_key.split(","))},
                     support,
                     data,
+                    support_rate=support / max(parent_count, 1),
                 )
             )
+
+    # Explicit business rules are evaluated as Spark aggregates on the scoped source.
+    from datetime import date
+
+    from sda.patterns.spark_rules import detect_spark_rules, parse_rules_json
+
+    try:
+        patterns.extend(
+            detect_spark_rules(
+                source,
+                parse_rules_json(args.business_rules_json),
+                table=source_table,
+                as_of=date.today(),
+                detector=detector,
+                analysis_id=analysis_id or "pattern-run",
+            )
+        )
+    except (ValueError, KeyError, TypeError) as exc:
+        raise SystemExit(f"invalid business rules: {exc}") from exc
 
     # Multiple families can describe the same finding; persist one content-id row.
     patterns = [

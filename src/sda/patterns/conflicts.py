@@ -39,8 +39,14 @@ def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
         for right in ordered_rules[i + 1 :]:
             if getattr(left, "table", None) != getattr(right, "table", None):
                 continue
+            if not _scopes_overlap(left, right):
+                continue
             for lpred in getattr(left, "predicates", ()):
+                if lpred.get("role", "requirement") == "condition":
+                    continue
                 for rpred in getattr(right, "predicates", ()):
+                    if rpred.get("role", "requirement") == "condition":
+                        continue
                     if lpred.get("column") != rpred.get("column"):
                         continue
                     conflict_type = _conflict_type(lpred, rpred)
@@ -66,6 +72,29 @@ def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
                 conflict.conflict_type,
             ),
         )
+    )
+
+
+def _scopes_overlap(left: Any, right: Any) -> bool:
+    left_from, left_to = getattr(left, "effective_from", None), getattr(left, "effective_to", None)
+    right_from, right_to = getattr(right, "effective_from", None), getattr(right, "effective_to", None)
+    if left_to and right_from and left_to < right_from:
+        return False
+    if right_to and left_from and right_to < left_from:
+        return False
+    left_conditions = {
+        pred["column"]: pred
+        for pred in getattr(left, "predicates", ())
+        if pred.get("role") == "condition"
+    }
+    right_conditions = {
+        pred["column"]: pred
+        for pred in getattr(right, "predicates", ())
+        if pred.get("role") == "condition"
+    }
+    return not any(
+        _conflict_type(left_conditions[column], right_conditions[column])
+        for column in left_conditions.keys() & right_conditions.keys()
     )
 
 
