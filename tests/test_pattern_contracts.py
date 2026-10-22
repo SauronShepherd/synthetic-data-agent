@@ -137,7 +137,7 @@ def test_multiple_testing_noise_is_descriptive_and_never_auto_promoted() -> None
     assert all(
         pattern.evidence_quality["statistical_screening"]
         == {
-            "policy": "descriptive_no_p_values",
+            "policy": "descriptive_no_p_values_v1",
             "p_values_used": False,
             "multiple_testing_correction": "not_applicable",
         }

@@ -135,6 +135,36 @@ def test_registry_exposes_unavailable_stability_explicitly() -> None:
     assert json.loads(row["baseline_json"]) == {"global_rate": 0.3}
 
 
+def test_registry_preserves_versioned_statistical_screening_policy() -> None:
+    pattern = Pattern(
+        pattern_id="p-statistical-policy",
+        analysis_id="a1",
+        family=PatternFamily.CORRELATION,
+        origin=PatternOrigin.OBSERVED,
+        primary_table="main.s.t",
+        columns=("x", "y"),
+        condition={},
+        outcome={},
+        support_rows=100,
+        support_rate=1.0,
+        metric={"value": 0.4},
+        evidence_quality={
+            "statistical_screening": {
+                "policy": "descriptive_no_p_values_v1",
+                "p_values_used": False,
+                "multiple_testing_correction": "not_applicable",
+            }
+        },
+    )
+
+    payload = json.loads(registry_rows((pattern,))[0]["evidence_quality_json"])
+    assert payload["statistical_screening"] == {
+        "policy": "descriptive_no_p_values_v1",
+        "p_values_used": False,
+        "multiple_testing_correction": "not_applicable",
+    }
+
+
 def test_registry_preserves_stability_dimensions_without_slice_values() -> None:
     pattern = Pattern(
         pattern_id="p5",

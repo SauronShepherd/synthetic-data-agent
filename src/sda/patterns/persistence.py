@@ -24,10 +24,12 @@ _ASSOCIATION_NAMES = {
 }
 
 _SAFE_EVIDENCE_LABELS = {
+    "descriptive_no_p_values_v1",
     "lower_observed_violation_rate",
     "temporal_direction_inferred_from_observed_data",
     "temporal_direction_is_ambiguous",
     "temporal_order_violation_rate",
+    "not_applicable",
 }
 
 
