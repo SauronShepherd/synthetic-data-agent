@@ -31,6 +31,8 @@ class PatternScoringPolicy:
     ) -> PatternDecision:
         if support_rows < self.min_support_rows:
             return PatternDecision.INSUFFICIENT_EVIDENCE
+        if quality.stability_quality == "unstable":
+            return PatternDecision.REVIEW_REQUIRED
         if metric is not None and abs(metric) < self.min_correlation_abs:
             return PatternDecision.REJECTED
         if quality.warning_penalties or quality.validation_mode != "exact":

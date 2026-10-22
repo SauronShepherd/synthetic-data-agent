@@ -934,20 +934,35 @@ class PatternDetector:
             }
         )
         stability_values = metric.get("stability_values")
-        stability_result = stability(list(stability_values)) if stability_values else None
+        stability_result = metric.get("stability")
+        if not isinstance(stability_result, dict) and stability_values:
+            stability_result = stability(list(stability_values))
+        stability_entries = (
+            [stability_result]
+            if isinstance(stability_result, dict) and "stable" in stability_result
+            else list(stability_result.values())
+            if isinstance(stability_result, dict)
+            else []
+        )
+        stability_states = [
+            item.get("stable") for item in stability_entries if isinstance(item, dict)
+        ]
+        stability_quality = (
+            "unstable"
+            if any(value is False for value in stability_states)
+            else "stable"
+            if stability_states and all(value is True for value in stability_states)
+            else "unavailable"
+            if stability_entries
+            else str(metric.get("stability", "unavailable"))
+        )
         decision = self.scoring_policy.decide(
             support_rows=support,
             metric=metric.get("value"),
             quality=EvidenceQuality(
                 support_quality="sufficient",
                 validation_mode=metric.get("method", "exact"),
-                stability_quality=(
-                    "stable"
-                    if stability_result is not None and stability_result.get("stable") is True
-                    else "unstable"
-                    if stability_result is not None
-                    else str(metric.get("stability", "unavailable"))
-                ),
+                stability_quality=stability_quality,
                 source_quality=(
                     "compatible"
                     if metric.get("source_compatible", getattr(self, "_source_compatible", True))
@@ -983,7 +998,7 @@ class PatternDetector:
             else "mismatch",
             "support_quality": "sufficient",
             "confidence": metric.get("confidence"),
-            "stability": stability_result or metric.get("stability", "unavailable"),
+            "stability": stability_result or "unavailable",
             "baseline": baseline,
             "temporal_clock": temporal_clock,
             "population_rows": population_rows,

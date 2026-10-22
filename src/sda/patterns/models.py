@@ -243,6 +243,11 @@ class PatternConfig:
     sample_fraction: float = 1.0
     sample_seed: int = 1729
     max_rows_scanned: int = 100_000
+    stability_slice_columns: tuple[str, ...] = ()
+    stability_min_support_rows: int = 20
+    stability_min_slices: int = 3
+    stability_max_slices: int = 100
+    stability_max_spread: float = 0.1
 
     def __post_init__(self) -> None:
         if (
@@ -257,10 +262,22 @@ class PatternConfig:
             or not 0 < self.sample_fraction <= 1
             or self.sample_seed < 0
             or self.max_rows_scanned < 1
+            or self.stability_min_support_rows < 1
+            or self.stability_min_slices < 2
+            or self.stability_max_slices < self.stability_min_slices
+            or self.stability_max_slices > 1000
+            or not 0 <= self.stability_max_spread <= 1
             or not self.detector_version.strip()
             or not self.scoring_version.strip()
         ):
             raise ValueError("invalid pattern configuration")
+        object.__setattr__(self, "stability_slice_columns", tuple(self.stability_slice_columns))
+        if (
+            any(not column.strip() for column in self.stability_slice_columns)
+            or len(set(self.stability_slice_columns)) != len(self.stability_slice_columns)
+            or len(self.stability_slice_columns) > 10
+        ):
+            raise ValueError("stability slice columns must be unique and limited to ten")
 
     @property
     def configuration_hash(self) -> str:

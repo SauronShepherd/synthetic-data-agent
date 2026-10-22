@@ -46,6 +46,17 @@ def _safe_stability(value: Any) -> Any:
     if value == "unavailable":
         return {"status": "unavailable"}
     safe = _safe_payload(value)
+
+    def restore_labels(source: Any, target: Any) -> None:
+        if not isinstance(source, dict) or not isinstance(target, dict):
+            return
+        for key, item in source.items():
+            if key in {"dimension", "warning", "status", "stable", "truncated"}:
+                target[key] = item
+            else:
+                restore_labels(item, target.get(key))
+
+    restore_labels(value, safe)
     if (
         isinstance(value, dict)
         and isinstance(value.get("quality"), str)

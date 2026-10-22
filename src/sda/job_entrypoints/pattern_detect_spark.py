@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from itertools import combinations
+from typing import Any
 
 from sda.patterns.detector import PatternDetector
 from sda.patterns.models import PatternConfig
@@ -87,6 +88,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--event-time-column", default="")
     p.add_argument("--ingestion-time-column", default="")
     p.add_argument("--transition-tie-breakers", default="")
+    p.add_argument("--stability-slice-columns", default="")
+    p.add_argument(
+        "--stability-time-grain",
+        choices=("day", "week", "month", "quarter", "year"),
+        default="month",
+    )
+    p.add_argument("--stability-min-support-rows", type=int, default=20)
+    p.add_argument("--stability-min-slices", type=int, default=3)
+    p.add_argument("--stability-max-slices", type=int, default=100)
+    p.add_argument("--stability-max-spread", type=float, default=0.1)
     p.add_argument("--selected-tables", default="")
     p.add_argument("--business-rules-json", default="[]")
     p.add_argument("--min-support-rows", type=int, default=100)
@@ -117,6 +128,57 @@ def _column_list(raw: str) -> tuple[str, ...]:
     if len(columns) != len(set(columns)):
         raise SystemExit("transition tie-breaker columns must be unique")
     return columns
+
+
+def _conditional_stability(
+    frame: Any,
+    *,
+    condition: dict[str, Any],
+    outcome: str,
+    outcome_value: Any = None,
+    null_outcome: bool = False,
+    global_value: float | None = None,
+    slice_columns: tuple[str, ...],
+    min_support_rows: int,
+    min_slices: int,
+    max_slices: int,
+    max_spread: float,
+    time_grain: str,
+) -> dict[str, dict[str, Any]]:
+    if not slice_columns:
+        return {}
+    from sda.patterns.spark_metrics import spark_conditional_slice_rates
+    from sda.patterns.stability import stability
+
+    result: dict[str, dict[str, Any]] = {}
+    fields = {field.name: field.dataType.__class__.__name__ for field in frame.schema.fields}
+    for column in slice_columns:
+        temporal = fields[column] in {"DateType", "TimestampType", "TimestampNTZType"}
+        dimension = f"{column}:{time_grain}" if temporal else column
+        rows = spark_conditional_slice_rates(
+            frame,
+            condition=condition,
+            outcome=outcome,
+            slice_column=column,
+            outcome_value=outcome_value,
+            null_outcome=null_outcome,
+            time_grain=time_grain,
+            min_support_rows=min_support_rows,
+            max_slices=max_slices,
+        ).collect()
+        truncated = len(rows) > max_slices
+        bounded_rows = rows[:max_slices]
+        result[dimension] = stability(
+            [float(row["rate"]) for row in bounded_rows],
+            support_counts=[int(row["support_rows"]) for row in bounded_rows],
+            min_support_rows=min_support_rows,
+            min_slices=min_slices,
+            max_spread=max_spread,
+            dimension=dimension,
+            truncated=truncated,
+            global_value=global_value,
+        )
+    return result
 
 
 def _bounded_driver_sets(
@@ -324,11 +386,22 @@ def main() -> None:
         if name and not columns[name].lower().startswith(("timestamp", "date")):
             raise SystemExit(f"{label} column must have a date or timestamp type")
     transition_tie_breakers = _column_list(args.transition_tie_breakers)
+    stability_slice_columns = _column_list(args.stability_slice_columns)
     unknown_tie_breakers = set(transition_tie_breakers) - set(columns)
     if unknown_tie_breakers:
         raise SystemExit(
             f"transition tie-breaker columns are unavailable: {sorted(unknown_tie_breakers)}"
         )
+    if (
+        args.stability_min_support_rows < 1
+        or args.stability_min_slices < 2
+        or args.stability_max_slices < args.stability_min_slices
+        or args.stability_max_slices > 1000
+        or not 0 <= args.stability_max_spread <= 1
+    ):
+        raise SystemExit("invalid stability resource bounds")
+    if len(stability_slice_columns) > 10:
+        raise SystemExit("at most ten stability slice columns may be configured")
     from sda.patterns.upstream import scoped_role_columns, source_constraints
 
     try:
@@ -347,6 +420,15 @@ def main() -> None:
             token in str(column["name"]).lower() for token in ("email", "ssn", "password", "token")
         )
     }
+    unknown_stability_columns = set(stability_slice_columns) - set(columns)
+    if unknown_stability_columns:
+        raise SystemExit(
+            f"stability slice columns are unavailable: {sorted(unknown_stability_columns)}"
+        )
+    if set(stability_slice_columns) & (sensitive_columns | unprofiled | excluded):
+        raise SystemExit(
+            "stability slice columns must be profiled, non-sensitive, and eligible for analysis"
+        )
     numeric, categorical, temporal, entity_candidates = _candidate_columns(columns, roles, excluded)
     if not transition_event_time and temporal:
         transition_event_time = temporal[0]
@@ -358,6 +440,11 @@ def main() -> None:
             sample_fraction=args.sample_fraction,
             sample_seed=args.sample_seed,
             max_rows_scanned=args.max_rows_scanned,
+            stability_slice_columns=stability_slice_columns,
+            stability_min_support_rows=args.stability_min_support_rows,
+            stability_min_slices=args.stability_min_slices,
+            stability_max_slices=args.stability_max_slices,
+            stability_max_spread=args.stability_max_spread,
         )
     )
     analysis_started_at = datetime.now(UTC).isoformat()
@@ -497,6 +584,21 @@ def main() -> None:
                 support = int(data.pop("outcome_count"))
                 outcome_value = data.pop(outcome)
                 condition = {driver: data.pop(driver) for driver in drivers}
+                global_rate = int(data["global_count"] or 0) / max(source_count, 1)
+                condition_rate = support / max(condition_rows, 1)
+                slice_stability = _conditional_stability(
+                    source,
+                    condition=condition,
+                    outcome=outcome,
+                    outcome_value=outcome_value,
+                    slice_columns=stability_slice_columns,
+                    min_support_rows=args.stability_min_support_rows,
+                    min_slices=args.stability_min_slices,
+                    max_slices=args.stability_max_slices,
+                    max_spread=args.stability_max_spread,
+                    time_grain=args.stability_time_grain,
+                    global_value=condition_rate,
+                )
                 patterns.append(
                     detector._pattern(
                         analysis_id,
@@ -510,7 +612,8 @@ def main() -> None:
                             **data,
                             "outcome_count": support,
                             "condition_rows": condition_rows,
-                            "global_rate": int(data["global_count"] or 0) / max(source_count, 1),
+                            "global_rate": global_rate,
+                            "stability": slice_stability or "unavailable",
                         },
                         support_rate=support / condition_rows,
                     )
@@ -542,12 +645,20 @@ def main() -> None:
                         condition,
                         {"outcome": outcome},
                         support,
-                        {**data, "count": support, "method": "exact"},
+                        {
+                            **data,
+                            "count": support,
+                            "method": "exact",
+                            "stability": "unavailable",
+                        },
                     )
                 )
     for outcome in (
         name for name in columns if name not in excluded and name in roles.get("outcome", ())
     ):
+        global_null_rate = source.where(
+            F.col(f"`{outcome.replace('`', '``')}`").isNull()
+        ).count() / max(source_count, 1)
         for drivers in driver_sets:
             if outcome in drivers or len(patterns) >= detector.config.max_candidates:
                 continue
@@ -563,6 +674,20 @@ def main() -> None:
                 data = row.asDict()
                 support = int(data.pop("support_rows"))
                 condition = {driver: data.pop(driver) for driver in drivers}
+                condition_null_rate = float(data["null_rate"])
+                slice_stability = _conditional_stability(
+                    source,
+                    condition=condition,
+                    outcome=outcome,
+                    null_outcome=True,
+                    global_value=condition_null_rate,
+                    slice_columns=stability_slice_columns,
+                    min_support_rows=args.stability_min_support_rows,
+                    min_slices=args.stability_min_slices,
+                    max_slices=args.stability_max_slices,
+                    max_spread=args.stability_max_spread,
+                    time_grain=args.stability_time_grain,
+                )
                 patterns.append(
                     detector._pattern(
                         analysis_id,
@@ -572,7 +697,11 @@ def main() -> None:
                         condition,
                         {"outcome": outcome},
                         support,
-                        data,
+                        {
+                            **data,
+                            "global_null_rate": global_null_rate,
+                            "stability": slice_stability or "unavailable",
+                        },
                     )
                 )
     for earlier, later in zip(temporal, temporal[1:], strict=False):

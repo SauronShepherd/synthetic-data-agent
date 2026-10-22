@@ -6,6 +6,7 @@ from sda.patterns.conflicts import detect_rule_conflicts, resolve_rule_conflicts
 from sda.patterns.fanout import fanout_by_segment
 from sda.patterns.models import (
     Pattern,
+    PatternDecision,
     PatternDetectionResult,
     PatternExecutionReceipt,
     PatternFamily,
@@ -22,7 +23,7 @@ from sda.patterns.precedence import RulePrecedencePolicy
 from sda.patterns.roles import assign_roles
 from sda.patterns.rules import BusinessRule, RuleStrength, evaluate_rule
 from sda.patterns.safety import SafeValueKind, safe_pattern_value
-from sda.patterns.scoring import PatternScoringPolicy
+from sda.patterns.scoring import EvidenceQuality, PatternScoringPolicy
 from sda.patterns.stability import stability
 from sda.patterns.temporal import ordered_events, temporal_order
 from sda.patterns.transitions import state_transitions
@@ -910,6 +911,51 @@ def test_stability_reports_sign_flips_and_drift() -> None:
     result = stability([0.8, -0.7, 0.75])
     assert result["sign_flip_count"] == 2
     assert result["stable"] is False
+
+
+def test_stability_uses_global_baseline_and_refuses_thin_or_truncated_slices() -> None:
+    drift = stability(
+        [0.8, 0.5, 0.2],
+        support_counts=[20, 20, 20],
+        min_support_rows=10,
+        min_slices=3,
+        global_value=0.5,
+        dimension="month",
+    )
+    assert drift["stable"] is False
+    assert drift["max_abs_delta_from_global"] == pytest.approx(0.3)
+    thin = stability(
+        [0.5, 0.51],
+        support_counts=[20, 2],
+        min_support_rows=10,
+        min_slices=2,
+        global_value=0.5,
+        dimension="region",
+    )
+    assert thin["eligible_slice_count"] == 1
+    assert thin["stable"] is None
+    truncated = stability(
+        [0.5, 0.5, 0.5],
+        min_slices=3,
+        global_value=0.5,
+        dimension="source_system",
+        truncated=True,
+    )
+    assert truncated["stable"] is None
+
+
+def test_unstable_evidence_requires_review_instead_of_planning_acceptance() -> None:
+    decision = PatternScoringPolicy(min_support_rows=1).decide(
+        support_rows=100,
+        metric=None,
+        quality=EvidenceQuality(
+            support_quality="sufficient",
+            validation_mode="exact",
+            stability_quality="unstable",
+            source_quality="compatible",
+        ),
+    )
+    assert decision == PatternDecision.REVIEW_REQUIRED
 
 
 def test_rule_conflict_detection_handles_unhashable_predicates() -> None:

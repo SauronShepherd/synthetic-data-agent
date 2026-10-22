@@ -115,6 +115,37 @@ def test_registry_exposes_unavailable_stability_explicitly() -> None:
     assert json.loads(row["baseline_json"]) == {"global_rate": 0.3}
 
 
+def test_registry_preserves_stability_dimensions_without_slice_values() -> None:
+    pattern = Pattern(
+        pattern_id="p5",
+        analysis_id="a1",
+        family=PatternFamily.CONDITIONAL_DISTRIBUTION,
+        origin=PatternOrigin.OBSERVED,
+        primary_table="main.s.t",
+        columns=("segment", "status"),
+        condition={"segment": "private-segment-value"},
+        outcome={"status": "private-outcome-value"},
+        support_rows=60,
+        support_rate=0.5,
+        metric={"value": 0.5},
+        evidence_quality={
+            "stability": {
+                "event_time:month": {
+                    "dimension": "event_time:month",
+                    "stable": False,
+                    "max_abs_delta_from_global": 0.3,
+                }
+            }
+        },
+    )
+    row = registry_rows((pattern,))[0]
+    stability_json = json.loads(row["stability_json"])
+    assert stability_json["event_time:month"]["dimension"] == "event_time:month"
+    assert stability_json["event_time:month"]["stable"] is False
+    assert "private-segment-value" not in str(row)
+    assert "private-outcome-value" not in str(row)
+
+
 def test_registry_preserves_temporal_clock_and_ordering_provenance() -> None:
     pattern = Pattern(
         pattern_id="p-clock",

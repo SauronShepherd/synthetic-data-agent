@@ -1,16 +1,18 @@
 import ast
 import os
 import sys
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from sda.job_entrypoints.pattern_detect_spark import _candidate_columns
+from sda.job_entrypoints.pattern_detect_spark import _candidate_columns, _conditional_stability
 from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
 from sda.patterns.spark_metrics import (
     spark_conditional_distribution,
     spark_conditional_missingness,
+    spark_conditional_slice_rates,
     spark_fanout_by_segment,
     spark_metric,
     spark_numeric_by_group,
@@ -276,6 +278,73 @@ def test_numeric_by_group_baseline_and_null_driver_join(spark) -> None:
     )
     distribution = spark_conditional_distribution(frame, ("segment",), "status").collect()
     assert all(row["support_rows"] == 2 for row in distribution)
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_conditional_slice_rates_detect_monthly_drift_and_enforce_support(spark) -> None:
+    rows = []
+    for month, successes in (("2026-01-01", 8), ("2026-02-01", 5), ("2026-03-01", 2)):
+        rows.extend(
+            (
+                "west",
+                datetime.fromisoformat(f"{month} 12:00:00"),
+                "paid" if index < successes else "unpaid",
+            )
+            for index in range(10)
+        )
+    rows.extend([("west", datetime.fromisoformat("2026-04-01 12:00:00"), "paid")])
+    frame = spark.createDataFrame(
+        rows,
+        "region string, event_time timestamp, status string",
+    )
+    rates = spark_conditional_slice_rates(
+        frame,
+        condition={"region": "west"},
+        outcome="status",
+        outcome_value="paid",
+        slice_column="event_time",
+        time_grain="month",
+        min_support_rows=5,
+        max_slices=10,
+    ).collect()
+    observed = {row["rate"] for row in rates}
+    assert observed == {0.8, 0.5, 0.2}
+    assert {row["support_rows"] for row in rates} == {10}
+
+    summarized = _conditional_stability(
+        frame,
+        condition={"region": "west"},
+        outcome="status",
+        outcome_value="paid",
+        slice_columns=("event_time",),
+        min_support_rows=5,
+        min_slices=3,
+        max_slices=10,
+        max_spread=0.1,
+        time_grain="month",
+        global_value=0.5,
+    )
+    assert summarized["event_time:month"]["stable"] is False
+    assert summarized["event_time:month"]["max_abs_delta_from_global"] == pytest.approx(0.3)
+
+    null_rates = spark_conditional_slice_rates(
+        spark.createDataFrame(
+            [
+                (region, event_time, None if status == "paid" else "paid")
+                for region, event_time, status in rows
+            ],
+            "region string, event_time timestamp, status string",
+        ),
+        condition={"region": "west"},
+        outcome="status",
+        slice_column="event_time",
+        null_outcome=True,
+        time_grain="month",
+        min_support_rows=5,
+        max_slices=10,
+    ).collect()
+    assert len(null_rates) == 3
+    assert all(0 <= row["rate"] <= 1 for row in null_rates)
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]

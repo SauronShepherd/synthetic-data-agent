@@ -119,6 +119,37 @@ def test_pattern_entrypoint_parses_temporal_clock_parameters(
     assert args.transition_tie_breakers == "event_id,sequence"
 
 
+def test_pattern_entrypoint_parses_stability_slice_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pattern_detect_spark.py",
+            "--source-table",
+            "samples.demo.events",
+            "--stability-slice-columns",
+            "event_time,region,source_system",
+            "--stability-time-grain",
+            "quarter",
+            "--stability-min-support-rows",
+            "25",
+            "--stability-min-slices",
+            "4",
+            "--stability-max-slices",
+            "50",
+            "--stability-max-spread",
+            "0.15",
+        ],
+    )
+    args = parse_args()
+    assert args.stability_slice_columns == "event_time,region,source_system"
+    assert args.stability_time_grain == "quarter"
+    assert args.stability_min_support_rows == 25
+    assert args.stability_min_slices == 4
+    assert args.stability_max_slices == 50
+    assert args.stability_max_spread == 0.15
+
+
 def test_pattern_entrypoint_requires_source_table(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["pattern_detect_spark.py"])
     with pytest.raises(SystemExit):

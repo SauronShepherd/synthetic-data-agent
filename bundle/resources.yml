@@ -482,6 +482,18 @@ resources:
           default: ""
         - name: transition_tie_breakers
           default: ""
+        - name: stability_slice_columns
+          default: ""
+        - name: stability_time_grain
+          default: month
+        - name: stability_min_support_rows
+          default: "20"
+        - name: stability_min_slices
+          default: "3"
+        - name: stability_max_slices
+          default: "100"
+        - name: stability_max_spread
+          default: "0.1"
         - name: allow_best_effort_snapshot
           default: ${var.sda_allow_best_effort_snapshot}
       tasks:
@@ -547,6 +559,18 @@ resources:
               - "{{job.parameters.ingestion_time_column}}"
               - --transition-tie-breakers
               - "{{job.parameters.transition_tie_breakers}}"
+              - --stability-slice-columns
+              - "{{job.parameters.stability_slice_columns}}"
+              - --stability-time-grain
+              - "{{job.parameters.stability_time_grain}}"
+              - --stability-min-support-rows
+              - "{{job.parameters.stability_min_support_rows}}"
+              - --stability-min-slices
+              - "{{job.parameters.stability_min_slices}}"
+              - --stability-max-slices
+              - "{{job.parameters.stability_max_slices}}"
+              - --stability-max-spread
+              - "{{job.parameters.stability_max_spread}}"
               - --allow-best-effort-snapshot
               - "{{job.parameters.allow_best_effort_snapshot}}"
           environment_key: pattern_detector_environment

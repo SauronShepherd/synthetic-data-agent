@@ -201,6 +201,58 @@ def spark_conditional_distribution(frame: Any, drivers: tuple[str, ...], outcome
     )
 
 
+def spark_conditional_slice_rates(
+    frame: Any,
+    *,
+    condition: dict[str, Any],
+    outcome: str,
+    slice_column: str,
+    outcome_value: Any = None,
+    null_outcome: bool = False,
+    time_grain: str = "month",
+    min_support_rows: int = 1,
+    max_slices: int = 100,
+) -> Any:
+    """Return bounded per-slice rates for one aggregate pattern candidate.
+
+    Only grouped counts/rates are returned. Callers should persist the summary,
+    not slice labels or source values.
+    """
+    if not condition or min_support_rows < 1 or max_slices < 2:
+        raise ValueError("slice stability requires a condition and positive resource bounds")
+    columns = (*condition, outcome, slice_column)
+    _require_columns(frame, columns, metric="spark_conditional_slice_rates")
+    F = _functions()
+    field = next(field for field in frame.schema.fields if field.name == slice_column)
+    slice_ref = f"`{slice_column.replace('`', '``')}`"
+    slice_expression = F.col(slice_ref)
+    if field.dataType.__class__.__name__ in {"DateType", "TimestampType", "TimestampNTZType"}:
+        if time_grain not in {"day", "week", "month", "quarter", "year"}:
+            raise ValueError("time_grain must be day, week, month, quarter, or year")
+        slice_expression = F.date_trunc(time_grain, slice_expression.cast("timestamp"))
+    filtered = frame
+    for name, value in condition.items():
+        quoted = f"`{name.replace('`', '``')}`"
+        filtered = filtered.where(F.col(quoted).eqNullSafe(F.lit(value)))
+    outcome_ref = f"`{outcome.replace('`', '``')}`"
+    success = (
+        F.col(outcome_ref).isNull()
+        if null_outcome
+        else F.col(outcome_ref).eqNullSafe(F.lit(outcome_value))
+    )
+    return (
+        filtered.groupBy(slice_expression.alias("_slice"))
+        .agg(
+            F.count(F.lit(1)).alias("support_rows"),
+            F.sum(F.when(success, 1).otherwise(0)).alias("success_rows"),
+        )
+        .where(F.col("support_rows") >= min_support_rows)
+        .withColumn("rate", F.col("success_rows") / F.col("support_rows"))
+        .orderBy(F.col("_slice").asc_nulls_first())
+        .limit(max_slices + 1)
+    )
+
+
 def spark_numeric_by_group(frame: Any, drivers: tuple[str, ...], outcome: str) -> Any:
     """Numeric conditional summaries with a global non-null outcome baseline."""
     if not drivers:

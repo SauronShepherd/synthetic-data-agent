@@ -21,6 +21,16 @@ def test_pattern_task_receives_all_upstream_artifact_references() -> None:
     ):
         assert f"name: {parameter}" in block
         assert f"--{parameter.replace('_', '-')}" in block
+    for parameter in (
+        "stability_slice_columns",
+        "stability_time_grain",
+        "stability_min_support_rows",
+        "stability_min_slices",
+        "stability_max_slices",
+        "stability_max_spread",
+    ):
+        assert f"name: {parameter}" in block
+        assert f"--{parameter.replace('_', '-')}" in block
 
 
 def test_scope_and_relationship_jobs_use_separate_evidence_tables() -> None:
