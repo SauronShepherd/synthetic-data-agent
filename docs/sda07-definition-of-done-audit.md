@@ -41,6 +41,13 @@ Read-only Databricks inspection succeeds with profile `sda`:
 This proves the current bundle is wired and deployed; it does not replace the
 missing fresh run and registry query.
 
+The authenticated web console for workspace `7474654810500477` independently
+shows the account banner `You've reached your budget. Contact your admin for a
+budget increase. Budget resets Nov 1.` The Jobs page lists both the fixture job
+`701020438490636` and pattern job `904431536757321`, with historical successful
+runs. Selecting `Run now` for the fixture on 2026-10-22 produced the same
+organization-disabled error recorded below.
+
 ## Remaining gate
 
 The only SDA-07 DOD item that cannot currently be re-proven live is a fresh
