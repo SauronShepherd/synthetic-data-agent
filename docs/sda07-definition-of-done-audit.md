@@ -26,6 +26,21 @@ The detector deliberately uses the versioned descriptive policy
 `descriptive_no_p_values_v1`. If p-value evidence is supplied without an
 implemented multiple-testing correction policy, the detector fails closed.
 
+## Current deployment evidence
+
+Read-only Databricks inspection succeeds with profile `sda`:
+
+- Pattern job: `904431536757321` (`[dev] SDA Pattern Detector`).
+- Job deployment kind: `BUNDLE`.
+- Runtime wheel: `/Workspace/Users/angel.alvarez.pascua@gmail.com/.bundle/synthetic-data-agent/dev/artifacts/.internal/synthetic_data_agent-0.8.0.dev0-py3-none-any.whl`.
+- Entrypoint: `/Workspace/Users/angel.alvarez.pascua@gmail.com/.bundle/synthetic-data-agent/dev/files/src/sda/job_entrypoints/pattern_detect_spark.py`.
+- The job parameters include metadata, profile, relationship, dependency-graph,
+  source-snapshot, stability, fan-out, temporal-clock, output, and
+  evidence-table inputs required by the DOD.
+
+This proves the current bundle is wired and deployed; it does not replace the
+missing fresh run and registry query.
+
 ## Remaining gate
 
 The only SDA-07 DOD item that cannot currently be re-proven live is a fresh
