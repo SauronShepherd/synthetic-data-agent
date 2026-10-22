@@ -50,6 +50,8 @@ class BusinessRule:
             raise ValueError(
                 "approved rules require owner_id, reviewer_id, approval_reference, and approved_at"
             )
+        if self.approved and self.owner_id == self.reviewer_id:
+            raise ValueError("approved rules require distinct owner and reviewer identities")
         if self.approved_at:
             try:
                 datetime.fromisoformat(self.approved_at.replace("Z", "+00:00"))

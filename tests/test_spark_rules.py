@@ -60,6 +60,20 @@ def test_approved_rules_require_auditable_approval_metadata():
     assert rules[0].rule_version == "2"
 
 
+def test_approved_rules_require_independent_reviewer_identity() -> None:
+    with pytest.raises(ValueError, match="distinct owner and reviewer"):
+        BusinessRule(
+            "same-actor",
+            "main.s.t",
+            ({"column": "x"},),
+            approved=True,
+            owner_id="same-actor",
+            reviewer_id="same-actor",
+            approval_reference="ticket-1",
+            approved_at="2026-10-01T00:00:00Z",
+        )
+
+
 @pytest.fixture(scope="module")
 def spark():
     from pyspark.sql import SparkSession
