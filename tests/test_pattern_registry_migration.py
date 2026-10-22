@@ -35,24 +35,32 @@ class _Spark:
     def sql(self, statement: str) -> None:
         self.statements.append(statement)
         if self.apply_ddl:
-            self.columns.extend(["evidence_quality_json", "lifecycle", "rule_provenance_json"])
+            self.columns.extend(
+                [
+                    "evidence_quality_json",
+                    "lifecycle",
+                    "rule_provenance_json",
+                    "temporal_clock_json",
+                ]
+            )
 
 
-def test_existing_pattern_registry_gets_missing_v3_columns_before_write() -> None:
+def test_existing_pattern_registry_gets_missing_v4_columns_before_write() -> None:
     spark = _Spark(["schema_version", "artifact_id", "status", "evidence_id"])
     rows: list[dict[str, Any]] = [
         {
-            "schema_version": "sda07-pattern-registry-v3",
+            "schema_version": "sda07-pattern-registry-v4",
             "evidence_quality_json": "{}",
             "lifecycle": "observed_pattern",
             "rule_provenance_json": "{}",
+            "temporal_clock_json": "{}",
         }
     ]
     ensure_pattern_registry_columns(spark, "workspace.profiles.pattern_registry", rows)
     assert spark.statements == [
         "ALTER TABLE `workspace`.`profiles`.`pattern_registry` ADD COLUMNS "
         "(`evidence_quality_json` STRING, `lifecycle` STRING, "
-        "`rule_provenance_json` STRING)"
+        "`rule_provenance_json` STRING, `temporal_clock_json` STRING)"
     ]
 
 

@@ -115,6 +115,37 @@ def test_registry_exposes_unavailable_stability_explicitly() -> None:
     assert json.loads(row["baseline_json"]) == {"global_rate": 0.3}
 
 
+def test_registry_preserves_temporal_clock_and_ordering_provenance() -> None:
+    pattern = Pattern(
+        pattern_id="p-clock",
+        analysis_id="a1",
+        family=PatternFamily.STATE_TRANSITION,
+        origin=PatternOrigin.OBSERVED,
+        primary_table="main.s.events",
+        columns=("state",),
+        condition={"from_state": "OPEN"},
+        outcome={"to_state": "CLOSED"},
+        support_rows=10,
+        support_rate=0.5,
+        metric={},
+        evidence_quality={
+            "temporal_clock": {
+                "event_time_column": "event_at",
+                "ingestion_time_column": "ingested_at",
+                "tie_breaker_columns": ["event_id"],
+                "ingestion_order_disagreement_count": 2,
+            }
+        },
+    )
+    row = registry_rows((pattern,))[0]
+    assert json.loads(row["temporal_clock_json"]) == {
+        "event_time_column": "event_at",
+        "ingestion_time_column": "ingested_at",
+        "tie_breaker_columns": ["event_id"],
+        "ingestion_order_disagreement_count": 2,
+    }
+
+
 def test_registry_preserves_rule_owner_approval_and_effective_period() -> None:
     rule = BusinessRule(
         "cancelled_timestamp_required",

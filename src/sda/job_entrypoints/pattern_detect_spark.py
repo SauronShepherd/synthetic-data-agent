@@ -83,6 +83,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--fanout-parent-key", default="")
     p.add_argument("--fanout-child-key", default="")
     p.add_argument("--fanout-segment", default="")
+    p.add_argument("--event-time-column", default="")
+    p.add_argument("--ingestion-time-column", default="")
+    p.add_argument("--transition-tie-breakers", default="")
     p.add_argument("--selected-tables", default="")
     p.add_argument("--business-rules-json", default="[]")
     p.add_argument("--min-support-rows", type=int, default=100)
@@ -106,6 +109,13 @@ def _bool_arg(value: str | bool) -> bool:
     if normalized in {"0", "false", "no", "n", "off"}:
         return False
     raise argparse.ArgumentTypeError("expected a boolean value")
+
+
+def _column_list(raw: str) -> tuple[str, ...]:
+    columns = tuple(column.strip() for column in raw.split(",") if column.strip())
+    if len(columns) != len(set(columns)):
+        raise SystemExit("transition tie-breaker columns must be unique")
+    return columns
 
 
 def _candidate_columns(
@@ -290,6 +300,23 @@ def main() -> None:
     if source_count > args.max_rows_scanned:
         raise SystemExit(f"source rows exceed max_rows_scanned budget ({args.max_rows_scanned})")
     columns = {field.name: field.dataType.simpleString() for field in source.schema.fields}
+    transition_event_time = args.event_time_column or ""
+    if transition_event_time and transition_event_time not in columns:
+        raise SystemExit("event-time column is unavailable in the source schema")
+    if args.ingestion_time_column and args.ingestion_time_column not in columns:
+        raise SystemExit("ingestion-time column is unavailable in the source schema")
+    for label, name in (
+        ("event-time", transition_event_time),
+        ("ingestion-time", args.ingestion_time_column),
+    ):
+        if name and not columns[name].lower().startswith(("timestamp", "date")):
+            raise SystemExit(f"{label} column must have a date or timestamp type")
+    transition_tie_breakers = _column_list(args.transition_tie_breakers)
+    unknown_tie_breakers = set(transition_tie_breakers) - set(columns)
+    if unknown_tie_breakers:
+        raise SystemExit(
+            f"transition tie-breaker columns are unavailable: {sorted(unknown_tie_breakers)}"
+        )
     from sda.patterns.upstream import scoped_role_columns
 
     try:
@@ -300,7 +327,17 @@ def main() -> None:
     if unprofiled:
         roles["excluded"] = tuple(sorted(set(roles.get("excluded", ())) | unprofiled))
     excluded = set(roles.get("excluded", ()))
+    sensitive_columns = {
+        str(column["name"])
+        for column in role_columns
+        if column.get("sensitivity")
+        or any(
+            token in str(column["name"]).lower() for token in ("email", "ssn", "password", "token")
+        )
+    }
     numeric, categorical, temporal, entity_candidates = _candidate_columns(columns, roles, excluded)
+    if not transition_event_time and temporal:
+        transition_event_time = temporal[0]
     detector = PatternDetector(
         PatternConfig(
             mode=args.mode,
@@ -554,24 +591,32 @@ def main() -> None:
     if (
         state_candidates
         and entity_candidates
-        and temporal
+        and transition_event_time
         and len(patterns) < detector.config.max_candidates
     ):
-        tie_breakers = tuple(
+        tie_breakers = transition_tie_breakers or tuple(
             name
             for name in ("ingested_at", "ingestion_at", "ingestion_time", "event_id")
-            if name in columns
-            and name not in excluded
-            and name not in {entity_candidates[0], temporal[0]}
+            if name in columns and name not in {entity_candidates[0], transition_event_time}
         )
+        ordering_columns = {
+            *tie_breakers,
+            transition_event_time,
+            *((args.ingestion_time_column,) if args.ingestion_time_column else ()),
+        }
+        if ordering_columns & unprofiled:
+            raise SystemExit("transition ordering columns must have profile evidence")
+        if ordering_columns & sensitive_columns:
+            raise SystemExit("sensitive columns cannot be used for transition ordering")
         try:
             transition_rows = (
                 spark_state_transitions(
                     source,
                     entity_keys=(entity_candidates[0],),
                     state_column=state_candidates[0],
-                    event_time=temporal[0],
+                    event_time=transition_event_time,
                     tie_breakers=tie_breakers,
+                    ingestion_time=args.ingestion_time_column or None,
                 )
                 .limit(max(0, detector.config.max_candidates - len(patterns)))
                 .collect()

@@ -74,6 +74,30 @@ def test_pattern_entrypoint_parses_databricks_boolean_flags(
     assert args.allow_best_effort_snapshot is False
 
 
+def test_pattern_entrypoint_parses_temporal_clock_parameters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pattern_detect_spark.py",
+            "--source-table",
+            "samples.demo.events",
+            "--event-time-column",
+            "event_at",
+            "--ingestion-time-column",
+            "ingested_at",
+            "--transition-tie-breakers",
+            "event_id,sequence",
+        ],
+    )
+    args = parse_args()
+    assert args.event_time_column == "event_at"
+    assert args.ingestion_time_column == "ingested_at"
+    assert args.transition_tie_breakers == "event_id,sequence"
+
+
 def test_pattern_entrypoint_requires_source_table(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["pattern_detect_spark.py"])
     with pytest.raises(SystemExit):

@@ -965,6 +965,16 @@ class PatternDetector:
         baseline = {key: value for key, value in metric.items() if key.startswith("global_")}
         if isinstance(metric.get("baseline"), dict):
             baseline.update(metric["baseline"])
+        temporal_clock = {
+            key: metric[key]
+            for key in (
+                "event_time_column",
+                "ingestion_time_column",
+                "tie_breaker_columns",
+                "ingestion_order_disagreement_count",
+            )
+            if key in metric
+        }
         evidence_quality = {
             "validation_mode": metric.get("method", "exact"),
             "source_quality": "compatible"
@@ -974,6 +984,7 @@ class PatternDetector:
             "confidence": metric.get("confidence"),
             "stability": stability_result or metric.get("stability", "unavailable"),
             "baseline": baseline,
+            "temporal_clock": temporal_clock,
             "population_rows": population_rows,
             "sampling": {
                 "fraction": self.config.sample_fraction,

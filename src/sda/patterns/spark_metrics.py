@@ -345,12 +345,19 @@ def spark_state_transitions(
     state_column: str,
     event_time: str,
     tie_breakers: tuple[str, ...] = (),
+    ingestion_time: str | None = None,
 ) -> Any:
     if not entity_keys:
         raise ValueError("spark_state_transitions requires at least one entity key")
     _require_columns(
         frame,
-        (*entity_keys, state_column, event_time, *tie_breakers),
+        (
+            *entity_keys,
+            state_column,
+            event_time,
+            *tie_breakers,
+            *((ingestion_time,) if ingestion_time else ()),
+        ),
         metric="spark_state_transitions",
     )
     F = _functions()
@@ -370,8 +377,30 @@ def spark_state_transitions(
             else "temporal_tie_breaker_not_unique"
         )
     window = Window.partitionBy(*entity_keys).orderBy(*ordering)
+    if ingestion_time:
+        duplicate_ingestion_order = (
+            frame.groupBy(*entity_keys, ingestion_time, *tie_breakers)
+            .count()
+            .where(F.col("count") > 1)
+        )
+        if duplicate_ingestion_order.limit(1).count():
+            raise ValueError("temporal_ingestion_tie_breaker_not_unique")
+        ingestion_window = Window.partitionBy(*entity_keys).orderBy(
+            F.col(ingestion_time).asc_nulls_last(),
+            *(F.col(column).asc_nulls_last() for column in tie_breakers),
+        )
+        ordered_source = (
+            frame.withColumn("__sda_event_order", F.row_number().over(window))
+            .withColumn("__sda_ingestion_order", F.row_number().over(ingestion_window))
+            .withColumn(
+                "__sda_order_disagreement",
+                (F.col("__sda_event_order") != F.col("__sda_ingestion_order")).cast("long"),
+            )
+        )
+    else:
+        ordered_source = frame.withColumn("__sda_order_disagreement", F.lit(0))
     ordered = (
-        frame.withColumn("__sda_time", F.col(event_time).cast("timestamp"))
+        ordered_source.withColumn("__sda_time", F.col(event_time).cast("timestamp"))
         .withColumn("from_state", F.col(state_column))
         .withColumn("to_state", F.lead(F.col(state_column)).over(window))
         .withColumn("__sda_next_time", F.lead("__sda_time").over(window))
@@ -391,6 +420,7 @@ def spark_state_transitions(
         F.avg("__sda_duration").alias("mean_time_in_state_seconds"),
         F.expr("percentile_approx(__sda_duration, 0.5, 10000)").alias("p50_time_in_state_seconds"),
         F.max("__sda_duration").alias("max_time_in_state_seconds"),
+        F.sum("__sda_order_disagreement").alias("ingestion_order_disagreement_count"),
     )
     outgoing = counts.groupBy("from_state").agg(F.sum("count").alias("outgoing_count"))
     return (
@@ -400,5 +430,8 @@ def spark_state_transitions(
         .withColumn("transition_count", F.col("count"))
         .withColumn("transition_probability", F.col("count") / F.col("outgoing_count"))
         .withColumn("self_transition", F.col("from_state").eqNullSafe(F.col("to_state")))
+        .withColumn("event_time_column", F.lit(event_time))
+        .withColumn("ingestion_time_column", F.lit(ingestion_time))
+        .withColumn("tie_breaker_columns", F.lit(list(tie_breakers)))
         .withColumn("warnings", F.array(F.lit("unseen_transition_not_assumed_invalid")))
     )

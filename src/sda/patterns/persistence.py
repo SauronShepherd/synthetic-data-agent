@@ -9,7 +9,7 @@ from sda.artifacts.fingerprint import fingerprint
 from sda.patterns.models import Pattern
 from sda.runtime.identifiers import QualifiedName, quote_identifier
 
-PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v3"
+PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v4"
 PATTERN_EVIDENCE_SCHEMA_VERSION = "sda07-pattern-evidence-v1"
 
 _ASSOCIATION_NAMES = {
@@ -150,6 +150,9 @@ def registry_rows(
             "validation_mode": p.evidence_quality.get("validation_mode", "unknown"),
             "rule_provenance_json": json.dumps(
                 _rule_provenance(p.metric.get("rule")), sort_keys=True
+            ),
+            "temporal_clock_json": json.dumps(
+                p.evidence_quality.get("temporal_clock", {}), sort_keys=True
             ),
             "stability_json": json.dumps(
                 _safe_stability(p.evidence_quality.get("stability", {})), sort_keys=True

@@ -293,6 +293,31 @@ def test_state_transitions_ties_censoring_and_duration(spark) -> None:
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_state_transitions_record_event_clock_ingestion_clock_and_late_order(spark) -> None:
+    frame = spark.createDataFrame(
+        [
+            ("a", "open", "2024-01-01 00:01:00", "2024-01-01 00:03:00", 1),
+            ("a", "closed", "2024-01-01 00:02:00", "2024-01-01 00:02:00", 2),
+        ],
+        "entity string, status string, event_time string, ingestion_time string, event_id int",
+    )
+    row = spark_state_transitions(
+        frame,
+        entity_keys=("entity",),
+        state_column="status",
+        event_time="event_time",
+        ingestion_time="ingestion_time",
+        tie_breakers=("event_id",),
+    ).first()
+    assert row["from_state"] == "open"
+    assert row["to_state"] == "closed"
+    assert row["ingestion_order_disagreement_count"] == 1
+    assert row["event_time_column"] == "event_time"
+    assert row["ingestion_time_column"] == "ingestion_time"
+    assert row["tie_breaker_columns"] == ["event_id"]
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_spark_fanout_includes_zero_child_parents(spark) -> None:
     parents = spark.createDataFrame(
         [("p1", "premium"), ("p2", "standard")], "id string, segment string"

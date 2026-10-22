@@ -472,6 +472,12 @@ resources:
           default: ""
         - name: fanout_segment
           default: ""
+        - name: event_time_column
+          default: ""
+        - name: ingestion_time_column
+          default: ""
+        - name: transition_tie_breakers
+          default: ""
         - name: allow_best_effort_snapshot
           default: ${var.sda_allow_best_effort_snapshot}
       tasks:
@@ -531,6 +537,12 @@ resources:
               - "{{job.parameters.fanout_child_key}}"
               - --fanout-segment
               - "{{job.parameters.fanout_segment}}"
+              - --event-time-column
+              - "{{job.parameters.event_time_column}}"
+              - --ingestion-time-column
+              - "{{job.parameters.ingestion_time_column}}"
+              - --transition-tie-breakers
+              - "{{job.parameters.transition_tie_breakers}}"
               - --allow-best-effort-snapshot
               - "{{job.parameters.allow_best_effort_snapshot}}"
           environment_key: pattern_detector_environment
