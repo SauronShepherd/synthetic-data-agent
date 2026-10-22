@@ -128,9 +128,18 @@ class SQLiteStateRepository(StateRepository):
         try:
             self._connection.execute(
                 "INSERT INTO requests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (request.request_id, request.requester_id, request.environment, request.idempotency_key,
-                 request.source_scope, request.generation_options, request.target_catalog,
-                 request.target_schema, request.intended_use, request.submitted_at),
+                (
+                    request.request_id,
+                    request.requester_id,
+                    request.environment,
+                    request.idempotency_key,
+                    request.source_scope,
+                    request.generation_options,
+                    request.target_catalog,
+                    request.target_schema,
+                    request.intended_use,
+                    request.submitted_at,
+                ),
             )
             self._connection.commit()
         except sqlite3.IntegrityError as exc:
@@ -161,8 +170,17 @@ class SQLiteStateRepository(StateRepository):
         try:
             self._connection.execute(
                 "INSERT INTO plans VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (plan.plan_id, plan.request_id, plan.run_id, plan.version, plan.fingerprint,
-                 plan.status, plan.payload, plan.created_at, plan.supersedes_plan_id),
+                (
+                    plan.plan_id,
+                    plan.request_id,
+                    plan.run_id,
+                    plan.version,
+                    plan.fingerprint,
+                    plan.status,
+                    plan.payload,
+                    plan.created_at,
+                    plan.supersedes_plan_id,
+                ),
             )
             self._connection.commit()
         except sqlite3.IntegrityError as exc:
@@ -189,16 +207,32 @@ class SQLiteStateRepository(StateRepository):
 
     @staticmethod
     def _plan_from_row(row: tuple[object, ...]) -> PlanRecord:
-        return PlanRecord(str(row[0]), str(row[1]), str(row[2]), int(str(row[3])), str(row[4]),
-                          str(row[5]), str(row[6]), str(row[7]),
-                          str(row[8]) if row[8] is not None else None)
+        return PlanRecord(
+            str(row[0]),
+            str(row[1]),
+            str(row[2]),
+            int(str(row[3])),
+            str(row[4]),
+            str(row[5]),
+            str(row[6]),
+            str(row[7]),
+            str(row[8]) if row[8] is not None else None,
+        )
 
     @staticmethod
     def _request_from_row(row: tuple[object, ...]) -> RequestRecord:
-        return RequestRecord(str(row[0]), str(row[1]), str(row[2]), str(row[3]), str(row[4]),
-                             str(row[5]), str(row[6]) if row[6] is not None else None,
-                             str(row[7]) if row[7] is not None else None,
-                             str(row[8]) if row[8] is not None else None, str(row[9]))
+        return RequestRecord(
+            str(row[0]),
+            str(row[1]),
+            str(row[2]),
+            str(row[3]),
+            str(row[4]),
+            str(row[5]),
+            str(row[6]) if row[6] is not None else None,
+            str(row[7]) if row[7] is not None else None,
+            str(row[8]) if row[8] is not None else None,
+            str(row[9]),
+        )
 
     def get_run(self, run_id: str) -> RunRecord:
         row = self._connection.execute(
@@ -259,8 +293,15 @@ class SQLiteStateRepository(StateRepository):
         )
         self._connection.execute(
             "INSERT INTO transition_events (event_id, run_id, from_status, to_status, actor, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (event.event_id, event.run_id, event.from_status.value, event.to_status.value,
-            event.actor, event.reason, event.occurred_at),
+            (
+                event.event_id,
+                event.run_id,
+                event.from_status.value,
+                event.to_status.value,
+                event.actor,
+                event.reason,
+                event.occurred_at,
+            ),
         )
         self._connection.commit()
         return updated
@@ -350,7 +391,15 @@ class SQLiteStateRepository(StateRepository):
             (run_id,),
         ).fetchall()
         return tuple(
-            TransitionEvent(row[0], row[1], WorkflowStatus(row[2]), WorkflowStatus(row[3]), row[4], row[5], row[6])
+            TransitionEvent(
+                row[0],
+                row[1],
+                WorkflowStatus(row[2]),
+                WorkflowStatus(row[3]),
+                row[4],
+                row[5],
+                row[6],
+            )
             for row in rows
         )
 
@@ -368,9 +417,19 @@ class SQLiteStateRepository(StateRepository):
         try:
             self._connection.execute(
                 "INSERT INTO run_steps VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (step.step_id, step.run_id, step.step_name, step.tool_name, step.status.value,
-                 _encode_artifacts(step.input_artifacts), _encode_artifacts(step.output_artifacts),
-                 step.warning_count, step.error_code, step.started_at, step.finished_at),
+                (
+                    step.step_id,
+                    step.run_id,
+                    step.step_name,
+                    step.tool_name,
+                    step.status.value,
+                    _encode_artifacts(step.input_artifacts),
+                    _encode_artifacts(step.output_artifacts),
+                    step.warning_count,
+                    step.error_code,
+                    step.started_at,
+                    step.finished_at,
+                ),
             )
             self._connection.commit()
         except sqlite3.IntegrityError as exc:
@@ -403,8 +462,16 @@ class SQLiteStateRepository(StateRepository):
             raise StateError("terminal step cannot be changed")
         self._connection.execute(
             "UPDATE run_steps SET status = ?, input_artifacts = ?, output_artifacts = ?, warning_count = ?, error_code = ?, started_at = ?, finished_at = ? WHERE step_id = ?",
-            (step.status.value, _encode_artifacts(step.input_artifacts), _encode_artifacts(step.output_artifacts),
-             step.warning_count, step.error_code, step.started_at, step.finished_at, step.step_id),
+            (
+                step.status.value,
+                _encode_artifacts(step.input_artifacts),
+                _encode_artifacts(step.output_artifacts),
+                step.warning_count,
+                step.error_code,
+                step.started_at,
+                step.finished_at,
+                step.step_id,
+            ),
         )
         self._connection.commit()
         return step
@@ -423,8 +490,15 @@ class SQLiteStateRepository(StateRepository):
         try:
             self._connection.execute(
                 "INSERT INTO artifact_uses VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (use.use_id, use.run_id, use.artifact_id, use.decision.value,
-                 use.compatibility_fingerprint, use.reason, use.recorded_at),
+                (
+                    use.use_id,
+                    use.run_id,
+                    use.artifact_id,
+                    use.decision.value,
+                    use.compatibility_fingerprint,
+                    use.reason,
+                    use.recorded_at,
+                ),
             )
             self._connection.commit()
         except sqlite3.IntegrityError as exc:
@@ -442,16 +516,31 @@ class SQLiteStateRepository(StateRepository):
 
     @staticmethod
     def _artifact_use_from_row(row: tuple[object, ...]) -> ArtifactUse:
-        return ArtifactUse(str(row[0]), str(row[1]), str(row[2]), ArtifactDecision(str(row[3])),
-                           str(row[4]), str(row[5]), str(row[6]))
+        return ArtifactUse(
+            str(row[0]),
+            str(row[1]),
+            str(row[2]),
+            ArtifactDecision(str(row[3])),
+            str(row[4]),
+            str(row[5]),
+            str(row[6]),
+        )
 
     @staticmethod
     def _step_from_row(row: tuple[object, ...]) -> RunStep:
-        return RunStep(str(row[0]), str(row[1]), str(row[2]), str(row[3]), StepStatus(str(row[4])),
-                       tuple(json.loads(str(row[5]))) if row[5] else (),
-                       tuple(json.loads(str(row[6]))) if row[6] else (), int(str(row[7])),
-                       str(row[8]) if row[8] is not None else None, str(row[9]),
-                       str(row[10]) if row[10] is not None else None)
+        return RunStep(
+            str(row[0]),
+            str(row[1]),
+            str(row[2]),
+            str(row[3]),
+            StepStatus(str(row[4])),
+            tuple(json.loads(str(row[5]))) if row[5] else (),
+            tuple(json.loads(str(row[6]))) if row[6] else (),
+            int(str(row[7])),
+            str(row[8]) if row[8] is not None else None,
+            str(row[9]),
+            str(row[10]) if row[10] is not None else None,
+        )
 
     def acquire_attempt(
         self, attempt: ExecutionAttempt, *, lease_seconds: int = 300
@@ -515,7 +604,9 @@ class SQLiteStateRepository(StateRepository):
         current = self._attempt_from_row(row)
         if current.status is not AttemptStatus.RUNNING:
             raise StateError("attempt is already complete")
-        if current.lease_expires_at is not None and _parse_time(current.lease_expires_at) <= datetime.now(UTC):
+        if current.lease_expires_at is not None and _parse_time(
+            current.lease_expires_at
+        ) <= datetime.now(UTC):
             raise StateError("attempt lease has expired")
         status = AttemptStatus.SUCCEEDED if success else AttemptStatus.FAILED
         completed_at = datetime.now(UTC).isoformat()

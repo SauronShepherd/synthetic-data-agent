@@ -73,13 +73,17 @@ def test_analyze_scope_advances_plan_bound_run_to_planned() -> None:
     )
     repository = InMemoryStateRepository()
     plan = PlanRecord(
-        "plan-lifecycle", request.request_id, request.request_id, 1,
-        "fp-lifecycle", "approved", "{}"
+        "plan-lifecycle",
+        request.request_id,
+        request.request_id,
+        1,
+        "fp-lifecycle",
+        "approved",
+        "{}",
     )
 
     analyze_scope(
-        AgentState(request), article_02_toolchain()[:1],
-        state_repository=repository, plan=plan
+        AgentState(request), article_02_toolchain()[:1], state_repository=repository, plan=plan
     )
 
     run = repository.get_run(request.request_id)
@@ -99,8 +103,10 @@ def test_analyze_scope_rejects_terminal_plan_status(status: str) -> None:
     plan = PlanRecord("plan-1", request.request_id, request.request_id, 1, "fp-1", status, "{}")
     with pytest.raises(ValueError, match="not executable"):
         analyze_scope(
-            AgentState(request), article_02_toolchain()[:1],
-            state_repository=InMemoryStateRepository(), plan=plan
+            AgentState(request),
+            article_02_toolchain()[:1],
+            state_repository=InMemoryStateRepository(),
+            plan=plan,
         )
 
 
@@ -110,11 +116,22 @@ def test_analyze_scope_rejects_plan_rebinding_on_retry() -> None:
         source=SourceScope("main", "sales", ("orders",)),
     )
     repository = InMemoryStateRepository()
-    plan_one = PlanRecord("plan-1", request.request_id, request.request_id, 1, "fp-1", "approved", "{}")
-    plan_two = PlanRecord("plan-2", request.request_id, request.request_id, 2, "fp-2", "approved", "{}")
-    analyze_scope(AgentState(request), article_02_toolchain()[:1], state_repository=repository, plan=plan_one)
+    plan_one = PlanRecord(
+        "plan-1", request.request_id, request.request_id, 1, "fp-1", "approved", "{}"
+    )
+    plan_two = PlanRecord(
+        "plan-2", request.request_id, request.request_id, 2, "fp-2", "approved", "{}"
+    )
+    analyze_scope(
+        AgentState(request), article_02_toolchain()[:1], state_repository=repository, plan=plan_one
+    )
     with pytest.raises(ValueError, match="different plan"):
-        analyze_scope(AgentState(request), article_02_toolchain()[:1], state_repository=repository, plan=plan_two)
+        analyze_scope(
+            AgentState(request),
+            article_02_toolchain()[:1],
+            state_repository=repository,
+            plan=plan_two,
+        )
 
 
 def test_analyze_scope_resumes_by_skipping_completed_tools() -> None:
@@ -132,8 +149,6 @@ def test_analyze_scope_resumes_by_skipping_completed_tools() -> None:
     assert second_state is state
     assert second_manifest.status == first_manifest.status == "complete"
     assert len(repository.list_steps(request.request_id)) == 3
-
-
 
 
 def test_analyze_scope_persists_failed_step_without_raw_error_text() -> None:
@@ -175,7 +190,9 @@ def test_failed_step_can_be_retried_and_completed() -> None:
     with pytest.raises(RuntimeError):
         analyze_scope(state, article_02_toolchain()[:1] + (tool,), state_repository=repository)
     assert any(step.status.value == "failed" for step in repository.list_steps(request.request_id))
-    state, manifest = analyze_scope(state, article_02_toolchain()[:1] + (tool,), state_repository=repository)
+    state, manifest = analyze_scope(
+        state, article_02_toolchain()[:1] + (tool,), state_repository=repository
+    )
     assert manifest.status == "complete"
     assert repository.list_steps(request.request_id)[0].status.value == "succeeded"
     assert state.completed_tools

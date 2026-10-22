@@ -7,5 +7,11 @@ def test_sda_capability_matrix_covers_all_articles_and_release_gates() -> None:
     )
     for article in range(9):
         assert f"SDA-{article:02d}" in matrix
-    for gate in ("pytest", "ruff check", "mypy", "check_state_schema.py", "check_bundle_contract.py"):
+    for gate in (
+        "pytest",
+        "ruff check",
+        "mypy",
+        "check_state_schema.py",
+        "check_bundle_contract.py",
+    ):
         assert gate in matrix

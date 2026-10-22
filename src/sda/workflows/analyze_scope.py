@@ -210,9 +210,7 @@ def analyze_scope(
                     state_repository.create_step(failed_step)
                 except Exception:
                     state_repository.update_step(failed_step)
-            completed_ids = tuple(
-                artifact.artifact_id for artifact in state.durable_artifacts
-            )
+            completed_ids = tuple(artifact.artifact_id for artifact in state.durable_artifacts)
             state_repository.create_step(
                 RunStep(
                     step_id=f"{state.request.request_id}:analyze_scope_failure",

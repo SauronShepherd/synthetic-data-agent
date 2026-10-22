@@ -201,7 +201,9 @@ def test_coordinator_respects_rule_scope_dates_and_conflict_review() -> None:
     rules = (
         BusinessRule("a", "main.s.t", ({"column": "status", "value": "A", "role": "requirement"},)),
         BusinessRule("b", "main.s.t", ({"column": "status", "value": "B", "role": "requirement"},)),
-        BusinessRule("future", "main.s.t", ({"column": "status", "value": "C"},), effective_from="2999-01-01"),
+        BusinessRule(
+            "future", "main.s.t", ({"column": "status", "value": "C"},), effective_from="2999-01-01"
+        ),
         BusinessRule("other", "main.other", ({"column": "status", "value": "D"},)),
     )
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
@@ -934,12 +936,15 @@ def test_conflict_detection_respects_condition_and_effective_scope() -> None:
     left = rule("left", "cancelled", True)
     assert detect_rule_conflicts([left, rule("other-status", "new", False)]) == ()
     assert detect_rule_conflicts([left, rule("same-status", "cancelled", False)])
-    assert detect_rule_conflicts(
-        [
-            rule("old", "cancelled", True, effective_to="2024-12-31"),
-            rule("new", "cancelled", False, effective_from="2025-01-01"),
-        ]
-    ) == ()
+    assert (
+        detect_rule_conflicts(
+            [
+                rule("old", "cancelled", True, effective_to="2024-12-31"),
+                rule("new", "cancelled", False, effective_from="2025-01-01"),
+            ]
+        )
+        == ()
+    )
 
 
 def test_profile_index_and_relationship_identity_are_reusable() -> None:

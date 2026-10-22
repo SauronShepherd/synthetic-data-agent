@@ -85,7 +85,9 @@ def test_plan_versions_are_immutable_and_ordered() -> None:
     repo.create_request(RequestRecord("req-1", "alice", "dev", "idem-1", "{}"))
     plan = PlanRecord("plan-1", "req-1", "run-1", 1, "fp-1", "approved", "{}")
     assert repo.create_plan(plan) == repo.create_plan(plan)
-    corrected = PlanRecord("plan-2", "req-1", "run-1", 2, "fp-2", "draft", "{}", supersedes_plan_id="plan-1")
+    corrected = PlanRecord(
+        "plan-2", "req-1", "run-1", 2, "fp-2", "draft", "{}", supersedes_plan_id="plan-1"
+    )
     repo.create_plan(corrected)
     assert repo.list_plans("req-1") == (plan, corrected)
     with pytest.raises(StateError, match="different content"):
@@ -164,8 +166,11 @@ def test_every_declared_workflow_branch_is_executable(
     repo.create_run(RunRecord("run-branch", "req-branch", "idem-branch"))
     for expected_version, status in enumerate(statuses[1:]):
         run = repo.transition_run(
-            "run-branch", status, expected_version=expected_version,
-            actor="contract-test", reason="branch coverage",
+            "run-branch",
+            status,
+            expected_version=expected_version,
+            actor="contract-test",
+            reason="branch coverage",
         )
         assert run.status is status
     assert len(repo.list_transition_events("run-branch")) == len(statuses) - 1
@@ -203,7 +208,10 @@ def test_only_one_running_attempt_per_run_stage_is_allowed() -> None:
     with pytest.raises(StateError, match="running attempt"):
         repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile"))
     repo.complete_attempt("attempt-1", success=False, error_code="test")
-    assert repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile")).attempt_id == "attempt-2"
+    assert (
+        repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile")).attempt_id
+        == "attempt-2"
+    )
 
 
 def test_attempt_acquisition_rejects_unknown_runs() -> None:

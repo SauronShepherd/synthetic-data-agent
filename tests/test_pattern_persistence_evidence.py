@@ -85,5 +85,10 @@ def test_registry_redacts_strings_in_nested_evidence_and_actions():
     row = registry_rows((pattern,))[0]
     for value in ("secret-baseline", "secret-stability", "secret-generation", "secret-validation"):
         assert value not in str(row)
-    for field in ("baseline_json", "stability_json", "generation_action_json", "validation_action_json"):
+    for field in (
+        "baseline_json",
+        "stability_json",
+        "generation_action_json",
+        "validation_action_json",
+    ):
         assert set(json.loads(row[field])["label"]) == {"fingerprint"}

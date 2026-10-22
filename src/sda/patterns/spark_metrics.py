@@ -365,13 +365,13 @@ def spark_state_transitions(
         *(F.col(column).asc_nulls_last() for column in tie_breakers),
     ]
     duplicate_order = (
-        frame.groupBy(*entity_keys, event_time, *tie_breakers)
-        .count()
-        .where(F.col("count") > 1)
+        frame.groupBy(*entity_keys, event_time, *tie_breakers).count().where(F.col("count") > 1)
     )
     if duplicate_order.limit(1).count():
         raise ValueError(
-            "temporal_tie_breaker_missing" if not tie_breakers else "temporal_tie_breaker_not_unique"
+            "temporal_tie_breaker_missing"
+            if not tie_breakers
+            else "temporal_tie_breaker_not_unique"
         )
     window = Window.partitionBy(*entity_keys).orderBy(*ordering)
     ordered = (
@@ -381,8 +381,10 @@ def spark_state_transitions(
         .withColumn("__sda_next_time", F.lead("__sda_time").over(window))
         .withColumn("__sda_has_next", F.lead(F.lit(1)).over(window).isNotNull())
     )
-    censored = ordered.where(~F.col("__sda_has_next")).groupBy("from_state").agg(
-        F.count(F.lit(1)).alias("right_censored_count")
+    censored = (
+        ordered.where(~F.col("__sda_has_next"))
+        .groupBy("from_state")
+        .agg(F.count(F.lit(1)).alias("right_censored_count"))
     )
     transitions = ordered.where(F.col("__sda_has_next"))
     transitions = transitions.withColumn(

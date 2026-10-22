@@ -42,7 +42,9 @@ def test_sqlite_state_survives_repository_reopen(tmp_path: object) -> None:
     reopened = SQLiteStateRepository(path)
     assert reopened.get_plan("plan-1") == plan
     assert len(reopened.list_transition_events("run-1")) == 2
-    step = RunStep("step-1", "run-1", "metadata", "uc_metadata_reader", output_artifacts=("meta-1",))
+    step = RunStep(
+        "step-1", "run-1", "metadata", "uc_metadata_reader", output_artifacts=("meta-1",)
+    )
     reopened.create_step(step)
     reopened.close()
     reopened = SQLiteStateRepository(path)
@@ -103,7 +105,10 @@ def test_sqlite_state_allows_only_one_running_attempt_per_stage() -> None:
     with pytest.raises(StateError, match="running attempt"):
         repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile"))
     repo.complete_attempt("attempt-1", success=False, error_code="test")
-    assert repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile")).attempt_id == "attempt-2"
+    assert (
+        repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile")).attempt_id
+        == "attempt-2"
+    )
     repo.close()
 
 

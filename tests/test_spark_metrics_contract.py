@@ -264,12 +264,26 @@ def test_state_transitions_ties_censoring_and_duration(spark) -> None:
         "entity string, status string, event_time string, sequence int",
     )
     with pytest.raises(ValueError, match="temporal_tie_breaker_missing"):
-        spark_state_transitions(frame, entity_keys=("entity",), state_column="status", event_time="event_time")
+        spark_state_transitions(
+            frame, entity_keys=("entity",), state_column="status", event_time="event_time"
+        )
     with pytest.raises(ValueError, match="temporal_tie_breaker_not_unique"):
-        spark_state_transitions(frame.withColumn("sequence", frame.sequence * 0), entity_keys=("entity",), state_column="status", event_time="event_time", tie_breakers=("sequence",))
+        spark_state_transitions(
+            frame.withColumn("sequence", frame.sequence * 0),
+            entity_keys=("entity",),
+            state_column="status",
+            event_time="event_time",
+            tie_breakers=("sequence",),
+        )
     rows = {
         (row["from_state"], row["to_state"]): row.asDict()
-        for row in spark_state_transitions(frame.repartition(2), entity_keys=("entity",), state_column="status", event_time="event_time", tie_breakers=("sequence",)).collect()
+        for row in spark_state_transitions(
+            frame.repartition(2),
+            entity_keys=("entity",),
+            state_column="status",
+            event_time="event_time",
+            tie_breakers=("sequence",),
+        ).collect()
     }
     assert rows[("open", "open")]["self_transition"] is True
     assert rows[("open", "open")]["mean_time_in_state_seconds"] == 0

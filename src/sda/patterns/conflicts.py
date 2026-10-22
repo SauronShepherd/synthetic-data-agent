@@ -77,7 +77,10 @@ def detect_rule_conflicts(rules: list[Any]) -> tuple[RuleConflict, ...]:
 
 def _scopes_overlap(left: Any, right: Any) -> bool:
     left_from, left_to = getattr(left, "effective_from", None), getattr(left, "effective_to", None)
-    right_from, right_to = getattr(right, "effective_from", None), getattr(right, "effective_to", None)
+    right_from, right_to = (
+        getattr(right, "effective_from", None),
+        getattr(right, "effective_to", None),
+    )
     if left_to and right_from and left_to < right_from:
         return False
     if right_to and left_from and right_to < left_from:

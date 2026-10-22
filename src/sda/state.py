@@ -392,7 +392,9 @@ class InMemoryStateRepository:
             if existing_id is not None:
                 existing = self._requests[existing_id]
                 if replace(request, submitted_at=existing.submitted_at) != existing:
-                    raise StateError("request idempotency key already exists with different content")
+                    raise StateError(
+                        "request idempotency key already exists with different content"
+                    )
                 return existing
             if request.request_id in self._requests:
                 raise StateError(f"request already exists: {request.request_id}")
@@ -612,7 +614,9 @@ class InMemoryStateRepository:
                 raise StateError(f"unknown attempt: {attempt_id}") from exc
             if current.status is not AttemptStatus.RUNNING:
                 raise StateError("attempt is already complete")
-            if current.lease_expires_at is not None and _parse_time(current.lease_expires_at) <= datetime.now(UTC):
+            if current.lease_expires_at is not None and _parse_time(
+                current.lease_expires_at
+            ) <= datetime.now(UTC):
                 raise StateError("attempt lease has expired")
             updated = replace(
                 current,

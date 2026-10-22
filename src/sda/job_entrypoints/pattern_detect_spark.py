@@ -558,8 +558,11 @@ def main() -> None:
         and len(patterns) < detector.config.max_candidates
     ):
         tie_breakers = tuple(
-            name for name in ("ingested_at", "ingestion_at", "ingestion_time", "event_id")
-            if name in columns and name not in excluded and name not in {entity_candidates[0], temporal[0]}
+            name
+            for name in ("ingested_at", "ingestion_at", "ingestion_time", "event_id")
+            if name in columns
+            and name not in excluded
+            and name not in {entity_candidates[0], temporal[0]}
         )
         try:
             transition_rows = (
