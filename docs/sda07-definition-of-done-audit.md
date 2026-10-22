@@ -12,7 +12,7 @@ evidence index, not a claim that a local test proves a governed Databricks run.
 | Preserve support, baselines, violations, stability, provenance, and review state | Versioned registry/evidence rows retain population, baseline, violations, stability, clocks, snapshots, upstream IDs, warnings, and lifecycle | `src/sda/patterns/persistence.py`, `tests/test_pattern_persistence_evidence.py` | Local/CI complete |
 | Keep observed evidence distinct from approved rules | Observed patterns remain `observed_pattern`; hard constraints and approved lifecycle require explicit approved origins and metadata | `tests/test_pattern_contracts.py`, `tests/test_spark_rules.py` | Local/CI complete |
 | Emit generation/validation instructions without activating unapproved rules | Actions are proposals, record bounded fallback levels plus explicit global fallback, and observed evidence cannot become hard constraints | `src/sda/patterns/actions.py`, `tests/test_pattern_contracts.py` | Local/CI complete |
-| Persist an auditable registry and prove the deployed path with adversarial Spark/Databricks tests | Bundle is deployed and CI Spark/adversarial tests pass; historical `sda` evidence proves registry persistence and review state | CI `39752209517`, bundle deployment with profile `sda`, live run `440523671659941` | Partially complete: current Free workspace disables new job runs |
+| Persist an auditable registry and prove the deployed path with adversarial Spark/Databricks tests | Bundle is deployed and CI Spark/adversarial tests pass; historical `sda` evidence proves registry persistence and review state | CI `39753071013`, bundle deployment with profile `sda`, live run `440523671659941` | Partially complete: current Free workspace disables new job runs |
 
 ## Adversarial coverage
 
@@ -52,6 +52,9 @@ currently returns:
 Triggering new runs for organization 7474654810500477 is currently disabled temporarily.
 ```
 
-This is an external workspace/account state, not a repository test failure.
+The OAuth session was revalidated on 2026-10-22 against
+`dbc-916267ef-3b9b.cloud.databricks.com`; the same response was returned when
+triggering fixture job `701020438490636`. This is an external workspace/account
+state, not a repository test failure.
 The branch must remain open until that run can execute and its metadata →
 profile → relationship → pattern handoff and registry persistence are queried.
