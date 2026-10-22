@@ -338,6 +338,68 @@ def spark_numeric_by_group(frame: Any, drivers: tuple[str, ...], outcome: str) -
     return groups.crossJoin(baseline)
 
 
+def spark_numeric_slice_means(
+    frame: Any,
+    *,
+    condition: dict[str, Any],
+    outcome: str,
+    slice_column: str,
+    time_grain: str = "month",
+    min_support_rows: int = 1,
+    max_slices: int = 100,
+) -> Any:
+    """Return bounded per-slice means and the condition-wide scale baseline."""
+    if not condition or min_support_rows < 1 or max_slices < 2:
+        raise ValueError(
+            "numeric slice stability requires a condition and positive resource bounds"
+        )
+    _require_columns(frame, (*condition, outcome, slice_column), metric="spark_numeric_slice_means")
+    F = _functions()
+    field = next(field for field in frame.schema.fields if field.name == outcome)
+    numeric_types = {
+        "ByteType",
+        "ShortType",
+        "IntegerType",
+        "LongType",
+        "FloatType",
+        "DoubleType",
+        "DecimalType",
+    }
+    if field.dataType.__class__.__name__ not in numeric_types:
+        raise ValueError("spark_numeric_slice_means requires a numeric outcome")
+    slice_field = next(field for field in frame.schema.fields if field.name == slice_column)
+    slice_ref = f"`{slice_column.replace('`', '``')}`"
+    slice_expression = F.col(slice_ref)
+    if slice_field.dataType.__class__.__name__ in {
+        "DateType",
+        "TimestampType",
+        "TimestampNTZType",
+    }:
+        if time_grain not in {"day", "week", "month", "quarter", "year"}:
+            raise ValueError("time_grain must be day, week, month, quarter, or year")
+        slice_expression = F.date_trunc(time_grain, slice_expression.cast("timestamp"))
+    filtered = frame
+    for name, value in condition.items():
+        quoted = f"`{name.replace('`', '``')}`"
+        filtered = filtered.where(F.col(quoted).eqNullSafe(F.lit(value)))
+    outcome_ref = f"`{outcome.replace('`', '``')}`"
+    outcome_column = F.col(outcome_ref)
+    valid = filtered.where(outcome_column.isNotNull())
+    grouped = valid.groupBy(slice_expression.alias("_slice")).agg(
+        F.count(F.lit(1)).alias("support_rows"), F.avg(outcome_column).alias("slice_mean")
+    )
+    baseline = valid.agg(
+        F.avg(outcome_column).alias("condition_mean"),
+        F.stddev_pop(outcome_column).alias("condition_stddev"),
+    )
+    return (
+        grouped.crossJoin(baseline)
+        .where(F.col("support_rows") >= min_support_rows)
+        .orderBy(F.col("_slice").asc_nulls_first())
+        .limit(max_slices + 1)
+    )
+
+
 def spark_conditional_missingness(frame: Any, drivers: tuple[str, ...], outcome: str) -> Any:
     F = _functions()
     if not drivers:

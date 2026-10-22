@@ -152,6 +152,7 @@ def test_registry_preserves_stability_dimensions_without_slice_values() -> None:
             "stability": {
                 "event_time:month": {
                     "dimension": "event_time:month",
+                    "metric_name": "standardized_mean_delta",
                     "stable": False,
                     "max_abs_delta_from_global": 0.3,
                 }
@@ -161,6 +162,7 @@ def test_registry_preserves_stability_dimensions_without_slice_values() -> None:
     row = registry_rows((pattern,))[0]
     stability_json = json.loads(row["stability_json"])
     assert stability_json["event_time:month"]["dimension"] == "event_time:month"
+    assert stability_json["event_time:month"]["metric_name"] == "standardized_mean_delta"
     assert stability_json["event_time:month"]["stable"] is False
     assert "private-segment-value" not in str(row)
     assert "private-outcome-value" not in str(row)

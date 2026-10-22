@@ -11,6 +11,7 @@ from sda.job_entrypoints.pattern_detect_spark import (
     _candidate_columns,
     _conditional_stability,
     _correlation_stability,
+    _numeric_conditional_stability,
 )
 from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
 from sda.patterns.spark_metrics import (
@@ -21,6 +22,7 @@ from sda.patterns.spark_metrics import (
     spark_fanout_by_segment,
     spark_metric,
     spark_numeric_by_group,
+    spark_numeric_slice_means,
     spark_pearson,
     spark_spearman,
     spark_state_transitions,
@@ -399,6 +401,39 @@ def test_correlation_stability_detects_sign_reversal_by_month(spark) -> None:
     )
     assert summary["event_time:month"]["stable"] is False
     assert summary["event_time:month"]["sign_flip_count"] == 1
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_numeric_conditional_stability_detects_monthly_mean_drift(spark) -> None:
+    rows = [
+        ("premium", datetime(2026, month, 1), float(offset + shift))
+        for month, shift in ((1, 0), (2, 20), (3, 40))
+        for offset in range(10)
+    ]
+    frame = spark.createDataFrame(rows, "segment string, event_time timestamp, amount double")
+    slices = spark_numeric_slice_means(
+        frame,
+        condition={"segment": "premium"},
+        outcome="amount",
+        slice_column="event_time",
+        time_grain="month",
+        min_support_rows=5,
+        max_slices=10,
+    ).collect()
+    assert [row["slice_mean"] for row in slices] == pytest.approx([4.5, 24.5, 44.5])
+    summary = _numeric_conditional_stability(
+        frame,
+        condition={"segment": "premium"},
+        outcome="amount",
+        slice_columns=("event_time",),
+        min_support_rows=5,
+        min_slices=3,
+        max_slices=10,
+        max_spread=0.1,
+        time_grain="month",
+    )
+    assert summary["event_time:month"]["metric_name"] == "standardized_mean_delta"
+    assert summary["event_time:month"]["stable"] is False
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]

@@ -231,6 +231,65 @@ def _correlation_stability(
     return result
 
 
+def _numeric_conditional_stability(
+    frame: Any,
+    *,
+    condition: dict[str, Any],
+    outcome: str,
+    slice_columns: tuple[str, ...],
+    min_support_rows: int,
+    min_slices: int,
+    max_slices: int,
+    max_spread: float,
+    time_grain: str,
+) -> dict[str, dict[str, Any]]:
+    if not slice_columns:
+        return {}
+    from math import nan
+
+    from sda.patterns.spark_metrics import spark_numeric_slice_means
+    from sda.patterns.stability import stability
+
+    result: dict[str, dict[str, Any]] = {}
+    fields = {field.name: field.dataType.__class__.__name__ for field in frame.schema.fields}
+    for column in slice_columns:
+        temporal = fields[column] in {"DateType", "TimestampType", "TimestampNTZType"}
+        dimension = f"{column}:{time_grain}" if temporal else column
+        rows = spark_numeric_slice_means(
+            frame,
+            condition=condition,
+            outcome=outcome,
+            slice_column=column,
+            time_grain=time_grain,
+            min_support_rows=min_support_rows,
+            max_slices=max_slices,
+        ).collect()
+        bounded_rows = rows[:max_slices]
+        standardized_deltas = []
+        for row in bounded_rows:
+            scale = row["condition_stddev"]
+            mean = row["condition_mean"]
+            slice_mean = row["slice_mean"]
+            standardized_deltas.append(
+                (float(slice_mean) - float(mean)) / float(scale)
+                if scale is not None and float(scale) > 0 and mean is not None
+                else nan
+            )
+        summary = stability(
+            standardized_deltas,
+            support_counts=[int(row["support_rows"]) for row in bounded_rows],
+            min_support_rows=min_support_rows,
+            min_slices=min_slices,
+            max_spread=max_spread,
+            dimension=dimension,
+            truncated=len(rows) > max_slices,
+            global_value=0.0,
+        )
+        summary["metric_name"] = "standardized_mean_delta"
+        result[dimension] = summary
+    return result
+
+
 def _bounded_driver_sets(
     drivers: Sequence[str], *, max_depth: int, max_columns: int = 10
 ) -> tuple[tuple[str, ...], ...]:
@@ -718,6 +777,17 @@ def main() -> None:
                 data = row.asDict()
                 support = int(data.pop("count"))
                 condition = {driver: data.pop(driver) for driver in drivers}
+                slice_stability = _numeric_conditional_stability(
+                    source,
+                    condition=condition,
+                    outcome=outcome,
+                    slice_columns=stability_slice_columns,
+                    min_support_rows=args.stability_min_support_rows,
+                    min_slices=args.stability_min_slices,
+                    max_slices=args.stability_max_slices,
+                    max_spread=args.stability_max_spread,
+                    time_grain=args.stability_time_grain,
+                )
                 patterns.append(
                     detector._pattern(
                         analysis_id,
@@ -731,7 +801,7 @@ def main() -> None:
                             **data,
                             "count": support,
                             "method": "exact",
-                            "stability": "unavailable",
+                            "stability": slice_stability or "unavailable",
                         },
                     )
                 )

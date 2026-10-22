@@ -51,7 +51,14 @@ def _safe_stability(value: Any) -> Any:
         if not isinstance(source, dict) or not isinstance(target, dict):
             return
         for key, item in source.items():
-            if key in {"dimension", "warning", "status", "stable", "truncated"}:
+            if key in {
+                "dimension",
+                "metric_name",
+                "warning",
+                "status",
+                "stable",
+                "truncated",
+            }:
                 target[key] = item
             else:
                 restore_labels(item, target.get(key))
