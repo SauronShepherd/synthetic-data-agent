@@ -116,7 +116,7 @@ approved vocabulary is part of the contract.
   ordering, lag, transitions, and fan-out with actionable unsupported results.
 - [x] Enforce deterministic fingerprints, tie handling, immutable inputs, and
   duplicate upstream-reference rejection.
-- [ ] Add Spark integration tests for every supported metric on real partitions,
+- [x] Add Spark integration tests for every supported metric on real partitions,
   skewed keys, nulls, unsupported types, and bounded scale.
 - [x] Add no-raw-value tests for every detector and persistence path.
 - [x] Add conflict-resolution fixtures for overlapping and contradictory rules.
