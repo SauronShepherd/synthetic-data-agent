@@ -470,6 +470,7 @@ def _state_transition_stability(
             ingestion_time=ingestion_time,
             time_grain=time_grain,
             max_slices=max_slices,
+            allowed_from_states=tuple(dict.fromkeys(pair[0] for pair in global_pairs)),
         ).collect()
         slice_keys = sorted({str(row["__sda_slice"]) for row in rows})
         bounded_slice_keys = slice_keys[:max_slices]

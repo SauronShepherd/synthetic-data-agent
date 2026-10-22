@@ -783,6 +783,7 @@ def spark_state_transitions_by_slice(
     ingestion_time: str | None = None,
     time_grain: str = "month",
     max_slices: int = 100,
+    allowed_from_states: tuple[Any, ...] | None = None,
 ) -> Any:
     """Return bounded transition metrics grouped by a period or segment slice.
 
@@ -907,7 +908,7 @@ def spark_state_transitions_by_slice(
         F.col("c.ingestion_order_disagreement_count").alias("ingestion_order_disagreement_count"),
         F.col("o.outgoing_count").alias("outgoing_count"),
     )
-    return (
+    result = (
         combined.join(censored, ["__sda_slice", "from_state"], "left")
         .fillna({"right_censored_count": 0})
         .withColumn("transition_count", F.col("count"))
@@ -924,3 +925,12 @@ def spark_state_transitions_by_slice(
             F.col("to_state").asc_nulls_first(),
         )
     )
+    if allowed_from_states:
+        from_state_filter = None
+        for from_state in allowed_from_states:
+            candidate = F.col("from_state").eqNullSafe(F.lit(from_state))
+            from_state_filter = (
+                candidate if from_state_filter is None else from_state_filter | candidate
+            )
+        result = result.where(from_state_filter)
+    return result
