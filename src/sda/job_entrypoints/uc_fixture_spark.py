@@ -169,7 +169,10 @@ def main() -> None:
         SELECT CONCAT(CAST(month_index AS STRING), '-', CAST(entity_index AS STRING)) AS entity_id,
                CONCAT('source-', CAST(entity_index % 2 AS STRING)) AS source_system,
                CONCAT('partition-', CAST(month_index AS STRING)) AS partition_name,
-               CASE month_index WHEN 1 THEN 'open' ELSE 'closed' END AS status,
+               CASE
+                 WHEN month_index = 1 OR entity_index % 2 = 1 THEN 'open'
+                 ELSE 'closed'
+               END AS status,
                TIMESTAMPADD(
                  DAY,
                  CASE month_index WHEN 0 THEN 1 WHEN 1 THEN 1 ELSE 10 END,

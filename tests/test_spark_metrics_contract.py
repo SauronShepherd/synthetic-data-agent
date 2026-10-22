@@ -624,6 +624,7 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
     for month, state, duration_days in ((1, "closed", 1), (2, "open", 1), (3, "closed", 10)):
         for entity_index in range(5):
             start = datetime(2026, month, 1)
+            observed_state = state if entity_index % 2 == 0 else "open"
             rows.extend(
                 [
                     (
@@ -636,7 +637,7 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
                     (
                         f"{month}-{entity_index}",
                         f"source-{entity_index % 2}",
-                        state,
+                        observed_state,
                         start + timedelta(days=duration_days),
                         2,
                     ),
@@ -676,7 +677,9 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
     assert probability["unseen_transition_slice_count"] == 1
     duration = result[("open", "closed")]["event_time:month:p50_time_in_state_seconds"]
     assert duration["stable"] is False
-    assert result[("open", "closed")]["source_system:transition_probability"]["stable"] is False
+    source_probability = result[("open", "closed")]["source_system:transition_probability"]
+    assert source_probability["stable"] is False
+    assert source_probability["unseen_transition_slice_count"] == 1
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]
