@@ -338,8 +338,9 @@ def test_conditional_slice_rates_detect_monthly_drift_and_enforce_support(spark)
     null_rates = spark_conditional_slice_rates(
         spark.createDataFrame(
             [
-                (region, event_time, None if status == "paid" else "paid")
-                for region, event_time, status in rows
+                ("west", datetime(2026, month, 1), None if index < missing else "paid")
+                for month, missing in ((1, 8), (2, 5), (3, 2))
+                for index in range(10)
             ],
             "region string, event_time timestamp, status string",
         ),
@@ -352,7 +353,32 @@ def test_conditional_slice_rates_detect_monthly_drift_and_enforce_support(spark)
         max_slices=10,
     ).collect()
     assert len(null_rates) == 3
-    assert all(0 <= row["rate"] <= 1 for row in null_rates)
+    assert [row["rate"] for row in null_rates] == pytest.approx([0.8, 0.5, 0.2])
+    null_frame = spark.createDataFrame(
+        [
+            ("west", datetime(2026, month, 1), None if index < missing else "paid")
+            for month, missing in ((1, 8), (2, 5), (3, 2))
+            for index in range(10)
+        ],
+        "region string, event_time timestamp, status string",
+    )
+    missingness_stability = _conditional_stability(
+        null_frame,
+        condition={"region": "west"},
+        outcome="status",
+        null_outcome=True,
+        global_value=0.5,
+        slice_columns=("event_time",),
+        min_support_rows=5,
+        min_slices=3,
+        max_slices=10,
+        max_spread=0.1,
+        time_grain="month",
+    )
+    assert missingness_stability["event_time:month"]["stable"] is False
+    assert missingness_stability["event_time:month"]["max_abs_delta_from_global"] == pytest.approx(
+        0.3
+    )
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]

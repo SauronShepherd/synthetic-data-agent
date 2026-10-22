@@ -27,7 +27,7 @@ def main() -> None:
     prefix = f"{schema}.sda07_{suffix}"
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     if args.mode == "cleanup":
-        for name in ("orders", "customers"):
+        for name in ("orders", "customers", "missingness_stability"):
             spark.sql(f"DROP TABLE IF EXISTS {prefix}_{name}")
         spark.sql(f"DROP SCHEMA IF EXISTS {schema}")
         print(f"SDA07_FIXTURE_CLEANED {schema}")
@@ -54,7 +54,27 @@ def main() -> None:
         (102, 1, 200.0, 'active', '2026-01-02T00:00:00Z', '2026-01-03T00:00:00Z', NULL),
         (103, 2, 20.0, 'new', '2026-01-01T00:00:00Z', '2026-01-01T12:00:00Z', '2026-01-02T00:00:00Z')"""
     )
-    print(f"SDA07_FIXTURE_CREATED {prefix}_customers {prefix}_orders")
+    spark.sql(
+        f"""CREATE OR REPLACE TABLE {prefix}_missingness_stability USING DELTA AS
+        WITH rows AS (
+          SELECT id, CAST(FLOOR(id / 200) AS INT) AS month_index,
+                 CASE WHEN id % 200 < 100 THEN 'west' ELSE 'east' END AS region,
+                 CAST(id % 100 AS INT) AS row_index
+          FROM range(600)
+        )
+        SELECT region,
+               ADD_MONTHS(TIMESTAMP '2026-01-01 00:00:00', month_index) AS event_time,
+               CASE
+                 WHEN region = 'west' AND row_index <
+                   CASE month_index WHEN 0 THEN 80 WHEN 1 THEN 50 ELSE 20 END THEN NULL
+                 WHEN region = 'east' AND row_index < 10 THEN NULL
+                 ELSE CONCAT('value-', CAST(row_index AS STRING))
+               END AS nullable_value
+        FROM rows"""
+    )
+    print(
+        f"SDA07_FIXTURE_CREATED {prefix}_customers {prefix}_orders {prefix}_missingness_stability"
+    )
 
 
 if __name__ == "__main__":
