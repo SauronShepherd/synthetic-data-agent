@@ -130,6 +130,29 @@ def _column_list(raw: str) -> tuple[str, ...]:
     return columns
 
 
+def _orient_temporal_order(
+    left_time: str, right_time: str, summary: Mapping[str, Any]
+) -> tuple[str, str, dict[str, Any]]:
+    """Choose the observed lower-violation direction without implying approval."""
+    data = dict(summary)
+    forward_violations = int(data.get("violation_rows") or 0)
+    reverse_violations = int(data.get("reverse_violation_rows") or 0)
+    direction_reversed = reverse_violations < forward_violations
+    earlier, later = (right_time, left_time) if direction_reversed else (left_time, right_time)
+    if direction_reversed:
+        eligible = int(data.get("eligible_rows") or 0)
+        data["valid_rows"] = eligible - reverse_violations
+        data["violation_rows"] = reverse_violations
+        data["violation_rate"] = reverse_violations / max(eligible, 1)
+    data["direction_inferred"] = True
+    data["direction_tied"] = forward_violations == reverse_violations
+    data["direction_inference"] = "lower_observed_violation_rate"
+    data["warnings"] = ["temporal_direction_inferred_from_observed_data"]
+    if data["direction_tied"]:
+        data["warnings"].append("temporal_direction_is_ambiguous")
+    return earlier, later, data
+
+
 def _conditional_stability(
     frame: Any,
     *,
@@ -286,6 +309,53 @@ def _numeric_conditional_stability(
             global_value=0.0,
         )
         summary["metric_name"] = "standardized_mean_delta"
+        result[dimension] = summary
+    return result
+
+
+def _temporal_order_stability(
+    frame: Any,
+    *,
+    earlier: str,
+    later: str,
+    global_violation_rate: float | None,
+    slice_columns: tuple[str, ...],
+    min_support_rows: int,
+    min_slices: int,
+    max_slices: int,
+    max_spread: float,
+    time_grain: str,
+) -> dict[str, dict[str, Any]]:
+    if not slice_columns:
+        return {}
+    from sda.patterns.spark_metrics import spark_temporal_order_slice_rates
+    from sda.patterns.stability import stability
+
+    result: dict[str, dict[str, Any]] = {}
+    fields = {field.name: field.dataType.__class__.__name__ for field in frame.schema.fields}
+    for column in slice_columns:
+        temporal = fields[column] in {"DateType", "TimestampType", "TimestampNTZType"}
+        dimension = f"{column}:{time_grain}" if temporal else column
+        rows = spark_temporal_order_slice_rates(
+            frame,
+            earlier,
+            later,
+            slice_column=column,
+            time_grain=time_grain,
+            min_support_rows=min_support_rows,
+            max_slices=max_slices,
+        ).collect()
+        summary = stability(
+            [float(row["violation_rate"]) for row in rows[:max_slices]],
+            support_counts=[int(row["support_rows"]) for row in rows[:max_slices]],
+            min_support_rows=min_support_rows,
+            min_slices=min_slices,
+            max_spread=max_spread,
+            dimension=dimension,
+            truncated=len(rows) > max_slices,
+            global_value=global_violation_rate,
+        )
+        summary["metric_name"] = "temporal_order_violation_rate"
         result[dimension] = summary
     return result
 
@@ -937,18 +1007,49 @@ def main() -> None:
                         },
                     )
                 )
-    for earlier, later in zip(temporal, temporal[1:], strict=False):
+    temporal_pair_budget = detector.config.max_candidates
+    for pair_index, (left_time, right_time) in enumerate(combinations(temporal, 2)):
+        if pair_index >= temporal_pair_budget:
+            warnings.warn(
+                f"temporal pair candidate budget reached ({temporal_pair_budget})",
+                stacklevel=1,
+            )
+            break
         if len(patterns) >= detector.config.max_candidates:
             break
-        summary = spark_temporal_order(source, earlier, later).limit(1).collect()
+        summary = spark_temporal_order(source, left_time, right_time).limit(1).collect()
+        if summary:
+            earlier, later, data = _orient_temporal_order(
+                left_time,
+                right_time,
+                summary[0].asDict(),
+            )
+        else:
+            continue
         if (
-            summary
-            and int(summary[0]["eligible_rows"] or 0) >= args.min_support_rows
-            and int(summary[0]["eligible_rows"] or 0) / max(source_count, 1)
-            >= args.min_support_rate
+            int(data["eligible_rows"] or 0) >= args.min_support_rows
+            and int(data["eligible_rows"] or 0) / max(source_count, 1) >= args.min_support_rate
         ):
-            data = summary[0].asDict()
             support = int(data["eligible_rows"])
+            data["stability"] = (
+                _temporal_order_stability(
+                    source,
+                    earlier=earlier,
+                    later=later,
+                    global_violation_rate=(
+                        float(data["violation_rate"])
+                        if data["violation_rate"] is not None
+                        else None
+                    ),
+                    slice_columns=stability_slice_columns,
+                    min_support_rows=args.stability_min_support_rows,
+                    min_slices=args.stability_min_slices,
+                    max_slices=args.stability_max_slices,
+                    max_spread=args.stability_max_spread,
+                    time_grain=args.stability_time_grain,
+                )
+                or "unavailable"
+            )
             patterns.append(
                 detector._pattern(
                     analysis_id,

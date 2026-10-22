@@ -1,7 +1,7 @@
 import ast
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -13,6 +13,7 @@ from sda.job_entrypoints.pattern_detect_spark import (
     _correlation_stability,
     _fanout_stability,
     _numeric_conditional_stability,
+    _temporal_order_stability,
 )
 from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
 from sda.patterns.spark_metrics import (
@@ -30,6 +31,7 @@ from sda.patterns.spark_metrics import (
     spark_state_transitions,
     spark_temporal_lag,
     spark_temporal_order,
+    spark_temporal_order_slice_rates,
     unsupported_metric_result,
 )
 from sda.profile_models import ProfileMode, TableProfileRequest
@@ -381,6 +383,47 @@ def test_conditional_slice_rates_detect_monthly_drift_and_enforce_support(spark)
     assert missingness_stability["event_time:month"]["max_abs_delta_from_global"] == pytest.approx(
         0.3
     )
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_temporal_order_stability_detects_monthly_violation_drift(spark) -> None:
+    rows = [
+        (
+            datetime(2026, month, 1),
+            datetime(2026, month, 1),
+            datetime(2026, month, 1) + timedelta(days=-1 if index < violations else 1),
+        )
+        for month, violations in ((1, 0), (2, 5), (3, 10))
+        for index in range(10)
+    ]
+    frame = spark.createDataFrame(
+        rows,
+        "event_time timestamp, created_at timestamp, closed_at timestamp",
+    )
+    rates = spark_temporal_order_slice_rates(
+        frame,
+        "created_at",
+        "closed_at",
+        slice_column="event_time",
+        time_grain="month",
+        min_support_rows=5,
+        max_slices=10,
+    ).collect()
+    assert [row["violation_rate"] for row in rates] == pytest.approx([0.0, 0.5, 1.0])
+    summary = _temporal_order_stability(
+        frame,
+        earlier="created_at",
+        later="closed_at",
+        global_violation_rate=0.5,
+        slice_columns=("event_time",),
+        min_support_rows=5,
+        min_slices=3,
+        max_slices=10,
+        max_spread=0.1,
+        time_grain="month",
+    )
+    assert summary["event_time:month"]["stable"] is False
+    assert summary["event_time:month"]["max_abs_delta_from_global"] == pytest.approx(0.5)
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]

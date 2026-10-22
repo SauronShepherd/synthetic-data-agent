@@ -36,6 +36,19 @@ from sda.patterns.temporal import ordered_events, temporal_order
 from sda.patterns.temporal_lags import lag_distribution
 from sda.patterns.transitions import state_transitions
 
+_SAFE_PATTERN_WARNINGS = {
+    "ingestion_order_differs_from_event_order",
+    "observed_pattern_requires_review",
+    "pattern_artifact_reused",
+    "pattern_requires_review",
+    "rule_conflict_requires_review",
+    "state_cardinality_exceeds_policy",
+    "temporal_direction_inferred_from_observed_data",
+    "temporal_direction_is_ambiguous",
+    "temporal_tie_breaker_missing",
+    "unseen_transition_not_assumed_invalid",
+}
+
 
 class PatternDetector:
     """Bounded in-memory reference detector; Spark entrypoints may use equivalent aggregations."""
@@ -1033,6 +1046,20 @@ class PatternDetector:
             min_support_rows=self.config.min_support_rows,
             min_support_rate=self.config.min_support_rate,
         )
+        metric_warnings = metric.get("warnings", ())
+        if isinstance(metric_warnings, str):
+            metric_warnings = (metric_warnings,)
+        elif not isinstance(metric_warnings, list | tuple | set | frozenset):
+            metric_warnings = ()
+        safe_warnings = {
+            warning
+            for warning in metric_warnings
+            if isinstance(warning, str) and warning in _SAFE_PATTERN_WARNINGS
+        }
+        if family is PatternFamily.BUSINESS_RULE:
+            safe_warnings.add("observed_pattern_requires_review")
+        if decision in {"review_required", "conflicted"}:
+            safe_warnings.add("pattern_requires_review")
         return Pattern(
             pid,
             analysis_id,
@@ -1047,9 +1074,7 @@ class PatternDetector:
             metric,
             evidence_quality,
             decision=decision,
-            warnings=("observed_pattern_requires_review",)
-            if family is PatternFamily.BUSINESS_RULE
-            else (),
+            warnings=tuple(sorted(safe_warnings)),
             generation_action=GenerationAction(
                 kind=generation_kind,
                 evidence_pattern_id=pid,
@@ -1062,7 +1087,12 @@ class PatternDetector:
                 metric=family.value,
                 tolerance=metric.get("tolerance"),
             ).to_dict(),
-            review_status="required" if family is PatternFamily.BUSINESS_RULE else "not_required",
+            review_status=(
+                "required"
+                if family is PatternFamily.BUSINESS_RULE
+                or decision in {"review_required", "conflicted"}
+                else "not_required"
+            ),
             rule_strength=(
                 metric["rule"].strength.name.lower()
                 if metric.get("rule") is not None

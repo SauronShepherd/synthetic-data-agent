@@ -9,6 +9,7 @@ from sda.job_entrypoints.pattern_detect_spark import (
     _analysis_id,
     _bool_arg,
     _bounded_driver_sets,
+    _orient_temporal_order,
     parse_args,
 )
 
@@ -42,6 +43,47 @@ def test_bounded_driver_sets_cover_interactions_in_deterministic_depth_order() -
         ("country", "channel"),
         ("tier", "channel"),
     )
+
+
+def test_temporal_direction_is_inferred_from_lower_violation_count_and_flagged() -> None:
+    earlier, later, data = _orient_temporal_order(
+        "closed_at",
+        "created_at",
+        {
+            "eligible_rows": 100,
+            "valid_rows": 10,
+            "violation_rows": 90,
+            "reverse_violation_rows": 10,
+            "violation_rate": 0.9,
+            "equal_rows": 0,
+        },
+    )
+    assert (earlier, later) == ("created_at", "closed_at")
+    assert data["valid_rows"] == 90
+    assert data["violation_rows"] == 10
+    assert data["violation_rate"] == 0.1
+    assert data["direction_inferred"] is True
+    assert data["direction_tied"] is False
+    assert data["warnings"] == ["temporal_direction_inferred_from_observed_data"]
+
+    earlier, later, tied = _orient_temporal_order(
+        "a_at",
+        "b_at",
+        {
+            "eligible_rows": 100,
+            "valid_rows": 50,
+            "violation_rows": 50,
+            "reverse_violation_rows": 50,
+            "violation_rate": 0.5,
+            "equal_rows": 0,
+        },
+    )
+    assert (earlier, later) == ("a_at", "b_at")
+    assert tied["direction_tied"] is True
+    assert tied["warnings"] == [
+        "temporal_direction_inferred_from_observed_data",
+        "temporal_direction_is_ambiguous",
+    ]
 
 
 def test_bounded_driver_sets_respect_depth_and_column_caps() -> None:

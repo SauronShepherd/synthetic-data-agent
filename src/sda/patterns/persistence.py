@@ -23,6 +23,13 @@ _ASSOCIATION_NAMES = {
     "business_rule": "rule_satisfaction",
 }
 
+_SAFE_EVIDENCE_LABELS = {
+    "lower_observed_violation_rate",
+    "temporal_direction_inferred_from_observed_data",
+    "temporal_direction_is_ambiguous",
+    "temporal_order_violation_rate",
+}
+
 
 def require_pattern_schema_version(row: dict[str, Any], *, expected: str) -> None:
     """Reject pattern rows from an incompatible persistence schema."""
@@ -38,6 +45,8 @@ def _safe_payload(value: Any) -> Any:
     if isinstance(value, list | tuple):
         return [_safe_payload(item) for item in value]
     if isinstance(value, int | float | bool) or value is None:
+        return value
+    if isinstance(value, str) and value in _SAFE_EVIDENCE_LABELS:
         return value
     return {"fingerprint": fingerprint(value)}
 

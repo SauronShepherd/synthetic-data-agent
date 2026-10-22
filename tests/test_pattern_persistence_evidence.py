@@ -168,6 +168,43 @@ def test_registry_preserves_stability_dimensions_without_slice_values() -> None:
     assert "private-outcome-value" not in str(row)
 
 
+def test_registry_preserves_safe_temporal_direction_and_review_labels():
+    from sda.patterns.persistence import evidence_rows
+
+    pattern = Pattern(
+        pattern_id="p-temporal-direction",
+        analysis_id="a-temporal-direction",
+        family=PatternFamily.TEMPORAL_ORDER,
+        origin=PatternOrigin.OBSERVED,
+        primary_table="main.s.t",
+        columns=("created_at", "closed_at"),
+        condition={},
+        outcome={},
+        support_rows=100,
+        support_rate=1.0,
+        metric={
+            "direction_inference": "lower_observed_violation_rate",
+            "warnings": ["temporal_direction_inferred_from_observed_data"],
+        },
+        evidence_quality={},
+        decision="review_required",
+        warnings=("pattern_requires_review", "temporal_direction_inferred_from_observed_data"),
+        review_status="required",
+    )
+    rows = evidence_rows((pattern,))
+    payloads = {row["metric_name"]: json.loads(row["payload_json"]) for row in rows}
+    assert payloads["direction_inference"]["direction_inference"] == (
+        "lower_observed_violation_rate"
+    )
+    assert payloads["warnings"]["warnings"] == ["temporal_direction_inferred_from_observed_data"]
+    registry = registry_rows((pattern,))[0]
+    assert json.loads(registry["warnings_json"]) == [
+        "pattern_requires_review",
+        "temporal_direction_inferred_from_observed_data",
+    ]
+    assert registry["review_status"] == "required"
+
+
 def test_registry_preserves_temporal_clock_and_ordering_provenance() -> None:
     pattern = Pattern(
         pattern_id="p-clock",

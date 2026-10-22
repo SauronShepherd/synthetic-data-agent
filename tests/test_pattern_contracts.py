@@ -161,6 +161,30 @@ def test_correlation_method_does_not_masquerade_as_validation_mode() -> None:
     assert pattern.decision == "accepted_for_planning"
 
 
+def test_unstable_observed_pattern_requires_review_and_keeps_safe_direction_warning() -> None:
+    pattern = PatternDetector(PatternConfig(min_support_rows=1))._pattern(
+        "analysis",
+        "main.s.t",
+        PatternFamily.TEMPORAL_ORDER,
+        ("created_at", "closed_at"),
+        {},
+        {"later": "closed_at"},
+        100,
+        {
+            "eligible_rows": 100,
+            "violation_rate": 0.3,
+            "direction_inferred": True,
+            "direction_inference": "lower_observed_violation_rate",
+            "warnings": ["temporal_direction_inferred_from_observed_data"],
+            "stability": {"month": {"stable": False}},
+        },
+    )
+    assert pattern.decision == "review_required"
+    assert pattern.review_status == "required"
+    assert "temporal_direction_inferred_from_observed_data" in pattern.warnings
+    assert "pattern_requires_review" in pattern.warnings
+
+
 def test_standalone_detection_emits_conditional_missingness_patterns() -> None:
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
         [

@@ -537,8 +537,59 @@ def spark_temporal_order(frame: Any, earlier: str, later: str) -> Any:
         F.count(F.lit(1)).alias("eligible_rows"),
         F.sum(F.when(F.col(earlier) <= F.col(later), 1).otherwise(0)).alias("valid_rows"),
         F.sum(F.when(F.col(earlier) > F.col(later), 1).otherwise(0)).alias("violation_rows"),
+        F.sum(F.when(F.col(earlier) < F.col(later), 1).otherwise(0)).alias(
+            "reverse_violation_rows"
+        ),
         F.sum(F.when(F.col(earlier) == F.col(later), 1).otherwise(0)).alias("equal_rows"),
     ).withColumn("violation_rate", F.col("violation_rows") / F.col("eligible_rows"))
+
+
+def spark_temporal_order_slice_rates(
+    frame: Any,
+    earlier: str,
+    later: str,
+    *,
+    slice_column: str,
+    time_grain: str = "month",
+    min_support_rows: int = 1,
+    max_slices: int = 100,
+) -> Any:
+    """Return bounded temporal-order violation rates by a time or segment slice."""
+    if min_support_rows < 1 or max_slices < 2:
+        raise ValueError("temporal-order stability requires positive resource bounds")
+    _require_columns(
+        frame,
+        (earlier, later, slice_column),
+        metric="spark_temporal_order_slice_rates",
+    )
+    F = _functions()
+    slice_field = next(field for field in frame.schema.fields if field.name == slice_column)
+    slice_ref = f"`{slice_column.replace('`', '``')}`"
+    slice_expression = F.col(slice_ref)
+    if slice_field.dataType.__class__.__name__ in {
+        "DateType",
+        "TimestampType",
+        "TimestampNTZType",
+    }:
+        if time_grain not in {"day", "week", "month", "quarter", "year"}:
+            raise ValueError("time_grain must be day, week, month, quarter, or year")
+        slice_expression = F.date_trunc(time_grain, slice_expression.cast("timestamp"))
+    earlier_ref = f"`{earlier.replace('`', '``')}`"
+    later_ref = f"`{later.replace('`', '``')}`"
+    eligible = frame.where(F.col(earlier_ref).isNotNull() & F.col(later_ref).isNotNull())
+    return (
+        eligible.groupBy(slice_expression.alias("_slice"))
+        .agg(
+            F.count(F.lit(1)).alias("support_rows"),
+            F.sum(F.when(F.col(earlier_ref) > F.col(later_ref), 1).otherwise(0)).alias(
+                "violation_rows"
+            ),
+        )
+        .where(F.col("support_rows") >= min_support_rows)
+        .withColumn("violation_rate", F.col("violation_rows") / F.col("support_rows"))
+        .orderBy(F.col("_slice").asc_nulls_first())
+        .limit(max_slices + 1)
+    )
 
 
 def spark_temporal_lag(frame: Any, earlier: str, later: str) -> Any:
