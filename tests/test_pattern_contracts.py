@@ -83,6 +83,24 @@ def test_standalone_detection_emits_conditional_categorical_patterns() -> None:
     )
 
 
+def test_generation_action_records_bounded_fallback_to_global_without_activation() -> None:
+    pattern = PatternDetector(PatternConfig(min_support_rows=2))._pattern(
+        "analysis",
+        "main.s.t",
+        PatternFamily.CONDITIONAL_DISTRIBUTION,
+        ("segment", "tier"),
+        {"segment": "premium", "tier": "gold"},
+        {"outcome": "status", "value": "approved"},
+        2,
+        {"global_count": 4},
+    )
+
+    assert pattern.generation_action["fallback_levels"] == (("segment",),)
+    assert pattern.generation_action["fallback_terminal"] == "global_distribution"
+    assert pattern.lifecycle is PatternLifecycle.OBSERVED_PATTERN
+    assert pattern.origin is PatternOrigin.OBSERVED
+
+
 def test_pattern_identity_distinguishes_outcomes_and_is_repeatable() -> None:
     detector = PatternDetector(PatternConfig(min_support_rows=1))
     approved = detector._pattern(

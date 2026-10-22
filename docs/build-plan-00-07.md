@@ -130,7 +130,9 @@ approved vocabulary is part of the contract.
 - [x] Non-Spark unit/contract suite passes.
 - [x] Bundle contract and controlled-target preflight pass.
 - [x] PostgreSQL state integration passes with the checked-in schema.
-- [ ] Spark integration suite passes on supported Python/Spark versions.
+- [x] Spark integration suite passes on supported Python/Spark versions in CI
+  (Ubuntu runner; the Windows local Spark worker is skipped because the pinned
+  PySpark worker is incompatible with Python 3.13 on Windows).
 - [ ] Controlled Databricks Free Edition smoke proves metadata → profile →
   relationship → pattern artifact handoff and persistence.
 - [ ] Security review proves no secrets, unsafe identifiers, raw sensitive values,

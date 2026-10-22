@@ -1080,6 +1080,7 @@ class PatternDetector:
                 evidence_pattern_id=pid,
                 condition=tuple(condition),
                 fallback_levels=tuple(level.condition_columns for level in fallback.levels),
+                fallback_terminal=fallback.terminal,
             ).to_dict(),
             validation_action=ValidationAction(
                 kind=validation_kind,

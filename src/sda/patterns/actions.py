@@ -10,6 +10,7 @@ class GenerationAction:
     evidence_pattern_id: str
     condition: tuple[str, ...] = ()
     fallback_levels: tuple[tuple[str, ...], ...] = ()
+    fallback_terminal: str = "global_distribution"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
