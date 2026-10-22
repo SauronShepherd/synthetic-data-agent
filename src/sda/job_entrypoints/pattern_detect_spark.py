@@ -360,6 +360,202 @@ def _temporal_order_stability(
     return result
 
 
+def _temporal_lag_stability(
+    frame: Any,
+    *,
+    earlier: str,
+    later: str,
+    global_percentiles: list[float] | tuple[float, ...],
+    slice_columns: tuple[str, ...],
+    min_support_rows: int,
+    min_slices: int,
+    max_slices: int,
+    max_spread: float,
+    time_grain: str,
+) -> dict[str, dict[str, Any]]:
+    if not slice_columns:
+        return {}
+    from math import nan
+
+    from sda.patterns.spark_metrics import spark_temporal_lag_slice_rates
+    from sda.patterns.stability import stability
+
+    quantiles = ("p25", "p50", "p75", "p95", "p99")
+    result: dict[str, dict[str, Any]] = {}
+    fields = {field.name: field.dataType.__class__.__name__ for field in frame.schema.fields}
+    for column in slice_columns:
+        temporal = fields[column] in {"DateType", "TimestampType", "TimestampNTZType"}
+        dimension = f"{column}:{time_grain}" if temporal else column
+        rows = spark_temporal_lag_slice_rates(
+            frame,
+            earlier,
+            later,
+            slice_column=column,
+            time_grain=time_grain,
+            min_support_rows=min_support_rows,
+            max_slices=max_slices,
+        ).collect()
+        for index, quantile in enumerate(quantiles):
+            baseline = (
+                float(global_percentiles[index])
+                if len(global_percentiles) > index and global_percentiles[index] is not None
+                else None
+            )
+            relative_deltas: list[float] = []
+            for row in rows[:max_slices]:
+                percentiles = row["duration_percentiles_seconds"]
+                value = (
+                    float(percentiles[index])
+                    if percentiles is not None and percentiles[index] is not None
+                    else None
+                )
+                relative_deltas.append(
+                    (value - baseline) / abs(baseline)
+                    if value is not None and baseline is not None and baseline != 0.0
+                    else 0.0
+                    if value == baseline
+                    else nan
+                )
+            summary = stability(
+                relative_deltas,
+                support_counts=[int(row["support_rows"]) for row in rows[:max_slices]],
+                min_support_rows=min_support_rows,
+                min_slices=min_slices,
+                max_spread=max_spread,
+                dimension=f"{dimension}:{quantile}",
+                truncated=len(rows) > max_slices,
+                global_value=0.0,
+            )
+            summary["metric_name"] = f"temporal_lag_{quantile}_relative_delta"
+            summary["baseline_seconds"] = baseline
+            result[f"{dimension}:{quantile}"] = summary
+    return result
+
+
+def _state_transition_stability(
+    frame: Any,
+    *,
+    entity_key: str,
+    state_column: str,
+    event_time: str,
+    tie_breakers: tuple[str, ...],
+    ingestion_time: str | None,
+    global_pairs: tuple[tuple[Any, Any], ...],
+    slice_columns: tuple[str, ...],
+    min_support_rows: int,
+    min_slices: int,
+    max_slices: int,
+    max_spread: float,
+    time_grain: str,
+) -> dict[tuple[Any, Any], dict[str, dict[str, Any]]]:
+    if not slice_columns or not global_pairs:
+        return {pair: {} for pair in global_pairs}
+    from math import nan
+
+    from sda.patterns.spark_metrics import spark_state_transitions_by_slice
+    from sda.patterns.stability import stability
+
+    fields = {field.name: field.dataType.__class__.__name__ for field in frame.schema.fields}
+    result: dict[tuple[Any, Any], dict[str, dict[str, Any]]] = {pair: {} for pair in global_pairs}
+    for column in slice_columns:
+        temporal = fields[column] in {"DateType", "TimestampType", "TimestampNTZType"}
+        dimension = f"{column}:{time_grain}" if temporal else column
+        rows = spark_state_transitions_by_slice(
+            frame,
+            entity_keys=(entity_key,),
+            state_column=state_column,
+            event_time=event_time,
+            slice_column=column,
+            tie_breakers=tie_breakers,
+            ingestion_time=ingestion_time,
+            time_grain=time_grain,
+            max_slices=max_slices,
+        ).collect()
+        slice_keys = sorted({str(row["__sda_slice"]) for row in rows})
+        bounded_slice_keys = slice_keys[:max_slices]
+        by_slice_pair = {
+            (str(row["__sda_slice"]), (row["from_state"], row["to_state"])): row
+            for row in rows
+            if str(row["__sda_slice"]) in bounded_slice_keys
+        }
+        outgoing_by_slice_state = {}
+        for row in rows:
+            slice_state_key = (str(row["__sda_slice"]), row["from_state"])
+            outgoing_by_slice_state[slice_state_key] = int(row["outgoing_count"] or 0)
+        for pair in global_pairs:
+            probability_values: list[float] = []
+            probability_supports: list[int] = []
+            mean_values: list[float] = []
+            mean_supports: list[int] = []
+            p50_values: list[float] = []
+            p50_supports: list[int] = []
+            unseen_count = 0
+            for slice_key in bounded_slice_keys:
+                outgoing = outgoing_by_slice_state.get((slice_key, pair[0]))
+                if outgoing is None or outgoing < min_support_rows:
+                    continue
+                row = by_slice_pair.get((slice_key, pair))
+                probability_supports.append(outgoing)
+                if row is None:
+                    probability_values.append(0.0)
+                    unseen_count += 1
+                    continue
+                probability_values.append(float(row["transition_probability"]))
+                for metric_key, values, supports in (
+                    ("mean_time_in_state_seconds", mean_values, mean_supports),
+                    ("p50_time_in_state_seconds", p50_values, p50_supports),
+                ):
+                    if row[metric_key] is not None:
+                        values.append(float(row[metric_key]))
+                        supports.append(outgoing)
+
+            probability_summary = stability(
+                probability_values,
+                support_counts=probability_supports,
+                min_support_rows=min_support_rows,
+                min_slices=min_slices,
+                max_spread=max_spread,
+                dimension=f"{dimension}:transition_probability",
+                truncated=len(slice_keys) > max_slices,
+                global_value=None,
+            )
+            probability_summary["metric_name"] = "transition_probability"
+            probability_summary["unseen_transition_slice_count"] = unseen_count
+            if unseen_count:
+                probability_summary["warning"] = "unseen_transition_not_assumed_invalid"
+            result[pair][f"{dimension}:transition_probability"] = probability_summary
+            for metric_name, values, supports in (
+                ("mean_time_in_state_seconds", mean_values, mean_supports),
+                ("p50_time_in_state_seconds", p50_values, p50_supports),
+            ):
+                baseline = None
+                if values:
+                    baseline = sum(values) / len(values)
+                relative_values = [
+                    (value - baseline) / abs(baseline)
+                    if baseline is not None and baseline != 0.0
+                    else 0.0
+                    if value == baseline
+                    else nan
+                    for value in values
+                ]
+                summary = stability(
+                    relative_values,
+                    support_counts=supports,
+                    min_support_rows=min_support_rows,
+                    min_slices=min_slices,
+                    max_spread=max_spread,
+                    dimension=f"{dimension}:{metric_name}:relative_delta",
+                    truncated=len(slice_keys) > max_slices,
+                    global_value=0.0,
+                )
+                summary["metric_name"] = f"{metric_name}_relative_delta"
+                summary["baseline_seconds"] = baseline
+                summary["unseen_transition_slice_count"] = unseen_count
+                result[pair][f"{dimension}:{metric_name}"] = summary
+    return result
+
+
 def _fanout_stability(
     parent: Any,
     child: Any,
@@ -1065,6 +1261,22 @@ def main() -> None:
             if len(patterns) < detector.config.max_candidates:
                 lag = spark_temporal_lag(source, earlier, later).limit(1).collect()
                 if lag and int(lag[0]["count"] or 0) >= args.min_support_rows:
+                    lag_data = lag[0].asDict()
+                    lag_data["stability"] = (
+                        _temporal_lag_stability(
+                            source,
+                            earlier=earlier,
+                            later=later,
+                            global_percentiles=lag_data.get("duration_percentiles_seconds") or (),
+                            slice_columns=stability_slice_columns,
+                            min_support_rows=args.stability_min_support_rows,
+                            min_slices=args.stability_min_slices,
+                            max_slices=args.stability_max_slices,
+                            max_spread=args.stability_max_spread,
+                            time_grain=args.stability_time_grain,
+                        )
+                        or "unavailable"
+                    )
                     patterns.append(
                         detector._pattern(
                             analysis_id,
@@ -1074,7 +1286,7 @@ def main() -> None:
                             {},
                             {"later": later},
                             int(lag[0]["count"]),
-                            lag[0].asDict(),
+                            lag_data,
                         )
                     )
     state_candidates = [
@@ -1115,11 +1327,32 @@ def main() -> None:
                 .limit(max(0, detector.config.max_candidates - len(patterns)))
                 .collect()
             )
+            transition_pairs = tuple(
+                (row["from_state"], row["to_state"]) for row in transition_rows
+            )
+            transition_stability = _state_transition_stability(
+                source,
+                entity_key=entity_candidates[0],
+                state_column=state_candidates[0],
+                event_time=transition_event_time,
+                tie_breakers=tie_breakers,
+                ingestion_time=args.ingestion_time_column or None,
+                global_pairs=transition_pairs,
+                slice_columns=stability_slice_columns,
+                min_support_rows=args.stability_min_support_rows,
+                min_slices=args.stability_min_slices,
+                max_slices=args.stability_max_slices,
+                max_spread=args.stability_max_spread,
+                time_grain=args.stability_time_grain,
+            )
         except ValueError as exc:
             warnings.warn(f"state transition evidence unavailable: {exc}", stacklevel=1)
             transition_rows = []
+            transition_stability = {}
         for row in transition_rows:
             data = row.asDict()
+            pair = (data["from_state"], data["to_state"])
+            data["stability"] = transition_stability.get(pair, "unavailable")
             support = int(data.get("count", 0))
             if (
                 support >= args.min_support_rows

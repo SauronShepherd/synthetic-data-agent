@@ -13,6 +13,8 @@ from sda.job_entrypoints.pattern_detect_spark import (
     _correlation_stability,
     _fanout_stability,
     _numeric_conditional_stability,
+    _state_transition_stability,
+    _temporal_lag_stability,
     _temporal_order_stability,
 )
 from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
@@ -29,7 +31,9 @@ from sda.patterns.spark_metrics import (
     spark_pearson,
     spark_spearman,
     spark_state_transitions,
+    spark_state_transitions_by_slice,
     spark_temporal_lag,
+    spark_temporal_lag_slice_rates,
     spark_temporal_order,
     spark_temporal_order_slice_rates,
     unsupported_metric_result,
@@ -427,6 +431,47 @@ def test_temporal_order_stability_detects_monthly_violation_drift(spark) -> None
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_temporal_lag_stability_detects_monthly_distribution_drift(spark) -> None:
+    rows = [
+        (
+            datetime(2026, month, 1),
+            datetime(2026, month, 1),
+            datetime(2026, month, 1) + timedelta(days=days),
+        )
+        for month, days in ((1, 1), (2, 10), (3, 30))
+        for _ in range(10)
+    ]
+    frame = spark.createDataFrame(
+        rows,
+        "event_time timestamp, started_at timestamp, finished_at timestamp",
+    )
+    slices = spark_temporal_lag_slice_rates(
+        frame,
+        "started_at",
+        "finished_at",
+        slice_column="event_time",
+        time_grain="month",
+        min_support_rows=5,
+        max_slices=10,
+    ).collect()
+    assert len(slices) == 3
+    global_lag = spark_temporal_lag(frame, "started_at", "finished_at").first()
+    result = _temporal_lag_stability(
+        frame,
+        earlier="started_at",
+        later="finished_at",
+        global_percentiles=global_lag["duration_percentiles_seconds"],
+        slice_columns=("event_time",),
+        min_support_rows=5,
+        min_slices=3,
+        max_slices=10,
+        max_spread=0.1,
+        time_grain="month",
+    )
+    assert result["event_time:month:p50"]["stable"] is False
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_correlation_stability_detects_sign_reversal_by_month(spark) -> None:
     rows = [
         (datetime(2026, month, 1), float(value), float(value) * slope)
@@ -571,6 +616,60 @@ def test_state_transitions_record_event_clock_ingestion_clock_and_late_order(spa
     assert row["event_time_column"] == "event_time"
     assert row["ingestion_time_column"] == "ingestion_time"
     assert row["tie_breaker_columns"] == ["event_id"]
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark) -> None:
+    rows = []
+    for month, state, duration_days in ((1, "closed", 1), (2, "open", 1), (3, "closed", 10)):
+        for entity_index in range(5):
+            start = datetime(2026, month, 1)
+            rows.extend(
+                [
+                    (f"{month}-{entity_index}", "open", start, 1),
+                    (
+                        f"{month}-{entity_index}",
+                        state,
+                        start + timedelta(days=duration_days),
+                        2,
+                    ),
+                ]
+            )
+    frame = spark.createDataFrame(
+        rows,
+        "entity string, status string, event_time timestamp, sequence int",
+    )
+    sliced = spark_state_transitions_by_slice(
+        frame,
+        entity_keys=("entity",),
+        state_column="status",
+        event_time="event_time",
+        slice_column="event_time",
+        tie_breakers=("sequence",),
+        max_slices=10,
+    ).collect()
+    assert {row["__sda_slice"].month for row in sliced} == {1, 2, 3}
+    result = _state_transition_stability(
+        frame,
+        entity_key="entity",
+        state_column="status",
+        event_time="event_time",
+        tie_breakers=("sequence",),
+        ingestion_time=None,
+        global_pairs=(("open", "closed"),),
+        slice_columns=("event_time",),
+        min_support_rows=5,
+        min_slices=3,
+        max_slices=10,
+        max_spread=0.1,
+        time_grain="month",
+    )
+    probability = result[("open", "closed")]["event_time:month:transition_probability"]
+    assert probability["stable"] is False
+    assert probability["unseen_transition_slice_count"] == 1
+    assert (
+        result[("open", "closed")]["event_time:month:p50_time_in_state_seconds"]["stable"] is False
+    )
 
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]

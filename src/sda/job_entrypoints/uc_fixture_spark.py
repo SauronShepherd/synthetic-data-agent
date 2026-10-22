@@ -34,6 +34,7 @@ def main() -> None:
             "fanout_stability_parent",
             "fanout_stability_child",
             "temporal_order_stability",
+            "temporal_lag_stability",
         ):
             spark.sql(f"DROP TABLE IF EXISTS {prefix}_{name}")
         spark.sql(f"DROP SCHEMA IF EXISTS {schema}")
@@ -133,10 +134,27 @@ def main() -> None:
                END AS closed_at
         FROM dated"""
     )
+    spark.sql(
+        f"""CREATE OR REPLACE TABLE {prefix}_temporal_lag_stability USING DELTA AS
+        WITH rows AS (
+          SELECT CAST(FLOOR(id / 100) AS INT) AS month_index
+          FROM range(300)
+        ), dated AS (
+          SELECT ADD_MONTHS(TIMESTAMP '2026-01-01 00:00:00', month_index) AS event_time,
+                 month_index
+          FROM rows
+        )
+        SELECT event_time, event_time AS started_at,
+               TIMESTAMPADD(DAY,
+                 CASE month_index WHEN 0 THEN 1 WHEN 1 THEN 10 ELSE 30 END,
+                 event_time) AS finished_at
+        FROM dated"""
+    )
     print(
         f"SDA07_FIXTURE_CREATED {prefix}_customers {prefix}_orders "
         f"{prefix}_missingness_stability {prefix}_fanout_stability_parent "
-        f"{prefix}_fanout_stability_child {prefix}_temporal_order_stability"
+        f"{prefix}_fanout_stability_child {prefix}_temporal_order_stability "
+        f"{prefix}_temporal_lag_stability"
     )
 
 

@@ -622,6 +622,57 @@ def spark_temporal_lag(frame: Any, earlier: str, later: str) -> Any:
     )
 
 
+def spark_temporal_lag_slice_rates(
+    frame: Any,
+    earlier: str,
+    later: str,
+    *,
+    slice_column: str,
+    time_grain: str = "month",
+    min_support_rows: int = 1,
+    max_slices: int = 100,
+) -> Any:
+    """Return bounded lag-distribution percentiles by temporal or segment slice."""
+    if min_support_rows < 1 or max_slices < 2:
+        raise ValueError("temporal-lag stability requires positive resource bounds")
+    _require_columns(
+        frame,
+        (earlier, later, slice_column),
+        metric="spark_temporal_lag_slice_rates",
+    )
+    F = _functions()
+    slice_field = next(field for field in frame.schema.fields if field.name == slice_column)
+    slice_ref = f"`{slice_column.replace('`', '``')}`"
+    slice_expression = F.col(slice_ref)
+    if slice_field.dataType.__class__.__name__ in {
+        "DateType",
+        "TimestampType",
+        "TimestampNTZType",
+    }:
+        if time_grain not in {"day", "week", "month", "quarter", "year"}:
+            raise ValueError("time_grain must be day, week, month, quarter, or year")
+        slice_expression = F.date_trunc(time_grain, slice_expression.cast("timestamp"))
+    earlier_ref = F.col(f"`{earlier.replace('`', '``')}`").cast("timestamp")
+    later_ref = F.col(f"`{later.replace('`', '``')}`").cast("timestamp")
+    eligible = frame.where(earlier_ref.isNotNull() & later_ref.isNotNull())
+    lagged = eligible.select(
+        slice_expression.alias("_slice"),
+        (later_ref.cast("long") - earlier_ref.cast("long")).alias("_lag_seconds"),
+    )
+    return (
+        lagged.groupBy("_slice")
+        .agg(
+            F.count(F.lit(1)).alias("support_rows"),
+            F.expr(
+                "percentile_approx(_lag_seconds, array(0.25, 0.5, 0.75, 0.95, 0.99), 10000)"
+            ).alias("duration_percentiles_seconds"),
+        )
+        .where(F.col("support_rows") >= min_support_rows)
+        .orderBy(F.col("_slice").asc_nulls_first())
+        .limit(max_slices + 1)
+    )
+
+
 def spark_state_transitions(
     frame: Any,
     *,
@@ -718,4 +769,158 @@ def spark_state_transitions(
         .withColumn("ingestion_time_column", F.lit(ingestion_time))
         .withColumn("tie_breaker_columns", F.lit(list(tie_breakers)))
         .withColumn("warnings", F.array(F.lit("unseen_transition_not_assumed_invalid")))
+    )
+
+
+def spark_state_transitions_by_slice(
+    frame: Any,
+    *,
+    entity_keys: tuple[str, ...],
+    state_column: str,
+    event_time: str,
+    slice_column: str,
+    tie_breakers: tuple[str, ...] = (),
+    ingestion_time: str | None = None,
+    time_grain: str = "month",
+    max_slices: int = 100,
+) -> Any:
+    """Return bounded transition metrics grouped by a period or segment slice.
+
+    The slice is assigned from the source row where the state is observed. A
+    transition missing from a slice is not silently treated as invalid; the
+    caller can compare it with the outgoing-state support and record it as an
+    unseen transition.
+    """
+    if not entity_keys:
+        raise ValueError("spark_state_transitions_by_slice requires at least one entity key")
+    if max_slices < 2:
+        raise ValueError("state-transition stability requires at least two slices")
+    _require_columns(
+        frame,
+        (
+            *entity_keys,
+            state_column,
+            event_time,
+            slice_column,
+            *tie_breakers,
+            *((ingestion_time,) if ingestion_time else ()),
+        ),
+        metric="spark_state_transitions_by_slice",
+    )
+    F = _functions()
+    from pyspark.sql.window import Window
+
+    slice_field = next(field for field in frame.schema.fields if field.name == slice_column)
+    slice_expression = F.col(f"`{slice_column.replace('`', '``')}`")
+    if slice_field.dataType.__class__.__name__ in {
+        "DateType",
+        "TimestampType",
+        "TimestampNTZType",
+    }:
+        if time_grain not in {"day", "week", "month", "quarter", "year"}:
+            raise ValueError("time_grain must be day, week, month, quarter, or year")
+        slice_expression = F.date_trunc(time_grain, slice_expression.cast("timestamp"))
+
+    ordering = [
+        F.col(event_time).asc_nulls_last(),
+        *(F.col(column).asc_nulls_last() for column in tie_breakers),
+    ]
+    duplicate_order = (
+        frame.groupBy(*entity_keys, event_time, *tie_breakers).count().where(F.col("count") > 1)
+    )
+    if duplicate_order.limit(1).count():
+        raise ValueError(
+            "temporal_tie_breaker_missing"
+            if not tie_breakers
+            else "temporal_tie_breaker_not_unique"
+        )
+    window = Window.partitionBy(*entity_keys).orderBy(*ordering)
+    if ingestion_time:
+        duplicate_ingestion_order = (
+            frame.groupBy(*entity_keys, ingestion_time, *tie_breakers)
+            .count()
+            .where(F.col("count") > 1)
+        )
+        if duplicate_ingestion_order.limit(1).count():
+            raise ValueError("temporal_ingestion_tie_breaker_not_unique")
+        ingestion_window = Window.partitionBy(*entity_keys).orderBy(
+            F.col(ingestion_time).asc_nulls_last(),
+            *(F.col(column).asc_nulls_last() for column in tie_breakers),
+        )
+        ordered_source = (
+            frame.withColumn("__sda_event_order", F.row_number().over(window))
+            .withColumn("__sda_ingestion_order", F.row_number().over(ingestion_window))
+            .withColumn(
+                "__sda_order_disagreement",
+                (F.col("__sda_event_order") != F.col("__sda_ingestion_order")).cast("long"),
+            )
+        )
+    else:
+        ordered_source = frame.withColumn("__sda_order_disagreement", F.lit(0))
+    ordered_source = ordered_source.withColumn("__sda_slice", slice_expression)
+    selected_slices = (
+        ordered_source.select("__sda_slice")
+        .distinct()
+        .orderBy(F.col("__sda_slice").asc_nulls_first())
+        .limit(max_slices + 1)
+    )
+    ordered = (
+        ordered_source.withColumn("__sda_time", F.col(event_time).cast("timestamp"))
+        .withColumn("from_state", F.col(state_column))
+        .withColumn("to_state", F.lead(F.col(state_column)).over(window))
+        .withColumn("__sda_next_time", F.lead("__sda_time").over(window))
+        .withColumn("__sda_has_next", F.lead(F.lit(1)).over(window).isNotNull())
+        .join(selected_slices, "__sda_slice", "inner")
+    )
+    censored = (
+        ordered.where(~F.col("__sda_has_next"))
+        .groupBy("__sda_slice", "from_state")
+        .agg(F.count(F.lit(1)).alias("right_censored_count"))
+    )
+    transitions = ordered.where(F.col("__sda_has_next")).withColumn(
+        "__sda_duration",
+        F.col("__sda_next_time").cast("long") - F.col("__sda_time").cast("long"),
+    )
+    counts = transitions.groupBy("__sda_slice", "from_state", "to_state").agg(
+        F.count(F.lit(1)).alias("count"),
+        F.avg("__sda_duration").alias("mean_time_in_state_seconds"),
+        F.expr("percentile_approx(__sda_duration, 0.5, 10000)").alias("p50_time_in_state_seconds"),
+        F.max("__sda_duration").alias("max_time_in_state_seconds"),
+        F.sum("__sda_order_disagreement").alias("ingestion_order_disagreement_count"),
+    )
+    outgoing = counts.groupBy("__sda_slice", "from_state").agg(
+        F.sum("count").alias("outgoing_count")
+    )
+    joined = counts.alias("c").join(
+        outgoing.alias("o"),
+        (F.col("c.__sda_slice") == F.col("o.__sda_slice"))
+        & F.col("c.from_state").eqNullSafe(F.col("o.from_state")),
+    )
+    combined = joined.select(
+        F.col("c.__sda_slice").alias("__sda_slice"),
+        F.col("c.from_state").alias("from_state"),
+        F.col("c.to_state").alias("to_state"),
+        F.col("c.count").alias("count"),
+        F.col("c.mean_time_in_state_seconds").alias("mean_time_in_state_seconds"),
+        F.col("c.p50_time_in_state_seconds").alias("p50_time_in_state_seconds"),
+        F.col("c.max_time_in_state_seconds").alias("max_time_in_state_seconds"),
+        F.col("c.ingestion_order_disagreement_count").alias("ingestion_order_disagreement_count"),
+        F.col("o.outgoing_count").alias("outgoing_count"),
+    )
+    return (
+        combined.join(censored, ["__sda_slice", "from_state"], "left")
+        .fillna({"right_censored_count": 0})
+        .withColumn("transition_count", F.col("count"))
+        .withColumn("transition_probability", F.col("count") / F.col("outgoing_count"))
+        .withColumn("self_transition", F.col("from_state").eqNullSafe(F.col("to_state")))
+        .withColumn("slice_column", F.lit(slice_column))
+        .withColumn("event_time_column", F.lit(event_time))
+        .withColumn("ingestion_time_column", F.lit(ingestion_time))
+        .withColumn("tie_breaker_columns", F.lit(list(tie_breakers)))
+        .withColumn("warnings", F.array(F.lit("unseen_transition_not_assumed_invalid")))
+        .orderBy(
+            F.col("__sda_slice").asc_nulls_first(),
+            F.col("from_state").asc_nulls_first(),
+            F.col("to_state").asc_nulls_first(),
+        )
     )
