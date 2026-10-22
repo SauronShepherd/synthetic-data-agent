@@ -205,7 +205,7 @@ def test_spark_metric_families_execute_on_deterministic_data(spark) -> None:
             event_time="event_time",
             tie_breakers=("status",),
         ).count()
-        == 1
+        == 2
     )
 
 
