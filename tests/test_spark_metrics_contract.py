@@ -92,7 +92,7 @@ def test_unsupported_spark_metric_result_is_actionable_and_raw_value_free() -> N
     }
     result = spark_metric(object(), "spearman")
     assert result == unsupported_metric_result(
-        "spearman", "metric is not implemented by the Spark adapter"
+        "spearman", "missing required arguments: left, right"
     )
     assert spark_metric(object(), "  SPEARMAN ") == result
 

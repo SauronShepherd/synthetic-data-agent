@@ -66,10 +66,6 @@ def spark_metric(frame: Any, metric: str, **kwargs: Any) -> Any:
     }
     missing_kwargs = [name for name in required_by_metric.get(metric, ()) if name not in kwargs]
     if missing_kwargs:
-        if metric == "spearman" and not kwargs:
-            return unsupported_metric_result(
-                metric, "metric is not implemented by the Spark adapter"
-            )
         return unsupported_metric_result(
             metric, "missing required arguments: " + ", ".join(missing_kwargs)
         )
