@@ -402,9 +402,9 @@ resources:
         - name: manifest_table
           default: ${var.sda_manifest_table}
         - name: relationship_output_table
-          default: ${var.sda_relationship_output_table}
+          default: ${var.sda_scope_relationship_output_table}
         - name: graph_output_table
-          default: ${var.sda_graph_output_table}
+          default: ${var.sda_scope_graph_output_table}
       environments:
         - environment_key: analyze_scope_environment
           spec:
@@ -433,9 +433,9 @@ resources:
         - name: relationship_artifact_id
           default: ""
         - name: relationship_registry_table
-          default: ${var.sda_relationship_output_table}_registry
+          default: ${var.sda_scope_relationship_output_table}_registry
         - name: dependency_graph_registry_table
-          default: ${var.sda_graph_output_table}_registry
+          default: ${var.sda_scope_graph_output_table}_registry
         - name: dependency_graph_artifact_id
           default: ""
         - name: source_table

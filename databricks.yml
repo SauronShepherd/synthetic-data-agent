@@ -108,6 +108,12 @@ variables:
   sda_graph_output_table:
     description: Delta table for dependency graph evidence.
     default: sda_dev.profiles.dependency_graph_scope
+  sda_scope_relationship_output_table:
+    description: Delta evidence table for governed analyze_scope relationship artifacts.
+    default: sda_dev.profiles.scope_relationship_evidence
+  sda_scope_graph_output_table:
+    description: Delta evidence table for governed analyze_scope graph artifacts.
+    default: sda_dev.profiles.scope_graph_evidence
   sda_pattern_registry_table:
     description: Compact SDA 07 pattern registry.
     default: sda_dev.profiles.pattern_registry

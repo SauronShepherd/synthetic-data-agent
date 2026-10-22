@@ -8,6 +8,7 @@ import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
+from itertools import combinations
 
 from sda.patterns.detector import PatternDetector
 from sda.patterns.models import PatternConfig
@@ -116,6 +117,17 @@ def _column_list(raw: str) -> tuple[str, ...]:
     if len(columns) != len(set(columns)):
         raise SystemExit("transition tie-breaker columns must be unique")
     return columns
+
+
+def _bounded_driver_sets(
+    drivers: Sequence[str], *, max_depth: int, max_columns: int = 10
+) -> tuple[tuple[str, ...], ...]:
+    bounded = tuple(drivers[:max_columns])
+    return tuple(
+        driver_set
+        for depth in range(1, min(max_depth, len(bounded)) + 1)
+        for driver_set in combinations(bounded, depth)
+    )
 
 
 def _candidate_columns(
@@ -447,18 +459,21 @@ def main() -> None:
     categorical_drivers = [name for name in categorical if name in roles.get("driver", ())]
     categorical_outcomes = [name for name in categorical if name in roles.get("outcome", ())]
     numeric_outcomes = [name for name in numeric if name in roles.get("outcome", ())]
-    for driver in categorical_drivers[:10]:
+    driver_sets = _bounded_driver_sets(
+        categorical_drivers, max_depth=detector.config.max_condition_depth
+    )
+    for drivers in driver_sets:
         for outcome in categorical_outcomes[:10]:
-            if driver == outcome or len(patterns) >= detector.config.max_candidates:
+            if outcome in drivers or len(patterns) >= detector.config.max_candidates:
                 continue
             rows = (
-                spark_conditional_distribution(source, (driver,), outcome)
+                spark_conditional_distribution(source, drivers, outcome)
                 .where(F.col("support_rows") >= args.min_support_rows)
                 .where(F.col("support_rows") / F.lit(max(source_count, 1)) >= args.min_support_rate)
                 .where(F.col("outcome_count") >= args.min_support_rows)
                 .orderBy(
                     F.col("support_rows").desc(),
-                    F.col(driver).asc_nulls_first(),
+                    *(F.col(driver).asc_nulls_first() for driver in drivers),
                     F.col(outcome).asc_nulls_first(),
                 )
                 .limit(max(0, detector.config.max_candidates - len(patterns)))
@@ -469,13 +484,14 @@ def main() -> None:
                 condition_rows = int(data.pop("support_rows"))
                 support = int(data.pop("outcome_count"))
                 outcome_value = data.pop(outcome)
+                condition = {driver: data.pop(driver) for driver in drivers}
                 patterns.append(
                     detector._pattern(
                         analysis_id,
                         source_table,
                         PatternFamily.CONDITIONAL_DISTRIBUTION,
-                        (driver, outcome),
-                        {driver: data.pop(driver)},
+                        (*drivers, outcome),
+                        condition,
                         {"outcome": outcome, "value": outcome_value},
                         support,
                         {
@@ -488,26 +504,29 @@ def main() -> None:
                     )
                 )
         for outcome in numeric_outcomes[:10]:
-            if driver == outcome or len(patterns) >= detector.config.max_candidates:
+            if outcome in drivers or len(patterns) >= detector.config.max_candidates:
                 continue
             rows = (
-                spark_numeric_by_group(source, (driver,), outcome)
+                spark_numeric_by_group(source, drivers, outcome)
                 .where(F.col("count") >= args.min_support_rows)
                 .where(F.col("count") / F.lit(max(source_count, 1)) >= args.min_support_rate)
-                .orderBy(F.col("count").desc(), F.col(driver).asc_nulls_first())
+                .orderBy(
+                    F.col("count").desc(),
+                    *(F.col(driver).asc_nulls_first() for driver in drivers),
+                )
                 .limit(max(0, detector.config.max_candidates - len(patterns)))
                 .collect()
             )
             for row in rows:
                 data = row.asDict()
                 support = int(data.pop("count"))
-                condition = {driver: data.pop(driver)}
+                condition = {driver: data.pop(driver) for driver in drivers}
                 patterns.append(
                     detector._pattern(
                         analysis_id,
                         source_table,
                         PatternFamily.CONDITIONAL_DISTRIBUTION,
-                        (driver, outcome),
+                        (*drivers, outcome),
                         condition,
                         {"outcome": outcome},
                         support,
@@ -517,11 +536,11 @@ def main() -> None:
     for outcome in (
         name for name in columns if name not in excluded and name in roles.get("outcome", ())
     ):
-        for driver in categorical_drivers[:10]:
-            if driver == outcome or len(patterns) >= detector.config.max_candidates:
+        for drivers in driver_sets:
+            if outcome in drivers or len(patterns) >= detector.config.max_candidates:
                 continue
             rows = (
-                spark_conditional_missingness(source, (driver,), outcome)
+                spark_conditional_missingness(source, drivers, outcome)
                 .where(F.col("support_rows") >= args.min_support_rows)
                 .where(F.col("support_rows") / F.lit(max(source_count, 1)) >= args.min_support_rate)
                 .where(F.col("null_rate") > 0)
@@ -531,13 +550,13 @@ def main() -> None:
             for row in rows:
                 data = row.asDict()
                 support = int(data.pop("support_rows"))
-                condition = {driver: data.pop(driver)}
+                condition = {driver: data.pop(driver) for driver in drivers}
                 patterns.append(
                     detector._pattern(
                         analysis_id,
                         source_table,
                         PatternFamily.CONDITIONAL_MISSINGNESS,
-                        (driver, outcome),
+                        (*drivers, outcome),
                         condition,
                         {"outcome": outcome},
                         support,

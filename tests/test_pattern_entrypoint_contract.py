@@ -5,7 +5,12 @@ import types
 
 import pytest
 
-from sda.job_entrypoints.pattern_detect_spark import _analysis_id, _bool_arg, parse_args
+from sda.job_entrypoints.pattern_detect_spark import (
+    _analysis_id,
+    _bool_arg,
+    _bounded_driver_sets,
+    parse_args,
+)
 
 
 def test_analysis_identity_tracks_snapshot_inputs_and_configuration() -> None:
@@ -26,6 +31,22 @@ def test_analysis_identity_tracks_snapshot_inputs_and_configuration() -> None:
     assert first != _analysis_id("", **{**kwargs, "configuration_hash": "config-b"})
     assert first != _analysis_id("", **{**kwargs, "rule_set_hash": "rules-b"})
     assert _analysis_id("requested", **kwargs) == "requested"
+
+
+def test_bounded_driver_sets_cover_interactions_in_deterministic_depth_order() -> None:
+    assert _bounded_driver_sets(("country", "tier", "channel"), max_depth=2) == (
+        ("country",),
+        ("tier",),
+        ("channel",),
+        ("country", "tier"),
+        ("country", "channel"),
+        ("tier", "channel"),
+    )
+
+
+def test_bounded_driver_sets_respect_depth_and_column_caps() -> None:
+    assert _bounded_driver_sets(("a", "b", "c"), max_depth=1) == (("a",), ("b",), ("c",))
+    assert _bounded_driver_sets(tuple("abcdefghijk"), max_depth=2)[-1] == ("i", "j")
 
 
 def test_best_effort_analysis_identity_is_unique_per_run() -> None:

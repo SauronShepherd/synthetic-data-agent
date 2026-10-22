@@ -567,7 +567,9 @@ class TableProfiler:
                         percentile_values[4],
                     )
                     if "iqr" in requested_outliers and q1 is not None and q3 is not None:
-                        low, high = q1 - 1.5 * (q3 - q1), q3 + 1.5 * (q3 - q1)
+                        q1_value, q3_value = float(q1), float(q3)
+                        low = q1_value - 1.5 * (q3_value - q1_value)
+                        high = q3_value + 1.5 * (q3_value - q1_value)
                         findings.append(
                             {
                                 "method": "iqr",

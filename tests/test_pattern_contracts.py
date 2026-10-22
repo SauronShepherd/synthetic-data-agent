@@ -82,6 +82,42 @@ def test_standalone_detection_emits_conditional_categorical_patterns() -> None:
     )
 
 
+def test_pattern_identity_distinguishes_outcomes_and_is_repeatable() -> None:
+    detector = PatternDetector(PatternConfig(min_support_rows=1))
+    approved = detector._pattern(
+        "analysis",
+        "main.sales.orders",
+        PatternFamily.CONDITIONAL_DISTRIBUTION,
+        ("tier", "status"),
+        {"tier": "premium"},
+        {"outcome": "status", "value": "approved"},
+        5,
+        {"global_count": 10},
+    )
+    rejected = detector._pattern(
+        "analysis",
+        "main.sales.orders",
+        PatternFamily.CONDITIONAL_DISTRIBUTION,
+        ("tier", "status"),
+        {"tier": "premium"},
+        {"outcome": "status", "value": "rejected"},
+        5,
+        {"global_count": 10},
+    )
+    repeated = detector._pattern(
+        "analysis",
+        "main.sales.orders",
+        PatternFamily.CONDITIONAL_DISTRIBUTION,
+        ("tier", "status"),
+        {"tier": "premium"},
+        {"outcome": "status", "value": "approved"},
+        5,
+        {"global_count": 10},
+    )
+    assert approved.pattern_id != rejected.pattern_id
+    assert approved.pattern_id == repeated.pattern_id
+
+
 def test_standalone_detection_emits_conditional_missingness_patterns() -> None:
     result = PatternDetector(PatternConfig(min_support_rows=2)).detect(
         [

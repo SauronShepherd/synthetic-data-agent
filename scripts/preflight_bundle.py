@@ -33,6 +33,8 @@ FQN_OUTPUT_VARIABLES = (
     "sda_metadata_inventory_table",
     "sda_relationship_output_table",
     "sda_graph_output_table",
+    "sda_scope_relationship_output_table",
+    "sda_scope_graph_output_table",
     "sda_artifact_registry_table",
     "sda_pattern_registry_table",
     "sda_pattern_evidence_table",

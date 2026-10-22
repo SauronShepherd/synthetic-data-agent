@@ -930,6 +930,7 @@ class PatternDetector:
                 "family": family.value,
                 "columns": columns,
                 "condition": condition,
+                "outcome": outcome,
             }
         )
         stability_values = metric.get("stability_values")

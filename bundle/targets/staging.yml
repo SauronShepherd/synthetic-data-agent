@@ -36,6 +36,8 @@ targets:
       sda_relationship_child_table: workspace.sda_staging.controlled_bookings
       sda_relationship_output_table: workspace.sda_staging.relationship_analysis_scope
       sda_graph_output_table: workspace.sda_staging.dependency_graph_scope
+      sda_scope_relationship_output_table: workspace.sda_staging.scope_relationship_evidence
+      sda_scope_graph_output_table: workspace.sda_staging.scope_graph_evidence
       catalog_name: workspace
       sda_allow_best_effort_snapshot: "false"
       sda_allow_profile_schema_create: "false"

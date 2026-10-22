@@ -236,7 +236,7 @@ class PatternConfig:
     max_category_values: int = 100
     include_spearman: bool = False
     sensitive_value_policy: str = "no_values"
-    detector_version: str = "sda07-v1"
+    detector_version: str = "sda07-v2"
     scoring_version: str = "sda07-policy-v1"
     max_condition_depth: int = 2
     max_segment_cardinality: int = 50

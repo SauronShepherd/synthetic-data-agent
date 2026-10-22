@@ -23,6 +23,20 @@ def test_pattern_task_receives_all_upstream_artifact_references() -> None:
         assert f"--{parameter.replace('_', '-')}" in block
 
 
+def test_scope_and_relationship_jobs_use_separate_evidence_tables() -> None:
+    resources = (ROOT / "bundle" / "resources.yml").read_text(encoding="utf-8")
+    scope = resources.split("analyze_scope:", 1)[1].split("pattern_detector:", 1)[0]
+    patterns = resources.split("pattern_detector:", 1)[1].split("standalone_generator:", 1)[0]
+    assert "default: ${var.sda_scope_relationship_output_table}" in scope
+    assert "default: ${var.sda_scope_graph_output_table}" in scope
+    assert "default: ${var.sda_scope_relationship_output_table}_registry" in patterns
+    assert "default: ${var.sda_scope_graph_output_table}_registry" in patterns
+    for target in (ROOT / "bundle" / "targets").glob("*.yml"):
+        text = target.read_text(encoding="utf-8")
+        assert "sda_scope_relationship_output_table:" in text
+        assert "sda_scope_graph_output_table:" in text
+
+
 def test_bundle_contract_rejects_target_missing_pattern_variable(tmp_path: Path) -> None:
     (tmp_path / "bundle" / "targets").mkdir(parents=True)
     (tmp_path / "bundle" / "targets" / "dev.yml").write_text(

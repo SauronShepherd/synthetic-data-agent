@@ -1,11 +1,13 @@
 import ast
 import os
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from sda.job_entrypoints.pattern_detect_spark import _candidate_columns
+from sda.metadata_models import ColumnMetadata, ObjectType, TableMetadata
 from sda.patterns.spark_metrics import (
     spark_conditional_distribution,
     spark_conditional_missingness,
@@ -18,6 +20,8 @@ from sda.patterns.spark_metrics import (
     spark_temporal_order,
     unsupported_metric_result,
 )
+from sda.profile_models import ProfileMode, TableProfileRequest
+from sda.tools.table_profiler import TableProfiler
 
 
 def test_spark_entrypoint_candidates_respect_roles_and_exclusions() -> None:
@@ -44,6 +48,28 @@ def test_spark_entrypoint_candidates_respect_roles_and_exclusions() -> None:
     assert categorical == ["segment", "status"]
     assert temporal == ["created_at"]
     assert entity == ["account_id"]
+
+
+@pytest.mark.spark  # type: ignore[untyped-decorator]
+def test_table_profiler_handles_decimal_iqr_outliers(spark) -> None:
+    metadata = TableMetadata(
+        catalog="main",
+        schema="quality",
+        object_name="decimal_values",
+        object_type=ObjectType.TABLE,
+        columns=(ColumnMetadata("amount", "DECIMAL(10,2)", True, 1),),
+    )
+    frame = spark.createDataFrame(
+        [(Decimal("1.00"),), (Decimal("2.00"),), (Decimal("3.00"),), (Decimal("100.00"),)],
+        "amount decimal(10,2)",
+    )
+    profile = TableProfiler(
+        TableProfileRequest(metadata.full_name, mode=ProfileMode.FULL), metadata
+    ).profile_spark(frame)
+    amount = next(column for column in profile.column_profiles if column.column_name == "amount")
+    iqr = next(finding for finding in amount.outlier_findings if finding["method"] == "iqr")
+    assert iqr["thresholds"] == {"lower": 0.5, "upper": 4.5}
+    assert iqr["outlier_count"] == 1
 
 
 def test_candidates_include_single_role_conditional_columns() -> None:

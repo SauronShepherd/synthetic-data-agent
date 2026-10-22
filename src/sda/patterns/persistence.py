@@ -118,7 +118,7 @@ def registry_rows(
     configuration_hash: str = "",
     input_artifact_ids: tuple[str, ...] = (),
     source_references: tuple[Any, ...] = (),
-    detector_version: str = "sda07-v1",
+    detector_version: str = "sda07-v2",
     scoring_policy_version: str = "sda07-policy-v1",
     precedence_policy_version: str = "sda07-precedence-v1",
 ) -> list[dict[str, Any]]:

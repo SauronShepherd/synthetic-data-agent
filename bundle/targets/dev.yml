@@ -21,6 +21,8 @@ targets:
       sda_relationship_child_table: samples.wanderbricks.bookings
       sda_relationship_output_table: workspace.profiles.relationship_analysis_scope
       sda_graph_output_table: workspace.profiles.dependency_graph_scope
+      sda_scope_relationship_output_table: workspace.profiles.scope_relationship_evidence
+      sda_scope_graph_output_table: workspace.profiles.scope_graph_evidence
       sda_metadata_inventory_table: workspace.profiles.metadata_inventory
       sda_manifest_table: workspace.profiles.run_manifests
       sda_artifact_registry_table: workspace.profiles.artifact_registry
