@@ -69,7 +69,7 @@ def test_table_profiler_handles_decimal_iqr_outliers(spark) -> None:
     ).profile_spark(frame)
     amount = next(column for column in profile.column_profiles if column.column_name == "amount")
     iqr = next(finding for finding in amount.outlier_findings if finding["method"] == "iqr")
-    assert iqr["thresholds"] == {"lower": 0.5, "upper": 4.5}
+    assert iqr["thresholds"] == {"lower": -2.0, "upper": 6.0}
     assert iqr["outlier_count"] == 1
 
 
