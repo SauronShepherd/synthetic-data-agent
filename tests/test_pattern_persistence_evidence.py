@@ -1,7 +1,8 @@
 import json
 
-from sda.patterns.models import Pattern, PatternFamily, PatternOrigin
+from sda.patterns.models import Pattern, PatternFamily, PatternLifecycle, PatternOrigin
 from sda.patterns.persistence import registry_rows
+from sda.patterns.rules import BusinessRule
 
 
 def test_pattern_registry_rows_preserve_population_baseline_and_stability():
@@ -112,3 +113,56 @@ def test_registry_exposes_unavailable_stability_explicitly() -> None:
     row = registry_rows((pattern,))[0]
     assert json.loads(row["stability_json"]) == {"status": "unavailable"}
     assert json.loads(row["baseline_json"]) == {"global_rate": 0.3}
+
+
+def test_registry_preserves_rule_owner_approval_and_effective_period() -> None:
+    rule = BusinessRule(
+        "cancelled_timestamp_required",
+        "main.sales.orders",
+        ({"column": "cancel_at", "operator": "is_not_null", "role": "requirement"},),
+        origin=PatternOrigin.DOMAIN_APPROVED,
+        approved=True,
+        effective_from="2026-01-01",
+        effective_to="2026-12-31",
+        rule_version="3",
+        owner_id="domain-owner",
+        reviewer_id="domain-reviewer",
+        approval_reference="approval-2026-01",
+        approved_at="2026-10-01T12:00:00Z",
+        supersedes_rule_id="cancelled_timestamp_required_v2",
+    )
+    pattern = Pattern(
+        pattern_id="p5",
+        analysis_id="a1",
+        family=PatternFamily.BUSINESS_RULE,
+        origin=PatternOrigin.DOMAIN_APPROVED,
+        primary_table="main.sales.orders",
+        columns=("cancel_at",),
+        condition={},
+        outcome={},
+        support_rows=10,
+        support_rate=1.0,
+        metric={"rule": rule},
+        evidence_quality={},
+        decision="review_required",
+        review_status="required",
+        lifecycle=PatternLifecycle.REVIEW_REQUIRED,
+    )
+    provenance = json.loads(registry_rows((pattern,))[0]["rule_provenance_json"])
+    assert provenance == {
+        "approval_reference": "approval-2026-01",
+        "approval_status": "approved",
+        "approved": True,
+        "approved_at": "2026-10-01T12:00:00Z",
+        "effective_from": "2026-01-01",
+        "effective_to": "2026-12-31",
+        "origin": "domain_approved",
+        "owner_id": "domain-owner",
+        "reviewer_id": "domain-reviewer",
+        "rule_id": "cancelled_timestamp_required",
+        "rule_version": "3",
+        "review_status": "required",
+        "strength": "PROBABILISTIC",
+        "supersedes_rule_id": "cancelled_timestamp_required_v2",
+        "table": "main.sales.orders",
+    }

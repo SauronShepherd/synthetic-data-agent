@@ -33,6 +33,12 @@ def parse_rules_json(raw: str) -> tuple[BusinessRule, ...]:
                 effective_from=item.get("effective_from"),
                 effective_to=item.get("effective_to"),
                 review_status=item.get("review_status", "required"),
+                rule_version=item.get("rule_version", "1"),
+                owner_id=item.get("owner_id"),
+                reviewer_id=item.get("reviewer_id"),
+                approval_reference=item.get("approval_reference"),
+                approved_at=item.get("approved_at"),
+                supersedes_rule_id=item.get("supersedes_rule_id"),
             )
         )
     return tuple(rules)

@@ -39,6 +39,27 @@ def test_rule_json_and_effective_scope():
         )
 
 
+def test_approved_rules_require_auditable_approval_metadata():
+    with pytest.raises(ValueError, match="require owner_id, reviewer_id"):
+        BusinessRule(
+            "unverifiable",
+            "main.s.t",
+            ({"column": "status", "value": "A"},),
+            origin=PatternOrigin.DOMAIN_APPROVED,
+            approved=True,
+        )
+    rules = parse_rules_json(
+        '[{"rule_id":"approved","table":"main.s.t","predicates":[{"column":"x"}],'
+        '"approved":true,"owner_id":"owner","reviewer_id":"reviewer",'
+        '"approval_reference":"ticket-1","approved_at":"2026-10-01T00:00:00Z",'
+        '"rule_version":"2"}]'
+    )
+    assert rules[0].owner_id == "owner"
+    assert rules[0].reviewer_id == "reviewer"
+    assert rules[0].approved_at == "2026-10-01T00:00:00Z"
+    assert rules[0].rule_version == "2"
+
+
 @pytest.fixture(scope="module")
 def spark():
     from pyspark.sql import SparkSession
@@ -88,6 +109,10 @@ def test_conflict_precedence_remains_review_only(spark):
             ({"column": "status", "value": "B", "role": "requirement"},),
             origin=PatternOrigin.DOMAIN_APPROVED,
             approved=True,
+            owner_id="domain-owner",
+            reviewer_id="domain-reviewer",
+            approval_reference="approval-2026-01",
+            approved_at="2026-10-01T12:00:00Z",
         ),
     )
     detector = PatternDetector(PatternConfig(min_support_rows=1))

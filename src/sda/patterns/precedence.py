@@ -25,5 +25,7 @@ class RulePrecedencePolicy:
                 },
             )
 
-    def rank(self, origin: PatternOrigin) -> int:
+    def rank(self, origin: PatternOrigin, *, approved: bool = False) -> int:
+        if origin in {PatternOrigin.USER_PROVIDED, PatternOrigin.DOMAIN_APPROVED} and not approved:
+            return 0
         return (self.origin_rank or {}).get(origin, 0)

@@ -24,6 +24,7 @@ def _analysis_id(
     source_version: str | None,
     snapshot_timestamp: str | None,
     configuration_hash: str,
+    rule_set_hash: str,
     run_id: str,
     started_at: str,
 ) -> str:
@@ -38,6 +39,7 @@ def _analysis_id(
         "source_version": source_version,
         "snapshot_timestamp": snapshot_timestamp,
         "configuration_hash": configuration_hash,
+        "rule_set_hash": rule_set_hash,
     }
     if snapshot_kind != "delta_version":
         identity["run_id"] = run_id or started_at
@@ -227,6 +229,13 @@ def main() -> None:
             )
         except Exception as exc:
             raise SystemExit(f"unable to validate pattern inputs: {exc}") from exc
+    from sda.artifacts.fingerprint import fingerprint
+    from sda.patterns.spark_rules import parse_rules_json
+
+    try:
+        business_rules = parse_rules_json(args.business_rules_json)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise SystemExit(f"invalid business rules: {exc}") from exc
     from pyspark.sql import functions as F
 
     source_version = None
@@ -311,6 +320,7 @@ def main() -> None:
         source_version=source_version,
         snapshot_timestamp=snapshot_timestamp,
         configuration_hash=detector.config.configuration_hash,
+        rule_set_hash=fingerprint(business_rules),
         run_id=args.run_id,
         started_at=analysis_started_at,
     )
@@ -640,13 +650,13 @@ def main() -> None:
     # Explicit business rules are evaluated as Spark aggregates on the scoped source.
     from datetime import date
 
-    from sda.patterns.spark_rules import detect_spark_rules, parse_rules_json
+    from sda.patterns.spark_rules import detect_spark_rules
 
     try:
         patterns.extend(
             detect_spark_rules(
                 source,
-                parse_rules_json(args.business_rules_json),
+                business_rules,
                 table=source_table,
                 as_of=date.today(),
                 detector=detector,

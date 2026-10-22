@@ -109,8 +109,8 @@ def resolve_rule_conflicts(rules: list[Any], policy: Any) -> tuple[RuleConflict,
     for conflict in conflicts:
         left = by_id[conflict.left_rule_id]
         right = by_id[conflict.right_rule_id]
-        left_rank = policy.rank(left.origin)
-        right_rank = policy.rank(right.origin)
+        left_rank = policy.rank(left.origin, approved=left.approved)
+        right_rank = policy.rank(right.origin, approved=right.approved)
         if left_rank == right_rank:
             winner = min(left.rule_id, right.rule_id)
             resolved.append(
@@ -134,7 +134,7 @@ def resolve_rule_conflicts(rules: list[Any], policy: Any) -> tuple[RuleConflict,
                 conflict.overlap_scope,
                 winning_rule_id=winner.rule_id,
                 precedence_reason=f"origin_rank:{max(left_rank, right_rank)}",
-                requires_review=False,
+                requires_review=not (left.approved and right.approved),
             )
         )
     return tuple(resolved)

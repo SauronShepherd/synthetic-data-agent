@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import IntEnum
 from typing import Any
 
@@ -25,10 +26,35 @@ class BusinessRule:
     effective_from: str | None = None
     effective_to: str | None = None
     review_status: str = "required"
+    rule_version: str = "1"
+    owner_id: str | None = None
+    reviewer_id: str | None = None
+    approval_reference: str | None = None
+    approved_at: str | None = None
+    supersedes_rule_id: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.rule_id or not self.table or not self.predicates:
+        if not self.rule_id.strip() or not self.table.strip() or not self.predicates:
             raise ValueError("rule identity, scope, and predicates are required")
+        if not self.rule_version.strip():
+            raise ValueError("rule_version must not be empty")
+        if self.approved and not all(
+            value and value.strip()
+            for value in (
+                self.owner_id,
+                self.reviewer_id,
+                self.approval_reference,
+                self.approved_at,
+            )
+        ):
+            raise ValueError(
+                "approved rules require owner_id, reviewer_id, approval_reference, and approved_at"
+            )
+        if self.approved_at:
+            try:
+                datetime.fromisoformat(self.approved_at.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("approved_at must be an ISO-8601 date or timestamp") from exc
         if self.strength is RuleStrength.HARD and self.origin is PatternOrigin.OBSERVED:
             raise ValueError("observed rules cannot be hard invariants")
         if (

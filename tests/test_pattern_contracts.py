@@ -900,6 +900,25 @@ def test_equal_precedence_conflicts_use_stable_rule_id_tiebreak() -> None:
     assert conflicts[0].to_dict()["winning_rule_id"] == "a-rule"
 
 
+def test_unapproved_claimed_domain_origin_does_not_outrank_declared_rule() -> None:
+    claimed_domain = BusinessRule(
+        "domain-claim",
+        "main.s.t",
+        ({"column": "status", "operator": "eq", "value": "A"},),
+        origin=PatternOrigin.DOMAIN_APPROVED,
+        approved=False,
+    )
+    declared = BusinessRule(
+        "declared",
+        "main.s.t",
+        ({"column": "status", "operator": "eq", "value": "B"},),
+        origin=PatternOrigin.DECLARED,
+    )
+    conflict = resolve_rule_conflicts([claimed_domain, declared], RulePrecedencePolicy())[0]
+    assert conflict.winning_rule_id == "declared"
+    assert conflict.requires_review
+
+
 def test_conflict_detection_deduplicates_repeated_predicate_pairs() -> None:
     left = BusinessRule(
         rule_id="left",

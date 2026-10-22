@@ -16,6 +16,7 @@ def test_analysis_identity_tracks_snapshot_inputs_and_configuration() -> None:
         "source_version": "7",
         "snapshot_timestamp": "2026-10-22T00:00:00Z",
         "configuration_hash": "config-a",
+        "rule_set_hash": "rules-a",
         "run_id": "run-a",
         "started_at": "2026-10-22T00:00:00Z",
     }
@@ -23,6 +24,7 @@ def test_analysis_identity_tracks_snapshot_inputs_and_configuration() -> None:
     assert first == _analysis_id("", **kwargs)
     assert first != _analysis_id("", **{**kwargs, "source_version": "8"})
     assert first != _analysis_id("", **{**kwargs, "configuration_hash": "config-b"})
+    assert first != _analysis_id("", **{**kwargs, "rule_set_hash": "rules-b"})
     assert _analysis_id("requested", **kwargs) == "requested"
 
 
@@ -34,6 +36,7 @@ def test_best_effort_analysis_identity_is_unique_per_run() -> None:
         "source_version": None,
         "snapshot_timestamp": None,
         "configuration_hash": "config-a",
+        "rule_set_hash": "rules-a",
         "run_id": "run-a",
         "started_at": "2026-10-22T00:00:00Z",
     }

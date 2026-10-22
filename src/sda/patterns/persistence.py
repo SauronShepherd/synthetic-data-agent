@@ -9,7 +9,7 @@ from sda.artifacts.fingerprint import fingerprint
 from sda.patterns.models import Pattern
 from sda.runtime.identifiers import QualifiedName, quote_identifier
 
-PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v2"
+PATTERN_REGISTRY_SCHEMA_VERSION = "sda07-pattern-registry-v3"
 PATTERN_EVIDENCE_SCHEMA_VERSION = "sda07-pattern-evidence-v1"
 
 _ASSOCIATION_NAMES = {
@@ -96,7 +96,7 @@ class PatternPersistence:
 
 
 def ensure_pattern_registry_columns(spark: Any, table: str, rows: list[dict[str, Any]]) -> None:
-    """Add v2 evidence fields to an existing v1 registry before publishing rows."""
+    """Add versioned evidence fields to an existing pattern registry before publishing."""
     name = QualifiedName.parse(table)
     if not rows or not spark.catalog.tableExists(name.full_name):
         return
@@ -148,6 +148,9 @@ def registry_rows(
                 _safe_payload(p.evidence_quality.get("baseline", {})), sort_keys=True
             ),
             "validation_mode": p.evidence_quality.get("validation_mode", "unknown"),
+            "rule_provenance_json": json.dumps(
+                _rule_provenance(p.metric.get("rule")), sort_keys=True
+            ),
             "stability_json": json.dumps(
                 _safe_stability(p.evidence_quality.get("stability", {})), sort_keys=True
             ),
@@ -187,6 +190,30 @@ def registry_rows(
         }
         for p in patterns
     ]
+
+
+def _rule_provenance(rule: Any) -> dict[str, Any]:
+    if rule is None:
+        return {}
+    origin = getattr(rule, "origin", None)
+    strength = getattr(rule, "strength", None)
+    return {
+        "rule_id": getattr(rule, "rule_id", None),
+        "rule_version": getattr(rule, "rule_version", None),
+        "table": getattr(rule, "table", None),
+        "origin": getattr(origin, "value", origin),
+        "strength": getattr(strength, "name", strength),
+        "approved": bool(getattr(rule, "approved", False)),
+        "approval_status": "approved" if getattr(rule, "approved", False) else "unapproved",
+        "review_status": getattr(rule, "review_status", "required"),
+        "owner_id": getattr(rule, "owner_id", None),
+        "reviewer_id": getattr(rule, "reviewer_id", None),
+        "approval_reference": getattr(rule, "approval_reference", None),
+        "approved_at": getattr(rule, "approved_at", None),
+        "effective_from": getattr(rule, "effective_from", None),
+        "effective_to": getattr(rule, "effective_to", None),
+        "supersedes_rule_id": getattr(rule, "supersedes_rule_id", None),
+    }
 
 
 def evidence_rows(patterns: tuple[Pattern, ...]) -> list[dict[str, Any]]:
