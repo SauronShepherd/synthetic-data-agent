@@ -666,7 +666,7 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
         global_pairs=(("open", "closed"),),
         slice_columns=("event_time", "source_system"),
         min_support_rows=5,
-        min_slices=3,
+        min_slices=2,
         max_slices=10,
         max_spread=0.1,
         time_grain="month",
@@ -675,8 +675,7 @@ def test_state_transition_stability_tracks_unseen_pairs_and_duration_drift(spark
     assert probability["stable"] is False
     assert probability["unseen_transition_slice_count"] == 1
     duration = result[("open", "closed")]["event_time:month:p50_time_in_state_seconds"]
-    assert duration["stable"] is None
-    assert duration["warning"] == "insufficient_or_truncated_slices"
+    assert duration["stable"] is False
     assert result[("open", "closed")]["source_system:transition_probability"]["stable"] is False
 
 
