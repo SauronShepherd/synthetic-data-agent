@@ -363,6 +363,8 @@ resources:
               - "{{job.parameters.metadata_inventory_id}}"
               - --metadata-inventory-table
               - "{{job.parameters.metadata_inventory_table}}"
+              - --artifact-registry-table
+              - "{{job.parameters.artifact_registry_table}}"
               - --manifest-table
               - "{{job.parameters.manifest_table}}"
               - --relationship-output-table
@@ -399,6 +401,8 @@ resources:
           default: ""
         - name: metadata_inventory_table
           default: ""
+        - name: artifact_registry_table
+          default: ${var.sda_artifact_registry_table}
         - name: manifest_table
           default: ${var.sda_manifest_table}
         - name: relationship_output_table

@@ -31,6 +31,10 @@ def test_scope_and_relationship_jobs_use_separate_evidence_tables() -> None:
     assert "default: ${var.sda_scope_graph_output_table}" in scope
     assert "default: ${var.sda_scope_relationship_output_table}_registry" in patterns
     assert "default: ${var.sda_scope_graph_output_table}_registry" in patterns
+    assert "--artifact-registry-table" in scope
+    assert '"{{job.parameters.artifact_registry_table}}"' in scope
+    assert "name: artifact_registry_table" in scope
+    assert "default: ${var.sda_artifact_registry_table}" in scope
     for target in (ROOT / "bundle" / "targets").glob("*.yml"):
         text = target.read_text(encoding="utf-8")
         assert "sda_scope_relationship_output_table:" in text

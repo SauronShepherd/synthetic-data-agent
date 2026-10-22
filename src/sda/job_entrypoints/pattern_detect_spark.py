@@ -329,7 +329,7 @@ def main() -> None:
         raise SystemExit(
             f"transition tie-breaker columns are unavailable: {sorted(unknown_tie_breakers)}"
         )
-    from sda.patterns.upstream import scoped_role_columns
+    from sda.patterns.upstream import scoped_role_columns, source_constraints
 
     try:
         role_columns, unprofiled = scoped_role_columns(source_table, columns, upstream_refs)
@@ -374,6 +374,7 @@ def main() -> None:
         started_at=analysis_started_at,
     )
     from sda.patterns.models import Pattern, PatternFamily
+    from sda.patterns.platform_constraints import evaluate_platform_constraints
     from sda.patterns.spark_metrics import (
         spark_conditional_distribution,
         spark_conditional_missingness,
@@ -389,6 +390,17 @@ def main() -> None:
 
     patterns: list[Pattern] = []
     # Only aggregate rows are collected; source values never leave Spark.
+    try:
+        patterns.extend(
+            evaluate_platform_constraints(
+                source,
+                source_constraints(source_table, upstream_refs),
+                analysis_id=analysis_id,
+                table=source_table,
+            )
+        )
+    except (ValueError, TypeError, KeyError) as exc:
+        raise SystemExit(f"unable to evaluate source platform constraints: {exc}") from exc
     correlation_numeric = [
         name
         for name in numeric

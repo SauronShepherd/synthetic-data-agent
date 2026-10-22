@@ -48,6 +48,20 @@ def test_controlled_artifact_fields_cannot_be_overwritten() -> None:
     assert writer.rows[0]["status"] == "complete"
 
 
+def test_persist_rows_keeps_fields_from_every_evidence_row() -> None:
+    writer = Writer()
+    persist_rows(
+        writer,
+        [{"kind": "relationship"}, {"kind": "candidate", "parent_table": "main.p"}],
+        "main.evidence.artifacts",
+        artifact_id="safe",
+    )
+
+    assert writer.rows[0]["parent_table"] is None
+    assert writer.rows[1]["parent_table"] == "main.p"
+    assert set(writer.rows[0]) == set(writer.rows[1])
+
+
 def test_delta_merge_rejects_missing_columns_instead_of_dropping_them(monkeypatch: Any) -> None:
     class FakeTarget:
         def toDF(self) -> Any:

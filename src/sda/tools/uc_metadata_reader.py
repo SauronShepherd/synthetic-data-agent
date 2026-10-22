@@ -95,7 +95,7 @@ def information_schema_queries(catalog: str, schema: str | None = None) -> tuple
         (
             "SELECT constraint_catalog, constraint_schema, constraint_name, "
             "table_catalog AS catalog, table_schema AS schema, table_name AS name, "
-            "constraint_type, enforced, rely "
+            "constraint_type, enforced "
             "FROM system.information_schema.table_constraints "
             f"WHERE {catalog_predicate}{schema_predicate}"
         ),
@@ -391,15 +391,29 @@ class InformationSchemaMetadataAdapter:
         columns = self._executor.execute(_restrict_query(queries[3], selected))
         table_tags = self._safe_execute(_restrict_query(queries[4], selected))
         column_tags = self._safe_execute(_restrict_query(queries[5], selected))
-        constraints = self._safe_execute_with_fallback(
-            _restrict_query(queries[6], selected),
-            _restrict_query(queries[6].replace(", rely ", " "), selected),
-        )
+        constraints = self._safe_execute(_restrict_query(queries[6], selected))
         key_columns = self._safe_execute(_restrict_query(queries[7], selected))
         referential_constraints = self._safe_execute(queries[8])
         constraint_tables = self._safe_execute(queries[9])
         constraint_columns = self._safe_execute(queries[10])
-        check_constraints = self._safe_execute(queries[11])
+        check_constraints = list(self._safe_execute(queries[11]))
+        delta_check_rows = self._read_delta_check_constraints(tables)
+        known_constraint_keys = {_constraint_key(row) for row in constraints}
+        constraints = tuple(constraints) + tuple(
+            {
+                "constraint_catalog": row["constraint_catalog"],
+                "constraint_schema": row["constraint_schema"],
+                "constraint_name": row["constraint_name"],
+                "catalog": row["catalog"],
+                "schema": row["schema"],
+                "name": row["name"],
+                "constraint_type": "CHECK",
+                "enforced": "YES",
+            }
+            for row in delta_check_rows
+            if _constraint_key(row) not in known_constraint_keys
+        )
+        check_constraints.extend(delta_check_rows)
 
         columns_by_table = _build_columns_by_table(columns, column_tags)
         tags_by_table = _build_table_tags_by_table(table_tags)
@@ -427,6 +441,53 @@ class InformationSchemaMetadataAdapter:
             for row in tables
         )
 
+    def _read_delta_check_constraints(
+        self, tables: Sequence[Mapping[str, Any]]
+    ) -> tuple[Mapping[str, Any], ...]:
+        """Read enforced CHECK expressions from Delta table properties.
+
+        Unity Catalog's CHECK_CONSTRAINTS information-schema view can be empty
+        even when Delta stores an enforced expression in table properties.
+        """
+        rows: list[Mapping[str, Any]] = []
+        attempted = False
+        for table in tables:
+            if ObjectType.from_platform(str(table.get("object_type", ""))) not in {
+                ObjectType.TABLE,
+                ObjectType.BASE_TABLE,
+            }:
+                continue
+            attempted = True
+            catalog, schema, name = _table_key(table)
+            qualified = ".".join(_quote_identifier(part) for part in (catalog, schema, name))
+            try:
+                properties = self._executor.execute(f"SHOW TBLPROPERTIES {qualified}")
+            except Exception as exc:  # pragma: no cover - platform/version dependent
+                self._query_status["delta_check_constraints"] = "unavailable"
+                self._query_errors["delta_check_constraints"] = type(exc).__name__
+                self._query_warnings.append("delta_check_constraint_metadata_unavailable")
+                continue
+            for property_row in properties:
+                property_name = str(property_row.get("key", property_row.get("property", "")))
+                prefix = "delta.constraints."
+                if not property_name.lower().startswith(prefix):
+                    continue
+                rows.append(
+                    {
+                        "constraint_catalog": catalog,
+                        "constraint_schema": schema,
+                        "constraint_name": property_name[len(prefix) :],
+                        "catalog": catalog,
+                        "schema": schema,
+                        "name": name,
+                        "check_clause": property_row.get("value"),
+                        "enforced": "YES",
+                    }
+                )
+        if attempted and "delta_check_constraints" not in self._query_status:
+            self._query_status["delta_check_constraints"] = "success"
+        return tuple(rows)
+
     def _safe_execute(self, sql: str) -> Sequence[Mapping[str, Any]]:
         source = _metadata_source_name(sql)
         try:
@@ -438,20 +499,6 @@ class InformationSchemaMetadataAdapter:
             self._query_errors[source] = type(exc).__name__
             self._query_warnings.append(f"{source}_metadata_unavailable")
             return ()
-
-    def _safe_execute_with_fallback(
-        self, primary_sql: str, fallback_sql: str
-    ) -> Sequence[Mapping[str, Any]]:
-        try:
-            rows = self._executor.execute(primary_sql)
-            self._query_status[_metadata_source_name(primary_sql)] = "success"
-            return rows
-        except Exception as exc:  # pragma: no cover - Databricks-version dependent
-            source = _metadata_source_name(primary_sql)
-            self._query_status[source] = "fallback"
-            self._query_errors[source] = type(exc).__name__
-            self._query_warnings.append("constraint_rely_metadata_unavailable")
-            return self._safe_execute(fallback_sql)
 
 
 class UcMetadataReader:

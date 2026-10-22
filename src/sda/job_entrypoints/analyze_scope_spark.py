@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest-table", default="")
     parser.add_argument("--metadata-inventory-id", default="")
     parser.add_argument("--metadata-inventory-table", default="")
+    parser.add_argument("--artifact-registry-table", default="")
     parser.add_argument("--relationship-output-table", default="")
     parser.add_argument("--graph-output-table", default="")
     return parser.parse_args()
@@ -135,9 +136,17 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
             "source_versions": source_versions,
         }
         if args.profile:
+            from sda.artifacts.models import ArtifactStatus
+            from sda.artifacts.registry import SparkArtifactRegistry
             from sda.profile_models import ProfileMode, TableProfileRequest
             from sda.profiling.persistence import find_reusable_profile, persist_profile
+            from sda.runtime.errors import ArtifactNotFoundError
             from sda.tools.table_profiler import TableProfiler
+
+            artifact_registry = getattr(args, "artifact_registry_table", "")
+            if not artifact_registry:
+                raise ValueError("artifact_registry_table is required for profile artifacts")
+            profile_registry = SparkArtifactRegistry(spark, artifact_registry)
 
             profiled: list[dict[str, Any]] = []
             for table in scoped_tables:
@@ -158,15 +167,32 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     metadata_inventory_id=args.metadata_inventory_id or None,
                 )
                 if reusable:
-                    profiled.append(
-                        {
-                            "source_table": table.full_name,
-                            "profile_id": str(reusable.get("profile_id")),
-                            "locations": {"table_profiles": f"{profile_target}_table_profiles"},
-                            "reused": True,
-                        }
-                    )
-                    continue
+                    profile_id = str(reusable.get("profile_id", ""))
+                    try:
+                        registered = profile_registry.require_complete(profile_id)
+                    except ArtifactNotFoundError:
+                        # Legacy profile rows are not sufficient downstream
+                        # evidence: recompute once so the full typed profile
+                        # payload can be registered for pattern-role checks.
+                        registered = None
+                    if registered is not None:
+                        if registered.status is not ArtifactStatus.COMPLETE:
+                            raise ValueError("reusable profile artifact is not complete")
+                        profiled.append(
+                            {
+                                "source_table": table.full_name,
+                                "profile_id": profile_id,
+                                "locations": {
+                                    "table_profiles": f"{profile_target}_table_profiles",
+                                    "column_profiles": f"{profile_target}_column_profiles",
+                                    "profile_distributions": (
+                                        f"{profile_target}_profile_distributions"
+                                    ),
+                                },
+                                "reused": True,
+                            }
+                        )
+                        continue
                 profile = TableProfiler(request, table).profile_spark(
                     scoped_frames[table.full_name],
                     source_version=source_versions[table.full_name],
@@ -190,11 +216,61 @@ def run(spark: Any, args: argparse.Namespace) -> dict[str, Any]:
                     profile_target,
                     reuse_existing=True,
                 )
+                # Publish the profile in the canonical registry as well as the
+                # queryable profile tables. Downstream SDA-07 input validation
+                # resolves every artifact ID through this registry.
+                from sda.artifacts.delta import persist_artifact_registry
+                from sda.artifacts.models import (
+                    ArtifactRef,
+                    ArtifactStatus,
+                    ArtifactType,
+                    SourceReference,
+                )
+
+                profile_ref = ArtifactRef(
+                    artifact_id=profile.profile_id,
+                    artifact_type=ArtifactType.TABLE_PROFILE,
+                    artifact_schema_version=profile.profile_schema_version,
+                    status=ArtifactStatus.COMPLETE,
+                    tool_name="table_profiler",
+                    tool_version=__version__,
+                    strategy_version="table-profile-v1",
+                    run_id=run_id,
+                    environment=getattr(args, "environment", "dev"),
+                    created_at=datetime.now(UTC).isoformat(),
+                    configuration_hash=profile.configuration_hash,
+                    primary_location=locations["table_profiles"],
+                    related_locations={
+                        "column_profiles": locations["column_profiles"],
+                        "distributions": locations["profile_distributions"],
+                        "registry": artifact_registry,
+                    },
+                    source_references=(
+                        SourceReference(
+                            table.full_name,
+                            "TABLE",
+                            "delta_version",
+                            source_versions[table.full_name],
+                            None,
+                            None,
+                            metadata_inventory_id=args.metadata_inventory_id or None,
+                        ),
+                    ),
+                    checksum=fingerprint(profile.to_dict()),
+                    summary=profile.agent_summary,
+                    warnings=profile.warnings,
+                    content=profile.to_dict(),
+                    input_artifact_ids=(
+                        (args.metadata_inventory_id,) if args.metadata_inventory_id else ()
+                    ),
+                )
+                persist_artifact_registry(spark, profile_ref, artifact_registry)
                 profiled.append(
                     {
                         "source_table": table.full_name,
                         "profile_id": profile.profile_id,
                         "locations": locations,
+                        "reused": False,
                     }
                 )
             metadata_summary["profiled_tables"] = profiled

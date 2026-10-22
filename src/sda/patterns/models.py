@@ -322,6 +322,7 @@ class Pattern:
             raise ValueError("declared_rule lifecycle requires a declared rule origin")
         if self.lifecycle is PatternLifecycle.APPROVED_RULE and self.origin not in {
             PatternOrigin.DOMAIN_APPROVED,
+            PatternOrigin.PLATFORM,
             PatternOrigin.DESTINATION_CONSTRAINT,
         }:
             raise ValueError("approved_rule lifecycle requires an approval origin")

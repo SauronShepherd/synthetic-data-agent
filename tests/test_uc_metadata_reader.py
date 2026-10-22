@@ -286,7 +286,7 @@ def test_information_schema_adapter_reads_real_query_results() -> None:
     assert any("information_schema.tables" in query.lower() for query in executor.queries)
 
 
-def test_information_schema_adapter_falls_back_when_rely_column_is_unsupported() -> None:
+def test_information_schema_adapter_does_not_query_unsupported_rely_column() -> None:
     from sda.tools.uc_metadata_reader import InformationSchemaMetadataAdapter
 
     class RelyUnsupported(FakeExecutor):
@@ -300,4 +300,35 @@ def test_information_schema_adapter_falls_back_when_rely_column_is_unsupported()
         MetadataReadConfig(catalog_allowlist=("main",), schema_allowlist=("sales",))
     )
     assert inventory.tables
-    assert any("rely" in warning for warning in inventory.warnings)
+    constraint_queries = [
+        query
+        for query in executor.queries
+        if "information_schema.table_constraints" in query.lower()
+    ]
+    assert constraint_queries
+    assert all("rely" not in query.lower() for query in constraint_queries)
+    assert not any("rely" in warning for warning in inventory.warnings)
+
+
+def test_information_schema_adapter_reads_enforced_check_from_delta_properties() -> None:
+    from sda.tools.uc_metadata_reader import InformationSchemaMetadataAdapter
+
+    class DeltaCheckProperties(FakeExecutor):
+        def execute(self, sql: str) -> tuple[dict[str, object], ...]:
+            if sql.lower().startswith("show tblproperties"):
+                return ({"key": "delta.constraints.amount_positive", "value": "amount >= 0"},)
+            return super().execute(sql)
+
+    inventory = InformationSchemaMetadataAdapter(DeltaCheckProperties()).read_inventory(
+        MetadataReadConfig(catalog_allowlist=("main",), schema_allowlist=("sales",))
+    )
+
+    check = next(
+        constraint
+        for constraint in inventory.tables[0].constraints
+        if constraint.name == "amount_positive"
+    )
+    assert check.kind is ConstraintKind.CHECK
+    assert check.check_clause == "amount >= 0"
+    assert check.enforced is True
+    assert inventory.provenance["metadata_sources"]["delta_check_constraints"] == "success"

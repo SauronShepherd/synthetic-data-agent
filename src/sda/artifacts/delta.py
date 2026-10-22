@@ -41,6 +41,8 @@ def persist_rows(
             }
             for index, row in enumerate(rows)
         ]
+        all_columns = tuple(dict.fromkeys(key for row in values for key in row))
+        values = [{column: row.get(column) for column in all_columns} for row in values]
         values = [
             {
                 key: json.dumps(value, default=str) if isinstance(value, list | dict) else value
@@ -177,6 +179,7 @@ def persist_artifact_lifecycle(
         raise ValueError("lifecycle publication must start with a writing artifact")
     persist_artifact_registry(spark, ref, registry_location)
     try:
+        ensure_artifact_evidence_columns(spark, evidence_location, rows)
         completed = ref.transition(ArtifactStatus.COMPLETE)
         persist_rows(
             spark,
@@ -196,6 +199,37 @@ def persist_artifact_lifecycle(
             "failed to persist artifact lifecycle",
             details={"artifact_id": ref.artifact_id, "error_code": "artifact_write_failed"},
         ) from exc
+
+
+def ensure_artifact_evidence_columns(spark: Any, location: str, rows: list[dict[str, Any]]) -> None:
+    """Add new evidence fields to existing Delta evidence tables safely.
+
+    Artifact evidence rows are extensible JSON-like records. Additive STRING
+    columns preserve older rows while allowing new evidence fields to be stored.
+    """
+    if not rows or not hasattr(spark, "catalog"):
+        return
+    from sda.runtime.identifiers import QualifiedName, quote_identifier
+
+    name = QualifiedName.parse(location)
+    if not spark.catalog.tableExists(name.full_name):
+        return
+    existing = {column.lower() for column in spark.table(name.quoted).columns}
+    required = {
+        column.lower()
+        for row in rows
+        for column in (*row.keys(), "artifact_id", "status", "evidence_id")
+    }
+    missing = sorted(required - existing)
+    if missing:
+        definitions = ", ".join(f"{quote_identifier(column)} STRING" for column in missing)
+        spark.sql(f"ALTER TABLE {name.quoted} ADD COLUMNS ({definitions})")
+    remaining = required - {column.lower() for column in spark.table(name.quoted).columns}
+    if remaining:
+        raise PersistenceError(
+            "artifact evidence schema migration did not add required columns",
+            details={"location": name.full_name, "columns": ",".join(sorted(remaining))},
+        )
 
 
 def persist_distributed_evidence(

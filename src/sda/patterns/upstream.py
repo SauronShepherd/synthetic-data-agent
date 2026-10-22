@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from sda.artifacts.models import ArtifactRef, ArtifactType
+from sda.metadata_models import ConstraintKind, ConstraintMetadata
 
 
 def scoped_role_columns(
@@ -73,6 +74,78 @@ def scoped_role_columns(
             }
         )
     return role_columns, excluded
+
+
+def source_constraints(
+    source_table: str, refs: tuple[ArtifactRef, ...]
+) -> tuple[ConstraintMetadata, ...]:
+    """Return declared source constraints from the compatible metadata artifact.
+
+    Non-nullable column metadata is normalized into a NOT NULL constraint when
+    the information-schema constraint inventory does not already contain one.
+    """
+    if not refs:
+        return ()
+    metadata_refs = [ref for ref in refs if ref.artifact_type is ArtifactType.METADATA_INVENTORY]
+    if len(metadata_refs) != 1:
+        raise ValueError("source constraints require exactly one metadata inventory")
+    tables = metadata_refs[0].content.get("tables", ())
+    matches = (
+        [
+            table
+            for table in tables
+            if isinstance(table, dict) and table.get("full_name") == source_table
+        ]
+        if isinstance(tables, (list, tuple))
+        else []
+    )
+    if len(matches) != 1:
+        raise ValueError("source table is absent or ambiguous in metadata inventory")
+    raw = matches[0]
+    constraints = [
+        ConstraintMetadata(
+            name=str(item["name"]),
+            kind=ConstraintKind(str(item.get("kind", ConstraintKind.UNKNOWN.value))),
+            columns=tuple(str(column) for column in item.get("columns", ())),
+            check_clause=item.get("check_clause"),
+            referenced_table=item.get("referenced_table"),
+            referenced_columns=tuple(str(column) for column in item.get("referenced_columns", ())),
+            enforced=bool(item.get("enforced", False)),
+            validated=bool(item.get("validated", False)),
+            match_option=item.get("match_option"),
+            update_rule=item.get("update_rule"),
+            delete_rule=item.get("delete_rule"),
+            rely=item.get("rely"),
+        )
+        for item in raw.get("constraints", ())
+        if isinstance(item, dict)
+    ]
+    non_null_columns = {
+        column
+        for constraint in constraints
+        if constraint.kind is ConstraintKind.NOT_NULL
+        for column in constraint.columns
+    }
+    # Information schema can omit a NOT NULL column association; normalized
+    # nullable metadata below is the column-level source of truth for that case.
+    constraints = [
+        constraint
+        for constraint in constraints
+        if constraint.kind is not ConstraintKind.NOT_NULL or constraint.columns
+    ]
+    constraints.extend(
+        ConstraintMetadata(
+            name=f"metadata_not_null_{column['name']}",
+            kind=ConstraintKind.NOT_NULL,
+            columns=(str(column["name"]),),
+            enforced=True,
+        )
+        for column in raw.get("columns", ())
+        if isinstance(column, dict)
+        and not bool(column.get("nullable", True))
+        and str(column.get("name", "")) not in non_null_columns
+    )
+    return tuple(constraints)
 
 
 def _by_name(value: object, key: str) -> dict[str, dict[str, Any]]:
