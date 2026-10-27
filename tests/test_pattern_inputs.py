@@ -126,6 +126,47 @@ def test_legacy_registry_fallback_still_validates_complete_input_set() -> None:
         )
 
 
+def test_pattern_loader_uses_latest_complete_rows_from_shared_registry() -> None:
+    class HistoricalRegistry(InMemoryArtifactRegistry):
+        def require_complete(self, artifact_id: str) -> ArtifactRef:
+            raise AssertionError("shared loader must resolve the latest complete row")
+
+        def require_latest_complete(self, artifact_id: str) -> ArtifactRef:
+            ref = self.get(artifact_id)
+            if ref is None:
+                raise ArtifactNotFoundError(
+                    "artifact was not found", details={"artifact_id": artifact_id}
+                )
+            if ref.status is not ArtifactStatus.COMPLETE:
+                raise ArtifactCompatibilityError(
+                    "artifact is not complete", details={"artifact_id": artifact_id}
+                )
+            return ref
+
+    central = HistoricalRegistry()
+    for item in artifacts()[:2]:
+        central.put(item)
+    relationships = InMemoryArtifactRegistry()
+    graph = InMemoryArtifactRegistry()
+    relationships.put(artifacts()[2])
+    graph.put(artifacts()[3])
+
+    resolved = load_pattern_inputs(
+        central,
+        inputs(),
+        environment="dev",
+        relationship_legacy=relationships,
+        dependency_graph_legacy=graph,
+    )
+
+    assert tuple(item.artifact_id for item in resolved) == (
+        "metadata",
+        "profile",
+        "relationship",
+        "graph",
+    )
+
+
 def test_incomplete_central_artifact_cannot_be_bypassed_by_legacy_fallback() -> None:
     central = InMemoryArtifactRegistry()
     relationships = InMemoryArtifactRegistry()

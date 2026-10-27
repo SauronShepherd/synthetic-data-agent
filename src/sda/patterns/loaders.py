@@ -30,7 +30,11 @@ def load_pattern_inputs(
     artifacts: list[ArtifactRef] = []
     for artifact_id, artifact_type in requested:
         try:
-            artifact = store.require_complete(artifact_id)
+            # A shared registry can contain historical rows for the same
+            # artifact ID after retries. Resolve the newest complete row
+            # instead of treating those expected lifecycle rows as a
+            # duplicate-input failure.
+            artifact = store.require_latest_complete(artifact_id)
         except ArtifactNotFoundError:
             legacy = (
                 relationship_legacy
