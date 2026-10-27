@@ -5,14 +5,14 @@ evidence index, not a claim that a local test proves a governed Databricks run.
 
 | Article requirement | Current implementation | Authoritative evidence | Status |
 | --- | --- | --- | --- |
-| Consume compatible metadata, profile, relationship, and source-snapshot evidence | `pattern_detect_spark.py` validates the complete `PatternInputRefs`, loads the upstream registry entries, and rejects incompatible Delta versions | `tests/test_pattern_inputs.py`, `tests/test_pattern_entrypoint_contract.py`, `tests/test_pattern_upstream.py` | Local/CI complete; current live rerun pending |
+| Consume compatible metadata, profile, relationship, and source-snapshot evidence | `pattern_detect_spark.py` validates the complete `PatternInputRefs`; `load_pattern_inputs` resolves the latest complete row from the shared registry and rejects incompatible Delta versions | `tests/test_pattern_inputs.py`, `tests/test_pattern_entrypoint_contract.py`, `tests/test_pattern_upstream.py` | Local/CI complete; current live rerun pending |
 | Select candidates by roles and measure numerical, categorical, mixed, fan-out, missingness, and segment patterns | `roles.py`, bounded driver-set selection, Spark correlation/conditional/missingness/numeric-group/fan-out adapters | `tests/test_pattern_contracts.py`, `tests/test_spark_metrics_contract.py`, CI Spark job | CI complete |
 | Detect temporal ordering, lag distributions, and state transitions | Temporal ordering direction inference, lag percentiles, event/ingestion clocks, transitions, censoring, unseen pairs, and bounded stability slices | `tests/test_pattern_entrypoint_contract.py`, `tests/test_spark_metrics_contract.py`, historical live run `440523671659941` | CI complete; new live paths pending |
 | Evaluate user/domain rules, conflicts, precedence, and effective periods | `rules.py`, `spark_rules.py`, conflict resolver, effective-date filtering, deterministic precedence, independent owner/reviewer validation | `tests/test_spark_rules.py`, `tests/test_pattern_contracts.py`, `tests/test_pattern_persistence_evidence.py` | Local/CI complete |
 | Preserve support, baselines, violations, stability, provenance, and review state | Versioned registry/evidence rows retain population, baseline, violations, stability, clocks, snapshots, upstream IDs, warnings, and lifecycle | `src/sda/patterns/persistence.py`, `tests/test_pattern_persistence_evidence.py` | Local/CI complete |
 | Keep observed evidence distinct from approved rules | Observed patterns remain `observed_pattern`; hard constraints and approved lifecycle require explicit approved origins and metadata | `tests/test_pattern_contracts.py`, `tests/test_spark_rules.py` | Local/CI complete |
 | Emit generation/validation instructions without activating unapproved rules | Actions are proposals, record bounded fallback levels plus explicit global fallback, and observed evidence cannot become hard constraints | `src/sda/patterns/actions.py`, `tests/test_pattern_contracts.py` | Local/CI complete |
-| Persist an auditable registry and prove the deployed path with adversarial Spark/Databricks tests | Bundle is deployed and CI Spark/adversarial tests pass; historical `sda` evidence proves registry persistence and review state | CI `40504955799`, bundle deployment with profile `sda`, live run `440523671659941` | Partially complete: current Free workspace disables new job runs |
+| Persist an auditable registry and prove the deployed path with adversarial Spark/Databricks tests | Bundle is deployed and CI Spark/adversarial tests pass; historical `sda` evidence proves registry persistence and review state | CI `40543519260`, bundle deployment with profile `sda`, live run `440523671659941` | Partially complete: current Free workspace disables new job runs |
 
 ## Adversarial coverage
 
@@ -43,19 +43,30 @@ missing fresh run and registry query.
 
 ## Latest verification pass
 
-At commit `a9881d3` the repository passed CI run `40504955799` end to end:
+At commit `435ffb0` the repository passed CI run `40543519260` end to end:
 
 - quality: format, Ruff, mypy, non-Spark tests, coverage, Spark tests, wheel
   build, and source-archive inspection;
 - PostgreSQL integration tests; and
 - bundle validation for the controlled deployment targets.
 
-The bundle was redeployed with profile `sda` after that commit (`14` files
+The bundle was redeployed with profile `sda` after that commit (`4` files
 uploaded, `18` resources unchanged). The local non-Spark suite, Ruff, mypy,
 format check, release hygiene, and bundle validation also pass. The two Spark
 tests that were attempted directly on this Windows workstation could not start
 their Python worker under Python 3.13/PySpark 3.5.9; this is an environment
 startup failure, while the same Spark contracts pass in CI above.
+
+## Cross-article and branch iteration
+
+The SDA-01 through SDA-06 articles and their branches were compared with the
+SDA-07 contracts. The comparison also exposed a relevant follow-up in the
+local SDA-08 history (`143dec4`, “Fix live SDA-07 artifact registry handoff”):
+the shared registry must resolve the newest complete upstream row when retry
+history contains multiple lifecycle rows. SDA-07 now carries that behavior in
+`ArtifactRegistryStore`, `SparkArtifactRegistry`, and `load_pattern_inputs`,
+with a regression test in `tests/test_pattern_inputs.py`. This is a code-level
+correction; it does not remove the need for the live Databricks smoke.
 
 The authenticated web console for workspace `7474654810500477` independently
 shows the account banner `You've reached your budget. Contact your admin for a
