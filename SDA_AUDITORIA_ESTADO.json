@@ -1,0 +1,230 @@
+{
+  "run_date": "2026-10-26",
+  "timezone": "Europe/Madrid",
+  "head_start": {
+    "branch": "SDA-07",
+    "sha": "21226c6af7e57554bdcfa41532fcecb7a91b7b7a"
+  },
+  "head_end": "not_rechecked",
+  "status": "AUDITORIA ABIERTA",
+  "sources": {
+    "article_index": "https://angelic-articles.com/",
+    "repository": "https://github.com/SauronShepherd/synthetic-data-agent",
+    "drafts": [
+      "SDA-07 Final.docx",
+      "SDA-08 Lakebase in Production.docx",
+      "SDA-09 Why We Picked Lakebase.docx",
+      "SDA-10 Generating Synthetic Tables.docx"
+    ]
+  },
+  "pairs": [
+    {
+      "id": "SDA-01",
+      "branch_sha": "79373f1f78d251ee69b93bb6a90aacee010fa71d",
+      "article_published": true,
+      "branch_remote": true,
+      "draft_docx": false,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "open"
+    },
+    {
+      "id": "SDA-02",
+      "branch_sha": "26532465cdc7a65ef3aa12f03cb0c360757ae8f2",
+      "article_published": true,
+      "branch_remote": true,
+      "draft_docx": false,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "article_url_not_retrieved",
+      "note": "Index lists SDA-02 and branch exists, but tested canonical URL returned HTTP 404; full article not read."
+    },
+    {
+      "id": "SDA-03",
+      "branch_sha": "b1b668cbc3c7ad900082dbe46e1dd7586c574424",
+      "article_published": true,
+      "branch_remote": true,
+      "draft_docx": false,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "open"
+    },
+    {
+      "id": "SDA-04",
+      "branch_sha": "4dff97bc1fd33e6c9cb368a718cf9f4130265097",
+      "article_published": true,
+      "branch_remote": true,
+      "draft_docx": false,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "open"
+    },
+    {
+      "id": "SDA-05",
+      "branch_sha": "912b92931496a4c33064f084fd8b5560c0781c33",
+      "article_published": true,
+      "branch_remote": true,
+      "draft_docx": false,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "open"
+    },
+    {
+      "id": "SDA-06",
+      "branch_sha": "637c2576b80b49d81a91ad7a4d80e7aba86c26c8",
+      "article_published": true,
+      "branch_remote": true,
+      "draft_docx": false,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "open"
+    },
+    {
+      "id": "SDA-07",
+      "branch_sha": "21226c6af7e57554bdcfa41532fcecb7a91b7b7a",
+      "article_published": true,
+      "branch_remote": true,
+      "draft_docx": true,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "open"
+    },
+    {
+      "id": "SDA-08",
+      "branch_sha": null,
+      "article_published": false,
+      "branch_remote": false,
+      "draft_docx": true,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "draft_without_branch"
+    },
+    {
+      "id": "SDA-09",
+      "branch_sha": null,
+      "article_published": false,
+      "branch_remote": false,
+      "draft_docx": true,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "draft_without_branch"
+    },
+    {
+      "id": "SDA-10",
+      "branch_sha": null,
+      "article_published": false,
+      "branch_remote": false,
+      "draft_docx": true,
+      "counters": {
+        "article_clean": 0,
+        "branch_clean": 0,
+        "pair_clean": 0,
+        "target": 10
+      },
+      "status": "draft_without_branch"
+    }
+  ],
+  "findings": [
+    {
+      "id": "SDA-CROSS-001",
+      "status": "new",
+      "priority": "P1",
+      "confidence": "confirmed_execution",
+      "summary": "Six failures in filtered local pytest run; Delta persistence tests invoke real DeltaTable against incomplete doubles."
+    },
+    {
+      "id": "SDA-CROSS-002",
+      "status": "new",
+      "priority": "P2",
+      "confidence": "confirmed",
+      "summary": "Index and git show SDA-02 exists; no SDA-00 discovered; SDA-02 canonical article URL added."
+    },
+    {
+      "id": "SDA-08-PAIR-001",
+      "status": "new",
+      "priority": "P1",
+      "confidence": "confirmed_against_repo_caveat",
+      "summary": "SDA-08 draft describes live Lakebase delivery while acceptance matrices retain live migration/OAuth/recovery as pending."
+    },
+    {
+      "id": "SDA-10-PAIR-001",
+      "status": "new",
+      "priority": "P1",
+      "confidence": "confirmed_against_code",
+      "summary": "SDA-10 promises deterministic Spark generator; current generation.py is pure local bounded generator and documents distributed adapter as future."
+    },
+    {
+      "id": "SDA-09-EDITORIAL-001",
+      "status": "new",
+      "priority": "P2",
+      "confidence": "probable",
+      "summary": "Benchmark decision needs reproducible benchmark data and current primary sources; detailed evidence audit pending."
+    },
+    {
+      "id": "SDA-02-ACCESS-001",
+      "status": "new",
+      "priority": "P2",
+      "confidence": "confirmed_http_404",
+      "summary": "SDA-02 exists in public index and git branch, but tested canonical URL /articles/sda--02-designing-the-synthetic-data-agent/ returned 404; full article unavailable."
+    }
+  ],
+  "tests": [
+    {
+      "command": "python -m pytest -q -m \"not spark and not databricks and not integration\" --tb=short",
+      "result": "failed",
+      "failures": 6,
+      "evidence": ".tmp/pytest-local.txt",
+      "environment": "current workspace/global Python 3.13 dependencies; clean rebuild not performed"
+    }
+  ],
+  "blocking_or_pending": [
+    "Review failures in reproducible project environment and classify root cause",
+    "Detailed pairwise review SDA-01 through SDA-07",
+    "Branches SDA-08 through SDA-10 do not exist remotely at capture time",
+    "SDA-09 benchmark evidence and current official Databricks docs need verification",
+    "Ten clean passes not achieved"
+  ],
+  "next_hypotheses": [
+    "Check mocked Delta persistence boundary and test dependency setup",
+    "Compare SDA-07 public HTML with Final DOCX and SHA 21226c6",
+    "Inspect SDA-08 live deployment evidence when branch exists",
+    "Verify SDA-10 generator claims against future branch"
+  ],
+  "clean_passes_global": 0
+}
