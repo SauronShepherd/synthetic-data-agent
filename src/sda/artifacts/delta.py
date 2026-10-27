@@ -61,6 +61,12 @@ def persist_rows(
         try:
             from delta.tables import DeltaTable
 
+            # ``delta-spark`` can be installed in a local environment even
+            # when the caller supplies a lightweight Spark test double. In
+            # that case the Delta merge path is not applicable.
+            if not hasattr(frame, "createOrReplaceTempView"):
+                _append_delta_frame(frame, location)
+                return
             frame.createOrReplaceTempView("__sda_artifact_write")
             target = DeltaTable.forName(spark, location)
             target_columns = {column.lower() for column in target.toDF().columns}
@@ -326,15 +332,25 @@ def _merge_or_append(frame: Any, spark: Any, location: str, condition: str) -> N
     try:
         from delta.tables import DeltaTable
 
+        # Lightweight local test doubles intentionally expose only ``write``;
+        # use the append fallback even when delta-spark is installed.
+        if not hasattr(frame, "alias"):
+            _append_delta_frame(frame, location)
+            return
         DeltaTable.forName(spark, location).alias("target").merge(
             frame.alias("source"), condition
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
     except (ImportError, ModuleNotFoundError):
-        frame.write.format("delta").mode("append").saveAsTable(location)
+        _append_delta_frame(frame, location)
     except Exception as exc:
         if not _is_missing_table_error(exc):
             raise
-        frame.write.format("delta").mode("append").saveAsTable(location)
+        _append_delta_frame(frame, location)
+
+
+def _append_delta_frame(frame: Any, location: str) -> None:
+    """Append a frame when the Delta merge API is unavailable or inapplicable."""
+    frame.write.format("delta").mode("append").saveAsTable(location)
 
 
 def _is_missing_table_error(exc: Exception) -> bool:

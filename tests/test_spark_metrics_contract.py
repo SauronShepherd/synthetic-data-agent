@@ -298,7 +298,7 @@ def test_numeric_by_group_baseline_and_null_driver_join(spark) -> None:
 
 @pytest.mark.spark  # type: ignore[untyped-decorator]
 def test_conditional_slice_rates_detect_monthly_drift_and_enforce_support(spark) -> None:
-    rows = []
+    rows: list[tuple[str, datetime, str]] = []
     for month, successes in (("2026-01-01", 8), ("2026-02-01", 5), ("2026-03-01", 2)):
         rows.extend(
             (
@@ -721,7 +721,7 @@ def test_fanout_stability_detects_monthly_zero_child_and_mean_drift(spark) -> No
         parent_rows,
         "id string, region string, event_time timestamp",
     )
-    child_rows = []
+    child_rows: list[tuple[str, ...]] = []
     for month in (1, 2, 3):
         for index in range(10):
             child_count = (

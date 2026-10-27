@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
@@ -9,7 +10,7 @@ from sda.patterns.roles import assign_roles
 from sda.patterns.upstream import scoped_role_columns
 
 
-def _ref(artifact_id: str, kind: ArtifactType, content: dict) -> ArtifactRef:
+def _ref(artifact_id: str, kind: ArtifactType, content: dict[str, Any]) -> ArtifactRef:
     return ArtifactRef(
         artifact_id=artifact_id,
         artifact_type=kind,

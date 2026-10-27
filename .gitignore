@@ -25,6 +25,7 @@ venv/
 # Databricks bundle local state
 .databricks/
 .release-check/
+.tmp/
 
 # OS/editor
 .DS_Store

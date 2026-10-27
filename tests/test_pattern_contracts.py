@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 
 from sda.patterns import PatternConfig, PatternDetector, PatternInputRefs, PatternLifecycle
@@ -198,7 +200,15 @@ def test_pattern_identity_distinguishes_outcomes_and_is_repeatable() -> None:
 
 def test_pattern_identity_distinguishes_association_methods() -> None:
     detector = PatternDetector(PatternConfig(min_support_rows=1))
-    shared = (
+    shared: tuple[
+        str,
+        str,
+        PatternFamily,
+        tuple[str, ...],
+        dict[str, Any],
+        dict[str, Any],
+        int,
+    ] = (
         "analysis",
         "main.sales.orders",
         PatternFamily.CORRELATION,

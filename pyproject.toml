@@ -52,6 +52,7 @@ markers = [
 target-version = "py311"
 line-length = 100
 src = ["src"]
+exclude = [".tmp"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
