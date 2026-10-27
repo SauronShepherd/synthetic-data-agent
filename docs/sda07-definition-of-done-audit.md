@@ -12,7 +12,7 @@ evidence index, not a claim that a local test proves a governed Databricks run.
 | Preserve support, baselines, violations, stability, provenance, and review state | Versioned registry/evidence rows retain population, baseline, violations, stability, clocks, snapshots, upstream IDs, warnings, and lifecycle | `src/sda/patterns/persistence.py`, `tests/test_pattern_persistence_evidence.py` | Local/CI complete |
 | Keep observed evidence distinct from approved rules | Observed patterns remain `observed_pattern`; hard constraints and approved lifecycle require explicit approved origins and metadata | `tests/test_pattern_contracts.py`, `tests/test_spark_rules.py` | Local/CI complete |
 | Emit generation/validation instructions without activating unapproved rules | Actions are proposals, record bounded fallback levels plus explicit global fallback, and observed evidence cannot become hard constraints | `src/sda/patterns/actions.py`, `tests/test_pattern_contracts.py` | Local/CI complete |
-| Persist an auditable registry and prove the deployed path with adversarial Spark/Databricks tests | Bundle is deployed and CI Spark/adversarial tests pass; historical `sda` evidence proves registry persistence and review state | CI `39753071013`, bundle deployment with profile `sda`, live run `440523671659941` | Partially complete: current Free workspace disables new job runs |
+| Persist an auditable registry and prove the deployed path with adversarial Spark/Databricks tests | Bundle is deployed and CI Spark/adversarial tests pass; historical `sda` evidence proves registry persistence and review state | CI `40504955799`, bundle deployment with profile `sda`, live run `440523671659941` | Partially complete: current Free workspace disables new job runs |
 
 ## Adversarial coverage
 
@@ -41,6 +41,22 @@ Read-only Databricks inspection succeeds with profile `sda`:
 This proves the current bundle is wired and deployed; it does not replace the
 missing fresh run and registry query.
 
+## Latest verification pass
+
+At commit `a9881d3` the repository passed CI run `40504955799` end to end:
+
+- quality: format, Ruff, mypy, non-Spark tests, coverage, Spark tests, wheel
+  build, and source-archive inspection;
+- PostgreSQL integration tests; and
+- bundle validation for the controlled deployment targets.
+
+The bundle was redeployed with profile `sda` after that commit (`14` files
+uploaded, `18` resources unchanged). The local non-Spark suite, Ruff, mypy,
+format check, release hygiene, and bundle validation also pass. The two Spark
+tests that were attempted directly on this Windows workstation could not start
+their Python worker under Python 3.13/PySpark 3.5.9; this is an environment
+startup failure, while the same Spark contracts pass in CI above.
+
 The authenticated web console for workspace `7474654810500477` independently
 shows the account banner `You've reached your budget. Contact your admin for a
 budget increase. Budget resets Nov 1.` The Jobs page lists both the fixture job
@@ -59,9 +75,9 @@ currently returns:
 Triggering new runs for organization 7474654810500477 is currently disabled temporarily.
 ```
 
-The OAuth session was revalidated on 2026-10-22 against
+The OAuth session was revalidated on 2026-10-27 against
 `dbc-916267ef-3b9b.cloud.databricks.com`; the same response was returned when
-triggering fixture job `701020438490636`. This is an external workspace/account
-state, not a repository test failure.
+triggering fixture job `701020438490636` after the latest deployment. This is
+an external workspace/account state, not a repository test failure.
 The branch must remain open until that run can execute and its metadata →
 profile → relationship → pattern handoff and registry persistence are queried.
