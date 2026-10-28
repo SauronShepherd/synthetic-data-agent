@@ -62,6 +62,19 @@ def test_persist_rows_keeps_fields_from_every_evidence_row() -> None:
     assert set(writer.rows[0]) == set(writer.rows[1])
 
 
+def test_persist_rows_allows_empty_evidence_batches() -> None:
+    writer = Writer()
+
+    persist_rows(
+        writer,
+        [],
+        "main.evidence.artifacts",
+        artifact_id="safe",
+    )
+
+    assert writer.rows == []
+
+
 def test_delta_merge_rejects_missing_columns_instead_of_dropping_them(monkeypatch: Any) -> None:
     class FakeTarget:
         def toDF(self) -> Any:

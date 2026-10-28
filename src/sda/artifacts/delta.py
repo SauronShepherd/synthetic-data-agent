@@ -31,6 +31,11 @@ def persist_rows(
         raise ValueError("invalid artifact status")
     if not location or "." not in location:
         raise ValueError("location must be a qualified table name")
+    # A valid artifact may have no bounded detail rows (for example, a
+    # detector can legitimately find no candidates).  There is nothing to
+    # merge in that case; the lifecycle header remains the source of truth.
+    if not rows:
+        return
     try:
         values = [
             {
@@ -79,7 +84,9 @@ def persist_rows(
             merge_condition = (
                 "target.artifact_id = source.artifact_id AND target.status = source.status"
             )
-            if "evidence_id" in target_columns:
+            if "evidence_id" in target_columns and "evidence_id" in {
+                column.lower() for column in frame.columns
+            }:
                 merge_condition += " AND target.evidence_id = source.evidence_id"
             insert_values = {column: f"source.{column}" for column in frame.columns}
             (
