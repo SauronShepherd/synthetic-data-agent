@@ -165,6 +165,31 @@ def test_registry_preserves_versioned_statistical_screening_policy() -> None:
     }
 
 
+def test_registry_preserves_business_rule_evaluation_date() -> None:
+    pattern = Pattern(
+        pattern_id="p-rule-date",
+        analysis_id="a1",
+        family=PatternFamily.BUSINESS_RULE,
+        origin=PatternOrigin.USER_PROVIDED,
+        primary_table="main.s.t",
+        columns=("status",),
+        condition={},
+        outcome={},
+        support_rows=10,
+        support_rate=1.0,
+        metric={"rule": BusinessRule("r1", "main.s.t", ({"column": "status"},))},
+        evidence_quality={},
+        decision="review_required",
+        review_status="required",
+        lifecycle=PatternLifecycle.REVIEW_REQUIRED,
+    )
+
+    provenance = json.loads(
+        registry_rows((pattern,), rules_as_of_date="2026-10-22")[0]["rule_provenance_json"]
+    )
+    assert provenance["rules_as_of_date"] == "2026-10-22"
+
+
 def test_registry_preserves_stability_dimensions_without_slice_values() -> None:
     pattern = Pattern(
         pattern_id="p5",

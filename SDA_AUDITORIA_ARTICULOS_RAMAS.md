@@ -155,3 +155,42 @@ Solo hay una lectura inicial de cada material; encontró hallazgos nuevos. Por t
 5. Continuar pasadas independientes con contador por artículo, rama y pareja; cualquier hallazgo nuevo reinicia solo el elemento afectado.
 
 **Próxima revisión sugerida:** tras disponibilidad de ramas SDA-08 y SDA-09 o antes de la publicación del 29 de octubre, lo que ocurra primero. La auditoría permanece abierta; este informe es una línea base inicial, no un cierre.
+
+## 9. Actualización de la iteración SDA-07 — 29 de octubre de 2026
+
+Esta sección supersede las observaciones operativas de la línea base anterior para
+SDA-07. La rama comprobada es `SDA-07`; el commit de esta iteración queda en el
+historial de la rama. Las eliminaciones de
+`.github/workflows/ci.yml` y `.github/workflows/databricks-integration.yml` se
+mantienen porque CI no forma parte del flujo solicitado.
+
+La revisión contrastó el DOCX de SDA-07, el artículo publicado y la implementación
+actual. Se verificó que el flujo consume los artefactos de SDA-04–06, limita
+candidatos por roles, mantiene separados patrones observados y reglas declaradas,
+preserva evidencia de soporte/violaciones/estabilidad/proveniencia, y cubre las
+familias condicional, missingness, fan-out, orden temporal, lag, transiciones y
+reglas con períodos efectivos. La evaluación de reglas ahora acepta
+`rules_as_of_date`, lo incorpora al `analysis_id` y lo persiste explícitamente en
+`rule_provenance_json`, evitando una fecha implícita o un fingerprint opaco.
+
+La autenticación del perfil `sda` fue renovada y `databricks bundle validate` y
+`databricks bundle deploy -t dev --profile sda` finalizaron correctamente. La
+ejecución live de reglas con fecha efectiva terminó correctamente en el job
+`803864714810420`, task `555844789496495`; produjo cinco patrones, incluida una
+regla business-rule en estado `review_required`, con ventana efectiva
+`2026-01-01`–`2026-12-31` y `rules_as_of_date=2026-10-22`. La consulta SQL de
+verificación fue `01f1d351-b686-1195-9996-dc08d47b2c7e`. El resto de IDs live y la
+matriz completa están en `docs/sda07-definition-of-done-audit.md`.
+
+Los seis fallos de persistencia reportados en la línea base fueron corregidos en
+la implementación y se añadió regresión para lotes vacíos y para la fecha de
+evaluación de reglas. La suite no-Spark, Ruff, formato, mypy, contratos de bundle,
+esquema y release se vuelven a ejecutar al cerrar esta iteración. El Spark local
+en Windows sigue siendo un entorno no soportado por la combinación Python 3.13 /
+PySpark; la evidencia Spark de SDA-07 se obtiene mediante Databricks `sda`.
+
+No se afirma el requisito formal de diez pasadas limpias por modelo: esta
+actualización documenta la corrección y verificación de esta iteración, pero no
+convierte retrospectivamente la línea base en 10/10. Tampoco se afirma readiness
+productivo: aprobación gobernada, service principal, promoción multi-entorno,
+Lakebase/Genie y pruebas de escala siguen fuera del alcance de SDA-07.

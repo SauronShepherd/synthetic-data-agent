@@ -24,5 +24,6 @@ owner/reviewer decision and auditable rule artifact.
 - `pattern_detect_spark.py` validates upstream artifacts, pins the source snapshot when
   Delta history is available, and evaluates Spark metric families and typed business
   rules without collecting raw rows.
-- The Databricks integration workflow runs both paths' applicable smoke checks and tears down
-  its managed Unity Catalog fixture.
+- The Databricks bundle smoke path runs both paths' applicable checks against a
+  managed Unity Catalog fixture; the commands and evidence are recorded locally
+  and in `docs/sda07-definition-of-done-audit.md`.

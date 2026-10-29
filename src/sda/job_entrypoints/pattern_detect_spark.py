@@ -109,6 +109,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--allow-best-effort-snapshot", nargs="?", const=True, default=False, type=_bool_arg
     )
+    p.add_argument(
+        "--rules-as-of-date",
+        default="",
+        help="ISO date used to select effective business rules; defaults to the run date",
+    )
     return p.parse_args()
 
 
@@ -777,6 +782,14 @@ def main() -> None:
         business_rules = parse_rules_json(args.business_rules_json)
     except (ValueError, KeyError, TypeError) as exc:
         raise SystemExit(f"invalid business rules: {exc}") from exc
+    from datetime import date
+
+    try:
+        rules_as_of = (
+            date.fromisoformat(args.rules_as_of_date) if args.rules_as_of_date else date.today()
+        )
+    except ValueError as exc:
+        raise SystemExit("rules-as-of-date must be an ISO date (YYYY-MM-DD)") from exc
     from pyspark.sql import functions as F
 
     source_version = None
@@ -913,7 +926,9 @@ def main() -> None:
         source_version=source_version,
         snapshot_timestamp=snapshot_timestamp,
         configuration_hash=detector.config.configuration_hash,
-        rule_set_hash=fingerprint(business_rules),
+        rule_set_hash=fingerprint(
+            {"rules": business_rules, "rules_as_of_date": rules_as_of.isoformat()}
+        ),
         run_id=args.run_id,
         started_at=analysis_started_at,
     )
@@ -1465,8 +1480,6 @@ def main() -> None:
             )
 
     # Explicit business rules are evaluated as Spark aggregates on the scoped source.
-    from datetime import date
-
     from sda.patterns.spark_rules import detect_spark_rules
 
     try:
@@ -1475,7 +1488,7 @@ def main() -> None:
                 source,
                 business_rules,
                 table=source_table,
-                as_of=date.today(),
+                as_of=rules_as_of,
                 detector=detector,
                 analysis_id=analysis_id,
             )
@@ -1535,6 +1548,7 @@ def main() -> None:
             source_references=artifact.source_references,
             detector_version=detector.config.detector_version,
             scoring_policy_version=detector.config.scoring_version,
+            rules_as_of_date=rules_as_of.isoformat(),
         )
         ensure_pattern_registry_columns(spark, args.output_table, rows)
         evidence = evidence_rows(tuple(patterns))

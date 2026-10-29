@@ -161,6 +161,22 @@ def test_pattern_entrypoint_parses_temporal_clock_parameters(
     assert args.transition_tie_breakers == "event_id,sequence"
 
 
+def test_pattern_entrypoint_parses_rules_as_of_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "pattern_detect_spark.py",
+            "--source-table",
+            "samples.demo.events",
+            "--rules-as-of-date",
+            "2026-10-22",
+        ],
+    )
+    args = parse_args()
+    assert args.rules_as_of_date == "2026-10-22"
+
+
 def test_pattern_entrypoint_parses_stability_slice_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         sys,

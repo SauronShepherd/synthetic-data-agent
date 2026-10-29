@@ -77,7 +77,7 @@ Configured allowlist
 
 ### Local SQL Warehouse
 
-`metadata-read-sql` uses the Databricks SQL Connector and a SQL Warehouse. This path is useful from a laptop or CI system when connection settings are provided through environment variables.
+`metadata-read-sql` uses the Databricks SQL Connector and a SQL Warehouse. This path is useful from a laptop or local verification environment when connection settings are provided through environment variables.
 
 ### Databricks Bundle serverless
 

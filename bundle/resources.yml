@@ -13,7 +13,7 @@ resources:
         - name: schema
           default: sda_integration
         - name: suffix
-          default: ci
+          default: smoke
         - name: mode
           default: create
       tasks:
@@ -466,6 +466,8 @@ resources:
           default: "false"
         - name: business_rules_json
           default: "[]"
+        - name: rules_as_of_date
+          default: ""
         - name: fanout_parent_table
           default: ""
         - name: fanout_child_table
@@ -543,6 +545,8 @@ resources:
               - "{{job.parameters.include_spearman}}"
               - --business-rules-json
               - "{{job.parameters.business_rules_json}}"
+              - --rules-as-of-date
+              - "{{job.parameters.rules_as_of_date}}"
               - --fanout-parent-table
               - "{{job.parameters.fanout_parent_table}}"
               - --fanout-child-table

@@ -150,6 +150,7 @@ def registry_rows(
     detector_version: str = "sda07-v2",
     scoring_policy_version: str = "sda07-policy-v1",
     precedence_policy_version: str = "sda07-precedence-v1",
+    rules_as_of_date: str | None = None,
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -182,7 +183,8 @@ def registry_rows(
             ),
             "validation_mode": p.evidence_quality.get("validation_mode", "unknown"),
             "rule_provenance_json": json.dumps(
-                _rule_provenance(p.metric.get("rule")), sort_keys=True
+                _rule_provenance(p.metric.get("rule"), rules_as_of_date=rules_as_of_date),
+                sort_keys=True,
             ),
             "temporal_clock_json": json.dumps(
                 p.evidence_quality.get("temporal_clock", {}), sort_keys=True
@@ -228,12 +230,12 @@ def registry_rows(
     ]
 
 
-def _rule_provenance(rule: Any) -> dict[str, Any]:
+def _rule_provenance(rule: Any, *, rules_as_of_date: str | None = None) -> dict[str, Any]:
     if rule is None:
-        return {}
+        return {"rules_as_of_date": rules_as_of_date} if rules_as_of_date else {}
     origin = getattr(rule, "origin", None)
     strength = getattr(rule, "strength", None)
-    return {
+    provenance = {
         "rule_id": getattr(rule, "rule_id", None),
         "rule_version": getattr(rule, "rule_version", None),
         "table": getattr(rule, "table", None),
@@ -250,6 +252,9 @@ def _rule_provenance(rule: Any) -> dict[str, Any]:
         "effective_to": getattr(rule, "effective_to", None),
         "supersedes_rule_id": getattr(rule, "supersedes_rule_id", None),
     }
+    if rules_as_of_date:
+        provenance["rules_as_of_date"] = rules_as_of_date
+    return provenance
 
 
 def evidence_rows(patterns: tuple[Pattern, ...]) -> list[dict[str, Any]]:

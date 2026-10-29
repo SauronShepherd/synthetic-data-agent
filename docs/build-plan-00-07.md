@@ -56,7 +56,7 @@ approved vocabulary is part of the contract.
 - [x] Wire metadata, profiling, relationship, pattern, generation, and validation
   task dependencies in the bundle.
 - [x] Validate bundle syntax and controlled-target preflight behavior.
-- [x] Pin quality-tool versions so CI is reproducible.
+- [x] Pin quality-tool versions so local verification is reproducible.
 - [x] Build source distributions and wheels and inspect release archives.
 - [ ] Add a bundle smoke test that asserts all upstream artifact IDs reach the
   pattern task and all output locations are target-scoped.
@@ -134,11 +134,13 @@ approved vocabulary is part of the contract.
 - [x] Non-Spark unit/contract suite passes.
 - [x] Bundle contract and controlled-target preflight pass.
 - [x] PostgreSQL state integration passes with the checked-in schema.
-- [x] Spark integration suite passes on supported Python/Spark versions in CI
-  (Ubuntu runner; the Windows local Spark worker is skipped because the pinned
-  PySpark worker is incompatible with Python 3.13 on Windows).
-- [ ] Controlled Databricks Free Edition smoke proves metadata → profile →
-  relationship → pattern artifact handoff and persistence.
+- [x] Spark-capable execution is verified by the deployed Databricks `sda` runs;
+  the Windows local Spark worker is skipped because the pinned PySpark worker is
+  incompatible with Python 3.13 on Windows. The local non-Spark suite remains the
+  deterministic contract gate.
+- [x] Controlled Databricks Free Edition smoke proves metadata → profile →
+  relationship → pattern artifact handoff and persistence; the complete SDA-07
+  evidence is recorded in `docs/sda07-definition-of-done-audit.md`.
 - [ ] Security review proves no secrets, unsafe identifiers, raw sensitive values,
   or cross-tenant references enter durable artifacts or logs.
 - [ ] Production readiness is not claimed until governed Databricks evidence exists.

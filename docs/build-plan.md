@@ -21,9 +21,9 @@ design evidence; the repository is the source of truth for what is currently pre
   local contracts and tests.
 - [x] Generation-plan, validation-report, and publication artifact types are registered
   in the durable artifact taxonomy.
-- [x] The local suite passes: 191 passed, 2 skipped using the checked-in `.testdeps`
-  dependency set. CI separates the non-Spark coverage run from the dedicated Spark
-  test job.
+- [x] The local suite passes using the checked-in `.testdeps` dependency set. Local
+  verification separates the non-Spark coverage run from the dedicated Spark-capable
+  test environment.
 - [x] The executable local slice includes immutable approved plans, deterministic
   standalone/relational generation, validation/privacy/publication gates, durable
   SQLite workflow state, bounded streaming replay/checkpoints, topology constraints,
@@ -41,8 +41,8 @@ design evidence; the repository is the source of truth for what is currently pre
   identifiers, raw sensitive values, and cross-run contamination.
 - [ ] Technical validation, privacy approval, human approval, and publication are
   separate decisions with explicit state transitions.
-- [ ] Local unit/contract tests, Spark tests, bundle validation, and a small governed
-  Databricks integration test all pass before a milestone is released.
+- [ ] Local unit/contract tests, Spark-capable tests, bundle validation, and a small
+  governed Databricks integration test all pass before a milestone is released.
 - [ ] Documentation, package metadata, bundle variables, schemas, migrations, and
   runbooks describe the same capabilities and milestone boundary.
 
@@ -130,8 +130,8 @@ design evidence; the repository is the source of truth for what is currently pre
 
 ### 3.3 Release foundation
 
-- [x] Add CI jobs for lint, mypy, unit tests, Spark tests, package build, bundle
-  validation, schema migration checks, and security/hygiene scans.
+- [x] Add documented local commands for lint, mypy, unit tests, Spark-capable tests,
+  package build, bundle validation, schema migration checks, and security/hygiene scans.
 - [x] Pin or constrain compatible Databricks Runtime, Spark, GraphFrames, connector,
   and Python versions; document optional dependency behavior.
 - [ ] Add environment promotion rules, service-principal permissions, UC grants,
@@ -289,7 +289,8 @@ design evidence; the repository is the source of truth for what is currently pre
 - [ ] Performance tests establish budgets and baselines for profiling, relationship
   inference, pattern detection, generation, validation, and publication.
 - [ ] Run `ruff check .`, `mypy src tests`, `pytest`, package build, bundle validation,
-  and the governed integration suite in CI; record skipped tests with reasons.
+  and the governed integration suite in the supported local/Databricks environments;
+  record skipped tests with reasons.
 - [x] Add an acceptance matrix mapping each SDA article deliverable and honest caveat
   to implementation, test evidence, documentation, and release status.
 

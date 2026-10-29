@@ -35,7 +35,7 @@ The bundle was deployed and inspected with profile `sda`:
 - Pattern job: `904431536757321` (`[dev] SDA Pattern Detector`).
 - Runtime wheel: `/Workspace/Users/angel.alvarez.pascua@gmail.com/.bundle/synthetic-data-agent/dev/artifacts/.internal/synthetic_data_agent-0.8.0.dev0-py3-none-any.whl`.
 - Entrypoint: `/Workspace/Users/angel.alvarez.pascua@gmail.com/.bundle/synthetic-data-agent/dev/files/src/sda/job_entrypoints/pattern_detect_spark.py`.
-- Deployment result: `3 files uploaded`, `18 resources unchanged`.
+- Deployment result: `10 files uploaded`, `17 resources unchanged`.
 - Bundle validation: `databricks bundle validate -t dev --profile sda` succeeded.
 
 The job parameters include metadata, profile, relationship, dependency-graph,
@@ -62,12 +62,16 @@ The detector runs completed as follows:
 | Temporal order | `860924432145115` | `146802087369387` | 2 patterns: 1 order, 1 lag |
 | Temporal lag | `745552892911128` | `649391472111480` | 2 patterns: 1 lag, 1 order |
 | State transition | `110054133161319` | `481013898467041` | 54 patterns: 52 conditional, 2 transitions |
+| Effective-date business rule | `28835202196740` | `143218448202347` | 1 business rule evaluated as of `2026-10-22`, persisted as review-required after the final bundle deployment |
 
-The SQL API confirmed that all six live analyses have distinct persisted
+The SQL API confirmed that all six detector analyses have distinct persisted
 evidence IDs: fan-out 6 rows, missingness 32, reference 93, temporal lag 18,
 temporal order 18, and transition 342. The artifact registry contains a
 complete lifecycle row for every detector analysis. Historical `writing` rows
 are retained as lifecycle history; consumers select the latest `complete` row.
+The effective-date query `01f1d352-8018-1ff4-8e2e-1e2a7e25407c` returned the
+business-rule analysis `sda07-rules-as-of-2026-10-22-r4`, window `2026-01-01` to
+`2026-12-31`, and explicit evaluation date `2026-10-22`.
 
 ## Corrections made during this iteration
 
@@ -84,6 +88,12 @@ The shared artifact loader also resolves the latest complete central registry
 row, which is required when retry history leaves both `writing` and `complete`
 rows. This behavior is covered by
 `test_pattern_loader_uses_latest_complete_rows_from_shared_registry`.
+
+The rule evaluator no longer hardcodes the cluster's current date. The bundle
+accepts `rules_as_of_date`, includes it in the analysis identity, passes it to
+effective-period selection, and preserves it in rule provenance. The local
+regression `test_registry_preserves_business_rule_evaluation_date` and the live
+business-rule run above verify this behavior.
 
 ## Local verification
 

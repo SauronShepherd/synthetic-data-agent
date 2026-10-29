@@ -134,6 +134,7 @@ def test_conflict_precedence_remains_review_only(spark):
         frame, rules, table="main.s.t", as_of=date.today(), detector=detector, analysis_id="test"
     )
     assert len(patterns) == 2
+    assert all(p.metric["rules_as_of_date"] == date.today().isoformat() for p in patterns)
     assert all(
         p.lifecycle is PatternLifecycle.REVIEW_REQUIRED and p.decision == "review_required"
         for p in patterns

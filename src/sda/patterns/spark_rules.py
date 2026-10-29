@@ -181,6 +181,7 @@ def detect_spark_rules(
                 "satisfaction_rate": result.satisfaction_rate,
                 "violation_rate": result.violation_rate,
                 "method": result.validation_mode,
+                "rules_as_of_date": as_of.isoformat(),
                 "rule": rule,
                 "conflicts": tuple(
                     c.to_dict()
