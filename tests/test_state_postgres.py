@@ -42,6 +42,11 @@ def test_postgres_connection_translates_placeholders_and_tables() -> None:
     assert cursor.statement == "INSERT INTO sda_runs (run_id) VALUES (%s)"
     assert cursor.parameters == ("run-1",)
 
+    audit_cursor = _PostgresConnection(connection).execute(
+        "INSERT INTO audit_events (run_id) VALUES (?)", ("run-1",)
+    )
+    assert audit_cursor.statement == "INSERT INTO sda_audit_events (run_id) VALUES (%s)"
+
 
 def test_postgres_connection_normalises_temporal_values() -> None:
     connection = Connection()

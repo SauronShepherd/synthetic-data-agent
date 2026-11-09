@@ -110,7 +110,7 @@ SDA-08 is complete when all of the following are true:
 | ST-03 | Run idempotency | Repeat run creation with same and conflicting keys | Same run is reused only for matching request content |
 | ST-04 | Transition graph | Execute every declared branch, including failure and retry | Only declared edges succeed; terminal states cannot move |
 | ST-05 | Optimistic concurrency | Transition with a stale version | Stale update is rejected and current version is unchanged |
-| ST-06 | Append-only history | Query transitions, feedback, and approvals after updates | Actor, reason, timestamps, and old decisions remain queryable |
+| ST-06 | Append-only history | Query transitions, feedback, audit events, and approvals after updates | Actor, reason, timestamps, metadata, and old decisions remain queryable |
 | ST-07 | Plan immutability | Insert plan v1 and corrected v2 | Versions are ordered and v1 is not rewritten |
 | ST-08 | Step retry history | Insert attempt 1 and attempt 2 for one named step | Both rows survive; only same attempt number conflicts |
 | ST-09 | Attempt lease | Acquire, renew, expire, recover, and complete an attempt | One active worker is allowed; stale worker cannot finish after recovery |
@@ -168,16 +168,16 @@ databricks bundle run -t dev analyze_scope --profile sda --params catalog=sample
 
 ## 5. Evidence recorded on 2026-11-09
 
-- Local: `441 passed, 5 skipped`.
+- Local: `447 passed, 5 skipped`.
 - Ruff: passed.
-- mypy: passed for 198 source files.
+- mypy: passed for 205 source files.
 - Bundle contract: passed for 3 targets.
 - Bundle deployment with profile `sda`: created/updated the Lakebase project,
   dev branch, primary endpoint, OAuth user role, and `sda_state` database.
 - Migration: one content-addressed migration row and 11 `sda_*` tables verified
   directly through PostgreSQL; no live test rows remained.
-- Live repository: request, run, plan, two step attempts, artifact reuse,
-  lease renewal, and attempt completion passed.
+- Live repository: request, run, plan, two step attempts, durable audit event,
+  artifact reuse, lease renewal, and attempt completion passed.
 - Live Spark: `spark_contract_smoke`, `uc_metadata_reader`,
   `table_profiler`, `relationship_detector`, `pattern_detector`, and one-table `analyze_scope`
   terminated successfully.

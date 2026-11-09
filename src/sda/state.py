@@ -12,6 +12,8 @@ from enum import StrEnum
 from threading import RLock
 from typing import Protocol
 
+from sda.operations import AuditEvent
+
 
 class WorkflowStatus(StrEnum):
     REQUESTED = "requested"
@@ -337,6 +339,8 @@ class StateRepository(Protocol):
     def list_approvals(self, run_id: str) -> tuple[Approval, ...]: ...
     def record_feedback(self, feedback: Feedback) -> Feedback: ...
     def list_feedback(self, run_id: str) -> tuple[Feedback, ...]: ...
+    def record_audit_event(self, event: AuditEvent) -> AuditEvent: ...
+    def list_audit_events(self, run_id: str) -> tuple[AuditEvent, ...]: ...
     def list_transition_events(self, run_id: str) -> tuple[TransitionEvent, ...]: ...
     def create_step(self, step: RunStep) -> RunStep: ...
     def get_step(self, step_id: str) -> RunStep: ...
@@ -371,6 +375,7 @@ class InMemoryStateRepository:
         self._attempts: dict[str, ExecutionAttempt] = {}
         self._approvals: list[Approval] = []
         self._feedback: dict[str, Feedback] = {}
+        self._audit_events: dict[str, list[AuditEvent]] = {}
         self._transition_events: dict[str, list[TransitionEvent]] = {}
         self._steps: dict[str, RunStep] = {}
         self._artifact_uses: dict[str, ArtifactUse] = {}
@@ -521,6 +526,17 @@ class InMemoryStateRepository:
         with self._lock:
             self.get_run(run_id)
             return tuple(item for item in self._feedback.values() if item.run_id == run_id)
+
+    def record_audit_event(self, event: AuditEvent) -> AuditEvent:
+        with self._lock:
+            self.get_run(event.run_id)
+            self._audit_events.setdefault(event.run_id, []).append(event)
+            return event
+
+    def list_audit_events(self, run_id: str) -> tuple[AuditEvent, ...]:
+        with self._lock:
+            self.get_run(run_id)
+            return tuple(self._audit_events.get(run_id, ()))
 
     def list_transition_events(self, run_id: str) -> tuple[TransitionEvent, ...]:
         with self._lock:

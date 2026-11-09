@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from sda.operations import AuditEvent, AuditLevel
 from sda.state import (
     Approval,
     ArtifactDecision,
@@ -136,6 +137,20 @@ def test_sqlite_artifact_use_decisions_survive_reopen(tmp_path: object) -> None:
     reopened.close()
 
 
+def test_sqlite_audit_events_survive_reopen(tmp_path: object) -> None:
+    path = str(tmp_path / "audit.db")
+    repo = SQLiteStateRepository(path)
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    event = AuditEvent(
+        "run-1", "profile_started", AuditLevel.INFO, "Profile started", stage="profile", metadata={"rows": 10}
+    )
+    repo.record_audit_event(event)
+    repo.close()
+    reopened = SQLiteStateRepository(path)
+    assert reopened.list_audit_events("run-1") == (event,)
+    reopened.close()
+
+
 def test_sqlite_state_renews_and_recovers_stale_leases() -> None:
     repo = SQLiteStateRepository()
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
@@ -204,6 +219,33 @@ def test_sqlite_migrates_legacy_approvals_table(tmp_path: object) -> None:
     assert (
         repo._connection.execute("PRAGMA table_info(approvals)").fetchall()[-1][1] == "decided_at"
     )
+    repo.close()
+
+
+def test_sqlite_migrates_legacy_run_steps_to_retry_key(tmp_path: object) -> None:
+    path = str(tmp_path / "legacy-steps.db")
+    connection = sqlite3.connect(path)
+    connection.execute(
+        "CREATE TABLE runs (run_id TEXT PRIMARY KEY, request_id TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL, plan_id TEXT, plan_fingerprint TEXT, version INTEGER NOT NULL, updated_at TEXT NOT NULL)"
+    )
+    connection.execute(
+        "CREATE TABLE run_steps (step_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, step_name TEXT NOT NULL, tool_name TEXT NOT NULL, status TEXT NOT NULL, input_artifacts TEXT NOT NULL, output_artifacts TEXT NOT NULL, warning_count INTEGER NOT NULL, error_code TEXT, started_at TEXT NOT NULL, finished_at TEXT, UNIQUE(run_id, step_name))"
+    )
+    connection.execute(
+        "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ("run-legacy", "req-legacy", "idem-legacy", "requested", None, None, 0, "now"),
+    )
+    connection.execute(
+        "INSERT INTO run_steps VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("step-1", "run-legacy", "profile", "table_profiler", "failed", "[]", "[]", 0, None, "now", None),
+    )
+    connection.commit()
+    connection.close()
+
+    repo = SQLiteStateRepository(path)
+    assert repo.list_steps("run-legacy")[0].attempt_number == 1
+    repo.create_step(RunStep("step-2", "run-legacy", "profile", "table_profiler", attempt_number=2))
+    assert sorted(step.attempt_number for step in repo.list_steps("run-legacy")) == [1, 2]
     repo.close()
 
 

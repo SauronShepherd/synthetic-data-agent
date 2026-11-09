@@ -12,6 +12,7 @@ import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+from sda.operations import AuditEvent, AuditLevel
 from sda.state import (
     Approval,
     ArtifactDecision,
@@ -77,22 +78,52 @@ class SQLiteStateRepository(StateRepository):
             "CREATE TABLE IF NOT EXISTS feedback (feedback_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), actor TEXT NOT NULL, category TEXT NOT NULL, message TEXT NOT NULL, evidence_ref TEXT, created_at TEXT NOT NULL)"
         )
         self._connection.execute(
+            "CREATE TABLE IF NOT EXISTS audit_events (event_id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(run_id), event_type TEXT NOT NULL, level TEXT NOT NULL, stage TEXT NOT NULL DEFAULT '', message TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT 'null', occurred_at TEXT NOT NULL)"
+        )
+        self._connection.execute(
             "CREATE TABLE IF NOT EXISTS transition_events (event_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), from_status TEXT NOT NULL, to_status TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL, occurred_at TEXT NOT NULL)"
         )
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS run_steps (step_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), step_name TEXT NOT NULL, tool_name TEXT NOT NULL, status TEXT NOT NULL, input_artifacts TEXT NOT NULL, output_artifacts TEXT NOT NULL, warning_count INTEGER NOT NULL, error_code TEXT, started_at TEXT NOT NULL, finished_at TEXT, attempt_number INTEGER NOT NULL DEFAULT 1 CHECK(attempt_number > 0), UNIQUE(run_id, step_name, attempt_number))"
         )
-        step_columns = {
-            str(row[1]) for row in self._connection.execute("PRAGMA table_info(run_steps)")
-        }
-        if "attempt_number" not in step_columns:
-            self._connection.execute(
-                "ALTER TABLE run_steps ADD COLUMN attempt_number INTEGER NOT NULL DEFAULT 1"
-            )
+        self._migrate_run_steps_retry_key()
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS artifact_uses (use_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), artifact_id TEXT NOT NULL, decision TEXT NOT NULL, compatibility_fingerprint TEXT NOT NULL, reason TEXT NOT NULL, recorded_at TEXT NOT NULL)"
         )
         self._connection.commit()
+
+    def _migrate_run_steps_retry_key(self) -> None:
+        """Upgrade pre-SDA-08 step tables without losing retry history."""
+
+        columns = {
+            str(row[1]) for row in self._connection.execute("PRAGMA table_info(run_steps)")
+        }
+        legacy_unique_key = False
+        for index in self._connection.execute("PRAGMA index_list(run_steps)"):
+            if not bool(index[2]):
+                continue
+            index_name = str(index[1]).replace("'", "''")
+            indexed_columns = [
+                str(row[2])
+                for row in self._connection.execute(f"PRAGMA index_info('{index_name}')")
+            ]
+            if indexed_columns == ["run_id", "step_name"]:
+                legacy_unique_key = True
+                break
+
+        if "attempt_number" in columns and not legacy_unique_key:
+            return
+
+        self._connection.execute("ALTER TABLE run_steps RENAME TO run_steps_legacy")
+        self._connection.execute(
+            "CREATE TABLE run_steps (step_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), step_name TEXT NOT NULL, tool_name TEXT NOT NULL, status TEXT NOT NULL, input_artifacts TEXT NOT NULL, output_artifacts TEXT NOT NULL, warning_count INTEGER NOT NULL, error_code TEXT, started_at TEXT NOT NULL, finished_at TEXT, attempt_number INTEGER NOT NULL DEFAULT 1 CHECK(attempt_number > 0), UNIQUE(run_id, step_name, attempt_number))"
+        )
+        attempt_expression = "attempt_number" if "attempt_number" in columns else "1"
+        self._connection.execute(
+            "INSERT INTO run_steps (step_id, run_id, step_name, tool_name, status, input_artifacts, output_artifacts, warning_count, error_code, started_at, finished_at, attempt_number) "
+            f"SELECT step_id, run_id, step_name, tool_name, status, input_artifacts, output_artifacts, warning_count, error_code, started_at, finished_at, {attempt_expression} FROM run_steps_legacy"
+        )
+        self._connection.execute("DROP TABLE run_steps_legacy")
 
     def create_run(self, run: RunRecord) -> RunRecord:
         existing = self._connection.execute(
@@ -349,6 +380,46 @@ class SQLiteStateRepository(StateRepository):
             (run_id,),
         ).fetchall()
         return tuple(Feedback(*row) for row in rows)
+
+    def record_audit_event(self, event: AuditEvent) -> AuditEvent:
+        self.get_run(event.run_id)
+        try:
+            self._connection.execute(
+                "INSERT INTO audit_events (run_id, event_type, level, stage, message, metadata, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    event.run_id,
+                    event.event_type,
+                    event.level.value,
+                    event.stage,
+                    event.message,
+                    json.dumps(event.metadata, separators=(",", ":")),
+                    event.occurred_at,
+                ),
+            )
+            self._connection.commit()
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise StateError("audit event cannot be recorded") from exc
+        return event
+
+    def list_audit_events(self, run_id: str) -> tuple[AuditEvent, ...]:
+        self.get_run(run_id)
+        rows = self._connection.execute(
+            "SELECT run_id, event_type, level, stage, message, metadata, occurred_at FROM audit_events WHERE run_id = ? ORDER BY event_id",
+            (run_id,),
+        ).fetchall()
+        return tuple(
+            AuditEvent(
+                str(row[0]),
+                str(row[1]),
+                AuditLevel(str(row[2])),
+                str(row[4]),
+                str(row[3]),
+                json.loads(str(row[5])) if row[5] is not None else None,
+                str(row[6]),
+            )
+            for row in rows
+        )
 
     def list_transition_events(self, run_id: str) -> tuple[TransitionEvent, ...]:
         self.get_run(run_id)

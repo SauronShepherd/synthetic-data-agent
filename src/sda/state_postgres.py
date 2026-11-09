@@ -154,6 +154,7 @@ class _PostgresConnection:
             ("attempts", "sda_execution_attempts"),
             ("approvals", "sda_approvals"),
             ("feedback", "sda_feedback"),
+            ("audit_events", "sda_audit_events"),
             ("transition_events", "sda_transition_events"),
             ("run_steps", "sda_run_steps"),
             ("artifact_uses", "sda_artifact_uses"),

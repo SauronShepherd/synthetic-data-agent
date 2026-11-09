@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from sda.operations import AuditEvent, AuditLevel
 from sda.state import (
     Approval,
     ArtifactDecision,
@@ -73,6 +74,15 @@ def test_artifact_use_decisions_are_idempotent_and_run_scoped() -> None:
     assert repo.list_artifact_uses("run-1") == (use,)
     with pytest.raises(StateError, match="different content"):
         repo.record_artifact_use(ArtifactUse("use-1", "run-1", "profile-2", "rejected", "fp-2"))
+
+
+def test_audit_events_are_append_only_and_run_scoped() -> None:
+    repo = InMemoryStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    event = AuditEvent("run-1", "profile_started", AuditLevel.INFO, "Profile started", metadata={"rows": 10})
+    assert repo.record_audit_event(event) == event
+    assert repo.record_audit_event(event) == event
+    assert repo.list_audit_events("run-1") == (event, event)
 
 
 def test_idempotency_key_rejects_conflicting_run_content() -> None:
