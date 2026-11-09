@@ -55,6 +55,16 @@ def test_steps_are_idempotent_and_preserve_artifact_handoffs() -> None:
         repo.update_step(replace(completed, warning_count=1))
 
 
+def test_step_retries_preserve_the_previous_attempt() -> None:
+    repo = InMemoryStateRepository()
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    first = RunStep("step-1", "run-1", "profile", "table_profiler", attempt_number=1)
+    second = RunStep("step-2", "run-1", "profile", "table_profiler", attempt_number=2)
+    repo.create_step(first)
+    repo.create_step(second)
+    assert [step.attempt_number for step in repo.list_steps("run-1")] == [1, 2]
+
+
 def test_artifact_use_decisions_are_idempotent_and_run_scoped() -> None:
     repo = InMemoryStateRepository()
     repo.create_run(RunRecord("run-1", "req-1", "idem-1"))

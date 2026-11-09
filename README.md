@@ -90,18 +90,20 @@ python -m pip install -e ".[dev,databricks]"
 ```
 
 For durable workflow state in PostgreSQL or Databricks Lakebase, install the
-optional PostgreSQL extra and construct `PostgreSQLStateRepository` with a DSN
-or an injected DB-API connection. Apply `sql/lakebase_state_schema.sql` before
-starting the service; generated rows and analytical evidence remain in Delta.
+optional PostgreSQL extra and construct `PostgreSQLStateRepository` with a DSN,
+an injected DB-API connection, or `LakebaseConnectionConfig` plus
+`PostgreSQLStateRepository.connect_lakebase`. The OAuth token provider is lazy so
+an expired token can be refreshed between connection attempts. Generated rows
+and analytical evidence remain in Delta; Lakebase stores operational state.
 
 ```bash
 python -m pip install -e ".[postgres]"
 ```
 
-Apply the state migration with the checked-in runner:
+Apply the versioned state migrations with the checked-in runner:
 
 ```bash
-python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN"
+python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN" --migrations-dir migrations/versions
 ```
 
 Or use:

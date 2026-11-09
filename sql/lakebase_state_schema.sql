@@ -4,9 +4,22 @@ CREATE TABLE IF NOT EXISTS sda_schema_migrations (
     applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS sda_generation_requests (
+    request_id TEXT PRIMARY KEY,
+    requester_id TEXT NOT NULL,
+    environment TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    source_scope JSONB NOT NULL,
+    generation_options JSONB NOT NULL DEFAULT '{}'::jsonb,
+    target_catalog TEXT,
+    target_schema TEXT,
+    intended_use TEXT,
+    submitted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS sda_runs (
     run_id TEXT PRIMARY KEY,
-    request_id TEXT NOT NULL,
+    request_id TEXT NOT NULL REFERENCES sda_generation_requests(request_id),
     idempotency_key TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL,
     plan_id TEXT,
@@ -20,19 +33,6 @@ CREATE TABLE IF NOT EXISTS sda_runs (
         'published', 'rejected', 'cancelled', 'failed'
     )),
     CONSTRAINT sda_runs_version_nonnegative CHECK (version >= 0)
-);
-
-CREATE TABLE IF NOT EXISTS sda_generation_requests (
-    request_id TEXT PRIMARY KEY,
-    requester_id TEXT NOT NULL,
-    environment TEXT NOT NULL,
-    idempotency_key TEXT NOT NULL UNIQUE,
-    source_scope JSONB NOT NULL,
-    generation_options JSONB NOT NULL DEFAULT '{}'::jsonb,
-    target_catalog TEXT,
-    target_schema TEXT,
-    intended_use TEXT,
-    submitted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS sda_generation_plans (
@@ -141,7 +141,8 @@ CREATE TABLE IF NOT EXISTS sda_run_steps (
     error_code TEXT,
     started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     finished_at TIMESTAMPTZ,
-    UNIQUE(run_id, step_name)
+    attempt_number INTEGER NOT NULL DEFAULT 1 CHECK (attempt_number > 0),
+    CONSTRAINT sda_run_steps_run_step_attempt UNIQUE(run_id, step_name, attempt_number)
 );
 
 CREATE INDEX IF NOT EXISTS sda_run_steps_run_order

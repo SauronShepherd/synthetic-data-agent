@@ -80,8 +80,15 @@ class SQLiteStateRepository(StateRepository):
             "CREATE TABLE IF NOT EXISTS transition_events (event_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), from_status TEXT NOT NULL, to_status TEXT NOT NULL, actor TEXT NOT NULL, reason TEXT NOT NULL, occurred_at TEXT NOT NULL)"
         )
         self._connection.execute(
-            "CREATE TABLE IF NOT EXISTS run_steps (step_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), step_name TEXT NOT NULL, tool_name TEXT NOT NULL, status TEXT NOT NULL, input_artifacts TEXT NOT NULL, output_artifacts TEXT NOT NULL, warning_count INTEGER NOT NULL, error_code TEXT, started_at TEXT NOT NULL, finished_at TEXT, UNIQUE(run_id, step_name))"
+            "CREATE TABLE IF NOT EXISTS run_steps (step_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), step_name TEXT NOT NULL, tool_name TEXT NOT NULL, status TEXT NOT NULL, input_artifacts TEXT NOT NULL, output_artifacts TEXT NOT NULL, warning_count INTEGER NOT NULL, error_code TEXT, started_at TEXT NOT NULL, finished_at TEXT, attempt_number INTEGER NOT NULL DEFAULT 1 CHECK(attempt_number > 0), UNIQUE(run_id, step_name, attempt_number))"
         )
+        step_columns = {
+            str(row[1]) for row in self._connection.execute("PRAGMA table_info(run_steps)")
+        }
+        if "attempt_number" not in step_columns:
+            self._connection.execute(
+                "ALTER TABLE run_steps ADD COLUMN attempt_number INTEGER NOT NULL DEFAULT 1"
+            )
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS artifact_uses (use_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), artifact_id TEXT NOT NULL, decision TEXT NOT NULL, compatibility_fingerprint TEXT NOT NULL, reason TEXT NOT NULL, recorded_at TEXT NOT NULL)"
         )
@@ -357,7 +364,7 @@ class SQLiteStateRepository(StateRepository):
     def create_step(self, step: RunStep) -> RunStep:
         self.get_run(step.run_id)
         existing = self._connection.execute(
-            "SELECT step_id, run_id, step_name, tool_name, status, input_artifacts, output_artifacts, warning_count, error_code, started_at, finished_at FROM run_steps WHERE step_id = ?",
+            "SELECT step_id, run_id, step_name, tool_name, status, input_artifacts, output_artifacts, warning_count, error_code, started_at, finished_at, attempt_number FROM run_steps WHERE step_id = ?",
             (step.step_id,),
         ).fetchone()
         if existing is not None:
@@ -367,20 +374,21 @@ class SQLiteStateRepository(StateRepository):
             return current
         try:
             self._connection.execute(
-                "INSERT INTO run_steps VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO run_steps (step_id, run_id, step_name, tool_name, status, input_artifacts, output_artifacts, warning_count, error_code, started_at, finished_at, attempt_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (step.step_id, step.run_id, step.step_name, step.tool_name, step.status.value,
                  _encode_artifacts(step.input_artifacts), _encode_artifacts(step.output_artifacts),
-                 step.warning_count, step.error_code, step.started_at, step.finished_at),
+                 step.warning_count, step.error_code, step.started_at, step.finished_at,
+                 step.attempt_number),
             )
             self._connection.commit()
         except sqlite3.IntegrityError as exc:
             self._connection.rollback()
-            raise StateError("step name already exists for this run") from exc
+            raise StateError("step attempt already exists for this run") from exc
         return step
 
     def get_step(self, step_id: str) -> RunStep:
         row = self._connection.execute(
-            "SELECT step_id, run_id, step_name, tool_name, status, input_artifacts, output_artifacts, warning_count, error_code, started_at, finished_at FROM run_steps WHERE step_id = ?",
+            "SELECT step_id, run_id, step_name, tool_name, status, input_artifacts, output_artifacts, warning_count, error_code, started_at, finished_at, attempt_number FROM run_steps WHERE step_id = ?",
             (step_id,),
         ).fetchone()
         if row is None:
@@ -390,21 +398,26 @@ class SQLiteStateRepository(StateRepository):
     def list_steps(self, run_id: str) -> tuple[RunStep, ...]:
         self.get_run(run_id)
         rows = self._connection.execute(
-            "SELECT step_id, run_id, step_name, tool_name, status, input_artifacts, output_artifacts, warning_count, error_code, started_at, finished_at FROM run_steps WHERE run_id = ? ORDER BY started_at, step_id",
+            "SELECT step_id, run_id, step_name, tool_name, status, input_artifacts, output_artifacts, warning_count, error_code, started_at, finished_at, attempt_number FROM run_steps WHERE run_id = ? ORDER BY started_at, step_id",
             (run_id,),
         ).fetchall()
         return tuple(self._step_from_row(row) for row in rows)
 
     def update_step(self, step: RunStep) -> RunStep:
         current = self.get_step(step.step_id)
-        if current.run_id != step.run_id or current.step_name != step.step_name:
+        if (
+            current.run_id != step.run_id
+            or current.step_name != step.step_name
+            or current.attempt_number != step.attempt_number
+        ):
             raise StateError("step identity cannot be changed")
         if current.status in {StepStatus.SUCCEEDED, StepStatus.CANCELLED} and current != step:
             raise StateError("terminal step cannot be changed")
         self._connection.execute(
-            "UPDATE run_steps SET status = ?, input_artifacts = ?, output_artifacts = ?, warning_count = ?, error_code = ?, started_at = ?, finished_at = ? WHERE step_id = ?",
+            "UPDATE run_steps SET status = ?, input_artifacts = ?, output_artifacts = ?, warning_count = ?, error_code = ?, started_at = ?, finished_at = ?, attempt_number = ? WHERE step_id = ?",
             (step.status.value, _encode_artifacts(step.input_artifacts), _encode_artifacts(step.output_artifacts),
-             step.warning_count, step.error_code, step.started_at, step.finished_at, step.step_id),
+             step.warning_count, step.error_code, step.started_at, step.finished_at,
+             step.attempt_number, step.step_id),
         )
         self._connection.commit()
         return step
@@ -451,7 +464,7 @@ class SQLiteStateRepository(StateRepository):
                        tuple(json.loads(str(row[5]))) if row[5] else (),
                        tuple(json.loads(str(row[6]))) if row[6] else (), int(str(row[7])),
                        str(row[8]) if row[8] is not None else None, str(row[9]),
-                       str(row[10]) if row[10] is not None else None)
+                       str(row[10]) if row[10] is not None else None, int(str(row[11])))
 
     def acquire_attempt(
         self, attempt: ExecutionAttempt, *, lease_seconds: int = 300

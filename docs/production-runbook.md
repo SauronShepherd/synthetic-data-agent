@@ -6,7 +6,7 @@ Databricks. A green local test run is not a substitute for these checks.
 ## Promotion gates
 
 - [ ] `ruff check .`, `mypy src tests`, `pytest`, wheel build, and bundle validation pass.
-- [ ] The Lakebase/PostgreSQL migration in `sql/lakebase_state_schema.sql` is applied
+- [ ] The versioned Lakebase/PostgreSQL migrations in `migrations/versions/` are applied
   by the platform migration owner and backed up.
 - [ ] The runtime service principal has only the required UC `USE CATALOG`, `USE SCHEMA`,
   `SELECT`, `MODIFY`, `CREATE TABLE`, and audit/state permissions.
@@ -40,9 +40,9 @@ defaults, logs, artifacts, or generated manifests.
 
 1. Validate the bundle against the target workspace.
 2. Deploy the wheel and resources to staging.
-3. Install the `postgres` extra, apply the checked-in migration, and verify the
+3. Install the `postgres` extra, apply the checked-in versioned migrations, and verify the
    service account can read/write state:
-   `python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN"`. Record the
+   `python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN" --migrations-dir migrations/versions`. Record the
    resulting migration ID from `sda_schema_migrations`.
 4. Run metadata discovery on a one-table allowlisted scope.
 5. Reuse the resulting evidence to run profiling, relationship detection, and SDA 07

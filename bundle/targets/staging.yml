@@ -44,3 +44,8 @@ targets:
       sda_schema_allowlist: ""
       sda_table_patterns: ""
       sda_max_metadata_objects: "100"
+      sda_lakebase_project_id: sda-state-staging
+      sda_lakebase_display_name: SDA durable state (staging)
+      sda_lakebase_branch_id: staging
+      sda_lakebase_identity_type: SERVICE_PRINCIPAL
+      sda_lakebase_role_principal: 5d652ec6-3ac4-45c1-903f-f684d737da28

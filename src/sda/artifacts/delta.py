@@ -80,13 +80,13 @@ def persist_rows(
                 .whenNotMatchedInsert(values=insert_values)
                 .execute()
             )
-        except (ImportError, ModuleNotFoundError):
+        except (AttributeError, ImportError, ModuleNotFoundError):
             frame.write.format("delta").mode("append").saveAsTable(location)
         except Exception as exc:
             if not _is_missing_table_error(exc):
                 raise
             frame.write.format("delta").mode("append").saveAsTable(location)
-    except (ImportError, ModuleNotFoundError):
+    except (AttributeError, ImportError, ModuleNotFoundError):
         frame.write.format("delta").mode("append").saveAsTable(location)
     except Exception as exc:
         raise PersistenceError(
@@ -258,7 +258,7 @@ def _merge_or_append(frame: Any, spark: Any, location: str, condition: str) -> N
         DeltaTable.forName(spark, location).alias("target").merge(
             frame.alias("source"), condition
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
-    except (ImportError, ModuleNotFoundError):
+    except (AttributeError, ImportError, ModuleNotFoundError):
         frame.write.format("delta").mode("append").saveAsTable(location)
     except Exception as exc:
         if not _is_missing_table_error(exc):

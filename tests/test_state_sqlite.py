@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -17,6 +18,7 @@ from sda.state import (
     RunRecord,
     RunStep,
     StateError,
+    StepStatus,
     WorkflowStatus,
 )
 from sda.state_sqlite import SQLiteStateRepository
@@ -47,6 +49,21 @@ def test_sqlite_state_survives_repository_reopen(tmp_path: object) -> None:
     reopened.close()
     reopened = SQLiteStateRepository(path)
     assert reopened.list_steps("run-1")[0].output_artifacts == ("meta-1",)
+    reopened.close()
+
+
+def test_sqlite_step_retries_survive_reopen(tmp_path: object) -> None:
+    path = str(tmp_path / "step-retries.db")
+    repo = SQLiteStateRepository(path)
+    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    first = RunStep("step-1", "run-1", "profile", "table_profiler", attempt_number=1)
+    second = RunStep("step-2", "run-1", "profile", "table_profiler", attempt_number=2)
+    repo.create_step(first)
+    repo.update_step(replace(first, status=StepStatus.FAILED))
+    repo.create_step(second)
+    repo.close()
+    reopened = SQLiteStateRepository(path)
+    assert [step.attempt_number for step in reopened.list_steps("run-1")] == [1, 2]
     reopened.close()
 
 

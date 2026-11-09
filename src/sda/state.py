@@ -249,6 +249,7 @@ class RunStep:
     error_code: str | None = None
     started_at: str = ""
     finished_at: str | None = None
+    attempt_number: int = 1
 
     def __post_init__(self) -> None:
         for value in (self.step_id, self.run_id, self.step_name, self.tool_name):
@@ -258,6 +259,10 @@ class RunStep:
             object.__setattr__(self, "status", StepStatus(self.status))
         if self.warning_count < 0:
             raise ValueError("warning_count must not be negative")
+        if self.attempt_number < 1:
+            raise ValueError("attempt_number must be positive")
+        if not self.started_at:
+            object.__setattr__(self, "started_at", datetime.now(UTC).isoformat())
 
 
 @dataclass(frozen=True, slots=True)
@@ -531,10 +536,12 @@ class InMemoryStateRepository:
                     raise StateError("step already exists with different content")
                 return existing
             if any(
-                current.run_id == step.run_id and current.step_name == step.step_name
+                current.run_id == step.run_id
+                and current.step_name == step.step_name
+                and current.attempt_number == step.attempt_number
                 for current in self._steps.values()
             ):
-                raise StateError("step name already exists for this run")
+                raise StateError("step attempt already exists for this run")
             self._steps[step.step_id] = step
             return step
 
@@ -552,7 +559,11 @@ class InMemoryStateRepository:
     def update_step(self, step: RunStep) -> RunStep:
         with self._lock:
             current = self.get_step(step.step_id)
-            if current.run_id != step.run_id or current.step_name != step.step_name:
+            if (
+                current.run_id != step.run_id
+                or current.step_name != step.step_name
+                or current.attempt_number != step.attempt_number
+            ):
                 raise StateError("step identity cannot be changed")
             if current.status in {StepStatus.SUCCEEDED, StepStatus.CANCELLED} and current != step:
                 raise StateError("terminal step cannot be changed")
