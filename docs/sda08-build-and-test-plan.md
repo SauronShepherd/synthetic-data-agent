@@ -124,7 +124,7 @@ SDA-08 is complete when all of the following are true:
 | ST-17 | Bundle contract | Validate dev/staging/prod and inspect resource summary | All targets resolve and all Lakebase resource types are present |
 | ST-18 | Live infrastructure | Deploy with `--profile sda`, list project/branch/endpoint/role/database | Resources are READY/ACTIVE and ownership is coherent |
 | ST-19 | Live migration | Generate a short-lived credential and apply `migrations/versions` | Migration recorded; all 11 operational tables exist |
-| ST-20 | Live repository CRUD | Connect with OAuth and execute request/run/plan/step/attempt/artifact flow | Read-back matches writes; test rows are removed afterward |
+| ST-20 | Live repository CRUD | Connect with OAuth and execute request/run/plan/step/attempt/artifact/audit flow | Read-back matches writes; test rows are removed afterward |
 | ST-21 | Live scale behavior | Verify timeout and run a post-suspension reconnect | Data remains; new connection receives a fresh token |
 | ST-22 | Cross-series Spark smoke | Run bundle jobs for metadata, profile, relationship, patterns, and scope | Jobs terminate successfully and produce governed evidence |
 | ST-23 | Static and package checks | Pytest, Ruff, mypy, release hygiene, wheel build | All checks are green and generated artifacts are removed before commit |
