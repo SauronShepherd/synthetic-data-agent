@@ -37,13 +37,13 @@ class SQLiteStateRepository(StateRepository):
         self._connection = sqlite3.connect(path)
         self._connection.execute("PRAGMA foreign_keys = ON")
         self._connection.execute(
-            "CREATE TABLE IF NOT EXISTS runs (run_id TEXT PRIMARY KEY, request_id TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL, plan_id TEXT, plan_fingerprint TEXT, version INTEGER NOT NULL, updated_at TEXT NOT NULL)"
+            "CREATE TABLE IF NOT EXISTS runs (run_id TEXT PRIMARY KEY, request_id TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL, plan_id TEXT, plan_fingerprint TEXT, version INTEGER NOT NULL, updated_at TEXT NOT NULL, FOREIGN KEY(request_id) REFERENCES requests(request_id))"
         )
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS requests (request_id TEXT PRIMARY KEY, requester_id TEXT NOT NULL, environment TEXT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE, source_scope TEXT NOT NULL, generation_options TEXT NOT NULL, target_catalog TEXT, target_schema TEXT, intended_use TEXT, submitted_at TEXT NOT NULL)"
         )
         self._connection.execute(
-            "CREATE TABLE IF NOT EXISTS plans (plan_id TEXT PRIMARY KEY, request_id TEXT NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL, fingerprint TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, supersedes_plan_id TEXT, UNIQUE(request_id, version), FOREIGN KEY(request_id) REFERENCES requests(request_id))"
+            "CREATE TABLE IF NOT EXISTS plans (plan_id TEXT PRIMARY KEY, request_id TEXT NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL, fingerprint TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, supersedes_plan_id TEXT, UNIQUE(request_id, version), FOREIGN KEY(request_id) REFERENCES requests(request_id), FOREIGN KEY(run_id) REFERENCES runs(run_id))"
         )
         self._connection.execute(
             "CREATE TABLE IF NOT EXISTS attempts (attempt_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id), stage TEXT NOT NULL, status TEXT NOT NULL, worker_id TEXT, lease_expires_at TEXT, retry_number INTEGER NOT NULL, error_code TEXT)"
@@ -126,6 +126,7 @@ class SQLiteStateRepository(StateRepository):
         self._connection.execute("DROP TABLE run_steps_legacy")
 
     def create_run(self, run: RunRecord) -> RunRecord:
+        self.get_request(run.request_id)
         existing = self._connection.execute(
             "SELECT run_id FROM runs WHERE idempotency_key = ?", (run.idempotency_key,)
         ).fetchone()
@@ -187,6 +188,7 @@ class SQLiteStateRepository(StateRepository):
 
     def create_plan(self, plan: PlanRecord) -> PlanRecord:
         self.get_request(plan.request_id)
+        self.get_run(plan.run_id)
         existing = self._connection.execute(
             "SELECT plan_id, request_id, run_id, version, fingerprint, status, payload, created_at, supersedes_plan_id FROM plans WHERE plan_id = ?",
             (plan.plan_id,),

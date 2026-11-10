@@ -25,12 +25,30 @@ from sda.state import (
 from sda.state_sqlite import SQLiteStateRepository
 
 
+def create_run(repo: SQLiteStateRepository, run: RunRecord) -> RunRecord:
+    """Create the request parent required by the durable repository contract."""
+
+    try:
+        repo.get_request(run.request_id)
+    except StateError:
+        repo.create_request(
+            RequestRecord(
+                run.request_id,
+                "test-user",
+                "test",
+                f"request-{run.idempotency_key}",
+                "{}",
+            )
+        )
+    return repo.create_run(run)
+
+
 def test_sqlite_state_survives_repository_reopen(tmp_path: object) -> None:
     path = str(tmp_path / "state.db")
     repo = SQLiteStateRepository(path)
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
     request = RequestRecord("req-1", "alice", "dev", "request-idem-1", '{"tables":["orders"]}')
     repo.create_request(request)
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     repo.transition_run("run-1", WorkflowStatus.PLANNED, actor="agent", reason="scope accepted")
     repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     repo.close()
@@ -56,7 +74,7 @@ def test_sqlite_state_survives_repository_reopen(tmp_path: object) -> None:
 def test_sqlite_step_retries_survive_reopen(tmp_path: object) -> None:
     path = str(tmp_path / "step-retries.db")
     repo = SQLiteStateRepository(path)
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     first = RunStep("step-1", "run-1", "profile", "table_profiler", attempt_number=1)
     second = RunStep("step-2", "run-1", "profile", "table_profiler", attempt_number=2)
     repo.create_step(first)
@@ -71,7 +89,7 @@ def test_sqlite_step_retries_survive_reopen(tmp_path: object) -> None:
 def test_sqlite_state_enforces_idempotency_and_version() -> None:
     repo = SQLiteStateRepository()
     run = RunRecord("run-1", "req-1", "idem-1")
-    assert repo.create_run(run) == repo.create_run(run)
+    assert create_run(repo, run) == create_run(repo, run)
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
     repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     with pytest.raises(StateError, match="concurrency"):
@@ -81,15 +99,15 @@ def test_sqlite_state_enforces_idempotency_and_version() -> None:
 
 def test_sqlite_state_rejects_conflicting_idempotency_content() -> None:
     repo = SQLiteStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     with pytest.raises(StateError, match="different content"):
-        repo.create_run(RunRecord("run-2", "req-2", "idem-1"))
+        create_run(repo, RunRecord("run-2", "req-2", "idem-1"))
     repo.close()
 
 
 def test_sqlite_state_persists_approvals_and_attempts() -> None:
     repo = SQLiteStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     approval = Approval("run-1", "human", "approved", "reviewer", "looks good")
     assert repo.record_approval(approval) == approval
     stored = repo._connection.execute(
@@ -116,7 +134,7 @@ def test_sqlite_state_persists_approvals_and_attempts() -> None:
 
 def test_sqlite_state_allows_only_one_running_attempt_per_stage() -> None:
     repo = SQLiteStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "profile"))
     with pytest.raises(StateError, match="running attempt"):
         repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile"))
@@ -128,7 +146,7 @@ def test_sqlite_state_allows_only_one_running_attempt_per_stage() -> None:
 def test_sqlite_artifact_use_decisions_survive_reopen(tmp_path: object) -> None:
     path = str(tmp_path / "artifact-use.db")
     repo = SQLiteStateRepository(path)
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     use = ArtifactUse("use-1", "run-1", "profile-1", ArtifactDecision.PRODUCED, "fp-1")
     repo.record_artifact_use(use)
     repo.close()
@@ -140,7 +158,7 @@ def test_sqlite_artifact_use_decisions_survive_reopen(tmp_path: object) -> None:
 def test_sqlite_audit_events_survive_reopen(tmp_path: object) -> None:
     path = str(tmp_path / "audit.db")
     repo = SQLiteStateRepository(path)
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     event = AuditEvent(
         "run-1", "profile_started", AuditLevel.INFO, "Profile started", stage="profile", metadata={"rows": 10}
     )
@@ -153,7 +171,7 @@ def test_sqlite_audit_events_survive_reopen(tmp_path: object) -> None:
 
 def test_sqlite_state_renews_and_recovers_stale_leases() -> None:
     repo = SQLiteStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     attempt = repo.acquire_attempt(
         ExecutionAttempt("run-1", "attempt-1", "generate", worker_id="worker-1"),
         lease_seconds=30,
@@ -172,7 +190,7 @@ def test_sqlite_state_renews_and_recovers_stale_leases() -> None:
 
 def test_sqlite_expired_worker_cannot_complete_before_recovery() -> None:
     repo = SQLiteStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     repo.acquire_attempt(
         ExecutionAttempt("run-1", "attempt-1", "generate", worker_id="worker-1"),
         lease_seconds=1,
@@ -188,7 +206,7 @@ def test_sqlite_expired_worker_cannot_complete_before_recovery() -> None:
 
 def test_sqlite_failed_run_can_be_explicitly_retried() -> None:
     repo = SQLiteStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     for status in (
         WorkflowStatus.PLANNED,
         WorkflowStatus.AWAITING_APPROVAL,
@@ -213,7 +231,7 @@ def test_sqlite_migrates_legacy_approvals_table(tmp_path: object) -> None:
     connection.commit()
     connection.close()
     repo = SQLiteStateRepository(path)
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     approval = Approval("run-1", "human", "approved", "reviewer", "approved for test")
     repo.record_approval(approval)
     assert (
@@ -252,7 +270,7 @@ def test_sqlite_migrates_legacy_run_steps_to_retry_key(tmp_path: object) -> None
 def test_sqlite_feedback_is_idempotent_and_survives_reopen(tmp_path: object) -> None:
     path = str(tmp_path / "state.db")
     repo = SQLiteStateRepository(path)
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     feedback = Feedback("feedback-1", "run-1", "reviewer", "correction", "Use profile v2")
     assert repo.record_feedback(feedback) == feedback
     assert repo.record_feedback(feedback) == feedback

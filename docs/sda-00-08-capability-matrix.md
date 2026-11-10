@@ -14,7 +14,7 @@ Databricks production readiness.
 | SDA-05 | Privacy-safe source profiling | `src/sda/tools/table_profiler.py`, `src/sda/profiling/` | `tests/test_profile_*.py`, `tests/test_conditional_nulls.py`, `tests/test_complex_type_contract.py` | Local bounded paths and live Databricks profile verified; scale/performance remains a capacity exercise |
 | SDA-06 | Keys, relationships, fan-out, and graph | `src/sda/relationships/`, `src/sda/relational.py` | `tests/test_relationship_*.py`, `tests/test_relational_validation.py` | Local contracts and live relationship/dependency output verified |
 | SDA-07 | Cross-column patterns and business rules | `src/sda/patterns/`, `src/sda/job_entrypoints/pattern_detect_spark.py` | `tests/test_pattern_*.py`, `tests/test_spark_metrics_contract.py` | Local contracts and live quick-mode Spark run verified |
-| SDA-08 | Durable requests, plans, runs, steps, leases, retries, audit, and artifact decisions | `src/sda/state*.py`, `src/sda/workflows/analyze_scope.py`, `sql/lakebase_state_schema.sql` | `tests/test_state*.py`, `tests/test_analyze_scope_workflow.py`, `tests/test_end_to_end_lineage.py` | Local contracts and live Lakebase migration/OAuth CRUD verified; backup/restore and post-suspension observation remain operational follow-ups |
+| SDA-08 | Durable requests, plans, runs, steps, leases, retries, audit, and artifact decisions | `src/sda/state*.py`, `src/sda/workflows/analyze_scope.py`, `sql/lakebase_state_schema.sql`, `bundle/lakebase.yml`, `scripts/prepare_sda08_restore_point.py` | `tests/test_state*.py`, `tests/test_analyze_scope_workflow.py`, `tests/test_end_to_end_lineage.py`, `tests/test_bundle_contract.py` | Local contracts plus live Lakebase migration/OAuth CRUD, protected root branch, scheduled snapshots, `IDLE -> ACTIVE` reconnect, and point-in-time recovery verified in dev; production promotion remains target-specific |
 
 ## Release evidence
 
@@ -32,6 +32,6 @@ python scripts/check_release.py
 The governed gate additionally requires authenticated Unity Catalog, Delta,
 Lakebase/PostgreSQL, service-principal, migration, recovery, and Databricks
 bundle evidence. The `sda` dev workspace now supplies the recorded bundle,
-Lakebase, PostgreSQL, and SDA-04 through SDA-07 Spark evidence; service-principal
-permissions, backup/restore, and post-suspension observation remain target-owner
+Lakebase, PostgreSQL, recovery, and SDA-04 through SDA-07 Spark evidence;
+service-principal permissions and staging/prod promotion remain target-owner
 operational checks.

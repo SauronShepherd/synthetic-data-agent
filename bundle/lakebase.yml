@@ -9,6 +9,15 @@ resources:
       purge_on_delete: false
 
   postgres_branches:
+    sda_state_production_branch:
+      parent: ${resources.postgres_projects.sda_state_project.id}
+      branch_id: production
+      no_expiry: true
+      is_protected: true
+      replace_existing: true
+      lifecycle:
+        prevent_destroy: true
+
     sda_state_branch:
       parent: ${resources.postgres_projects.sda_state_project.id}
       branch_id: ${var.sda_lakebase_branch_id}
@@ -43,3 +52,11 @@ resources:
       postgres_database: ${var.sda_lakebase_database_name}
       role: ${resources.postgres_roles.sda_state_app_role.id}
       replace_existing: true
+
+  postgres_snapshot_schedules:
+    sda_state_backup_schedule:
+      branch: ${resources.postgres_branches.sda_state_production_branch.id}
+      schedule:
+        - daily_schedule:
+            hour: 2
+          retention: 604800s

@@ -1,4 +1,4 @@
-"""Validate the static SDA 07 bundle wiring without workspace credentials."""
+"""Validate static SDA bundle wiring without workspace credentials."""
 
 from __future__ import annotations
 
@@ -52,6 +52,28 @@ def main(root: Path = Path(".")) -> int:
         missing = sorted(name for name in REQUIRED_VARIABLES if f"{name}:" not in text)
         if missing:
             raise SystemExit(f"{target} is missing pattern variables: {', '.join(missing)}")
+    lakebase_path = root / "bundle" / "lakebase.yml"
+    if lakebase_path.exists():
+        lakebase = lakebase_path.read_text(encoding="utf-8")
+        required_lakebase_resources = (
+            "postgres_projects:",
+            "postgres_branches:",
+            "postgres_endpoints:",
+            "postgres_roles:",
+            "postgres_databases:",
+            "postgres_snapshot_schedules:",
+            "sda_state_backup_schedule:",
+            "daily_schedule:",
+            "retention: 604800s",
+        )
+        missing_lakebase = [
+            marker for marker in required_lakebase_resources if marker not in lakebase
+        ]
+        if missing_lakebase:
+            raise SystemExit(
+                "Lakebase resources or backup schedule are missing: "
+                + ", ".join(missing_lakebase)
+            )
     print(f"Bundle contract: OK ({len(targets)} targets)")
     return 0
 

@@ -122,12 +122,13 @@ SDA-08 is complete when all of the following are true:
 | ST-15 | Migration ordering | Apply versioned directory twice | One migration row exists; second pass is a no-op at the data level |
 | ST-16 | Schema contract | Run `check_state_schema.py` and inspect required constraints | 11 tables, foreign keys, checks, indexes, and retry key are present |
 | ST-17 | Bundle contract | Validate dev/staging/prod and inspect resource summary | All targets resolve and all Lakebase resource types are present |
-| ST-18 | Live infrastructure | Deploy with `--profile sda`, list project/branch/endpoint/role/database | Resources are READY/ACTIVE and ownership is coherent |
+| ST-18 | Live infrastructure | Deploy with `--profile sda`, list project/branch/endpoint/role/database, protected root, and snapshot schedule | Resources are READY/ACTIVE, the root branch is protected, and the schedule is configured |
 | ST-19 | Live migration | Generate a short-lived credential and apply `migrations/versions` | Migration recorded; all 11 operational tables exist |
 | ST-20 | Live repository CRUD | Connect with OAuth and execute request/run/plan/step/attempt/artifact/audit flow | Read-back matches writes; test rows are removed afterward |
-| ST-21 | Live scale behavior | Verify timeout and run a post-suspension reconnect | Data remains; new connection receives a fresh token |
+| ST-21 | Live scale behavior | Leave the endpoint idle past its five-minute timeout and reconnect with a fresh OAuth credential | The endpoint reports `IDLE` before the new connection, returns `ACTIVE` after it, and the database remains readable |
 | ST-22 | Cross-series Spark smoke | Run bundle jobs for metadata, profile, relationship, patterns, and scope | Jobs terminate successfully and produce governed evidence |
 | ST-23 | Static and package checks | Pytest, Ruff, mypy, release hygiene, wheel build | All checks are green and generated artifacts are removed before commit |
+| ST-24 | Live point-in-time recovery | Insert a unique request marker, record a server timestamp, remove it from `dev`, restore a disposable branch from that timestamp, and read it back | The marker exists only in the restored branch; the original branch remains unchanged |
 
 ## 4. Commands
 
@@ -155,6 +156,15 @@ databricks postgres generate-database-credential <endpoint> --profile sda --ttl 
 python scripts/apply_state_schema.py "$env:SDA_POSTGRES_DSN" --migrations-dir migrations/versions
 ```
 
+The recovery acceptance uses the same short-lived DSN. It first runs
+`python scripts/prepare_sda08_restore_point.py`, then creates a temporary branch
+with `source_branch` and the printed `source_branch_time`, reads the marker back,
+and soft-deletes that temporary branch.
+
+After cleanup, `python scripts/check_sda08_live_state.py` verifies the 11-table
+schema, one migration row, and zero disposable request rows without printing the
+database credential.
+
 The Spark evidence jobs are run through the bundle, for example:
 
 ```powershell
@@ -166,14 +176,16 @@ databricks bundle run -t dev pattern_detector --profile sda --params run_id=sda0
 databricks bundle run -t dev analyze_scope --profile sda --params catalog=samples,schema=wanderbricks,tables=users,run_id=sda08-scope,profile=false
 ```
 
-## 5. Evidence recorded on 2026-11-09
+## 5. Evidence recorded on 2026-11-10
 
-- Local: `447 passed, 5 skipped`.
+- Local: `449 passed, 5 skipped`.
 - Ruff: passed.
-- mypy: passed for 205 source files.
+- mypy: passed for 206 source files.
 - Bundle contract: passed for 3 targets.
 - Bundle deployment with profile `sda`: created/updated the Lakebase project,
-  dev branch, primary endpoint, OAuth user role, and `sda_state` database.
+  protected `production` branch, dev branch, primary endpoint, OAuth user role,
+  `sda_state` database, and a daily seven-day snapshot schedule on the root
+  `production` branch.
 - Migration: one content-addressed migration row and 11 `sda_*` tables verified
   directly through PostgreSQL; no live test rows remained.
 - Live repository: request, run, plan, two step attempts, durable audit event,
@@ -181,17 +193,26 @@ databricks bundle run -t dev analyze_scope --profile sda --params catalog=sample
 - Live Spark: `spark_contract_smoke`, `uc_metadata_reader`,
   `table_profiler`, `relationship_detector`, `pattern_detector`, and one-table `analyze_scope`
   terminated successfully.
+- Live recovery: after the configured five-minute idle window, the dev endpoint
+  reported `IDLE`; a new OAuth connection reactivated it to `ACTIVE` and read
+  the migration table successfully. A point-in-time restore from `dev` created
+  a disposable root branch where the removed marker was present (`1` row) and
+  the migration row was still present (`1` row); the disposable branch was
+  soft-deleted and the original `dev` marker count was `0`.
 
 The five skipped local tests are environment-dependent Spark tests. They are not
 counted as passed local tests; the Databricks job evidence above is the stronger
-runtime proof for the Spark contract. A five-minute wait to observe scale-to-zero
-was not used as a hidden claim: the endpoint is configured for `300s`, while a
-post-suspension reconnect remains a repeatable operational check.
+runtime proof for the Spark contract. The current Lakebase API returned `IDLE`
+rather than the literal `SUSPENDED` state during the idle observation, so the
+evidence records the observable transition `IDLE -> ACTIVE` and does not rename
+it. The point-in-time recovery check is reproducible with
+`scripts/prepare_sda08_restore_point.py` and a disposable branch.
 
 ## 6. Definition of done
 
-SDA-08 is ready for the article when ST-01 through ST-20 and ST-22 through ST-23
-are green, the infrastructure is deployed from the bundle, and the live test
-data is removed. ST-21 is an operational follow-up that must be run after a
-real suspension window or an explicitly shortened disposable endpoint policy;
-it is not inferred from configuration alone.
+SDA-08 is complete for the local contract and the Databricks `dev` acceptance
+boundary when ST-01 through ST-24 are green, the infrastructure is deployed
+from the bundle, and all disposable data and branches are removed. This is not
+the same as production sign-off: staging/prod service-principal permissions,
+governed UC grants, and target-owner promotion evidence remain environment
+gates outside the `sda` user-profile acceptance run.

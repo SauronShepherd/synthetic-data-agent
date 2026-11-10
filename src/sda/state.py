@@ -384,6 +384,7 @@ class InMemoryStateRepository:
 
     def create_run(self, run: RunRecord) -> RunRecord:
         with self._lock:
+            self.get_request(run.request_id)
             existing_id = self._by_idempotency.get(run.idempotency_key)
             if existing_id is not None:
                 existing = self._runs[existing_id]
@@ -419,6 +420,7 @@ class InMemoryStateRepository:
     def create_plan(self, plan: PlanRecord) -> PlanRecord:
         with self._lock:
             self.get_request(plan.request_id)
+            self.get_run(plan.run_id)
             existing = self._plans.get(plan.plan_id)
             if existing is not None:
                 if existing != plan:

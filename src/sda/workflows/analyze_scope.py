@@ -70,16 +70,6 @@ def analyze_scope(
                 raise ValueError("plan request_id must match workflow request_id")
             if plan.status.lower() in {"rejected", "superseded", "expired"}:
                 raise ValueError(f"plan status is not executable: {plan.status}")
-            try:
-                existing_run = state_repository.get_run(state.request.request_id)
-            except Exception:
-                existing_run = None
-            if existing_run is not None and (
-                existing_run.plan_id != plan.plan_id
-                or existing_run.plan_fingerprint != plan.fingerprint
-            ):
-                raise ValueError("existing run is bound to a different plan")
-            state_repository.create_plan(plan)
         run = state_repository.create_run(
             RunRecord(
                 run_id=state.request.request_id,
@@ -89,6 +79,12 @@ def analyze_scope(
                 plan_fingerprint=plan.fingerprint if plan is not None else None,
             )
         )
+        if plan is not None:
+            if run.plan_id is not None and (
+                run.plan_id != plan.plan_id or run.plan_fingerprint != plan.fingerprint
+            ):
+                raise ValueError("existing run is bound to a different plan")
+            state_repository.create_plan(plan)
         if plan is not None and (
             run.plan_id != plan.plan_id or run.plan_fingerprint != plan.fingerprint
         ):

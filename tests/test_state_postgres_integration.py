@@ -4,7 +4,14 @@ from uuid import uuid4
 import pytest
 
 from sda.operations import AuditEvent, AuditLevel
-from sda.state import Approval, ExecutionAttempt, RequestRecord, RunRecord, WorkflowStatus
+from sda.state import (
+    Approval,
+    ExecutionAttempt,
+    PlanRecord,
+    RequestRecord,
+    RunRecord,
+    WorkflowStatus,
+)
 from sda.state_postgres import PostgreSQLStateRepository
 
 
@@ -25,6 +32,17 @@ def test_postgres_state_lifecycle() -> None:
         run = repository.create_run(RunRecord(run_id, request.request_id, uuid4().hex))
         assert request.request_id == run.request_id
         assert repository.get_run(run.run_id).status is WorkflowStatus.REQUESTED
+        plan = PlanRecord(
+            "plan-" + uuid4().hex,
+            request.request_id,
+            run_id,
+            1,
+            "integration-plan",
+            "approved",
+            "{}",
+        )
+        assert repository.create_plan(plan) == plan
+        assert repository.get_plan(plan.plan_id) == plan
         audit_event = AuditEvent(
             run_id, "integration_started", AuditLevel.INFO, "Integration started", metadata={"live": True}
         )
@@ -52,6 +70,9 @@ def test_postgres_state_lifecycle() -> None:
         )
         repository._connection._connection.execute(
             "DELETE FROM sda_execution_attempts WHERE run_id = %s", (run_id,)
+        )
+        repository._connection._connection.execute(
+            "DELETE FROM sda_generation_plans WHERE run_id = %s", (run_id,)
         )
         repository._connection._connection.execute(
             "DELETE FROM sda_runs WHERE run_id = %s", (run_id,)
