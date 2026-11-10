@@ -12,6 +12,8 @@ from enum import StrEnum
 from threading import RLock
 from typing import Protocol
 
+from sda.operations import AuditEvent
+
 
 class WorkflowStatus(StrEnum):
     REQUESTED = "requested"
@@ -249,6 +251,7 @@ class RunStep:
     error_code: str | None = None
     started_at: str = ""
     finished_at: str | None = None
+    attempt_number: int = 1
 
     def __post_init__(self) -> None:
         for value in (self.step_id, self.run_id, self.step_name, self.tool_name):
@@ -258,6 +261,10 @@ class RunStep:
             object.__setattr__(self, "status", StepStatus(self.status))
         if self.warning_count < 0:
             raise ValueError("warning_count must not be negative")
+        if self.attempt_number < 1:
+            raise ValueError("attempt_number must be positive")
+        if not self.started_at:
+            object.__setattr__(self, "started_at", datetime.now(UTC).isoformat())
 
 
 @dataclass(frozen=True, slots=True)
@@ -332,6 +339,8 @@ class StateRepository(Protocol):
     def list_approvals(self, run_id: str) -> tuple[Approval, ...]: ...
     def record_feedback(self, feedback: Feedback) -> Feedback: ...
     def list_feedback(self, run_id: str) -> tuple[Feedback, ...]: ...
+    def record_audit_event(self, event: AuditEvent) -> AuditEvent: ...
+    def list_audit_events(self, run_id: str) -> tuple[AuditEvent, ...]: ...
     def list_transition_events(self, run_id: str) -> tuple[TransitionEvent, ...]: ...
     def create_step(self, step: RunStep) -> RunStep: ...
     def get_step(self, step_id: str) -> RunStep: ...
@@ -366,6 +375,7 @@ class InMemoryStateRepository:
         self._attempts: dict[str, ExecutionAttempt] = {}
         self._approvals: list[Approval] = []
         self._feedback: dict[str, Feedback] = {}
+        self._audit_events: dict[str, list[AuditEvent]] = {}
         self._transition_events: dict[str, list[TransitionEvent]] = {}
         self._steps: dict[str, RunStep] = {}
         self._artifact_uses: dict[str, ArtifactUse] = {}
@@ -374,6 +384,7 @@ class InMemoryStateRepository:
 
     def create_run(self, run: RunRecord) -> RunRecord:
         with self._lock:
+            self.get_request(run.request_id)
             existing_id = self._by_idempotency.get(run.idempotency_key)
             if existing_id is not None:
                 existing = self._runs[existing_id]
@@ -409,6 +420,7 @@ class InMemoryStateRepository:
     def create_plan(self, plan: PlanRecord) -> PlanRecord:
         with self._lock:
             self.get_request(plan.request_id)
+            self.get_run(plan.run_id)
             existing = self._plans.get(plan.plan_id)
             if existing is not None:
                 if existing != plan:
@@ -517,6 +529,17 @@ class InMemoryStateRepository:
             self.get_run(run_id)
             return tuple(item for item in self._feedback.values() if item.run_id == run_id)
 
+    def record_audit_event(self, event: AuditEvent) -> AuditEvent:
+        with self._lock:
+            self.get_run(event.run_id)
+            self._audit_events.setdefault(event.run_id, []).append(event)
+            return event
+
+    def list_audit_events(self, run_id: str) -> tuple[AuditEvent, ...]:
+        with self._lock:
+            self.get_run(run_id)
+            return tuple(self._audit_events.get(run_id, ()))
+
     def list_transition_events(self, run_id: str) -> tuple[TransitionEvent, ...]:
         with self._lock:
             self.get_run(run_id)
@@ -531,10 +554,12 @@ class InMemoryStateRepository:
                     raise StateError("step already exists with different content")
                 return existing
             if any(
-                current.run_id == step.run_id and current.step_name == step.step_name
+                current.run_id == step.run_id
+                and current.step_name == step.step_name
+                and current.attempt_number == step.attempt_number
                 for current in self._steps.values()
             ):
-                raise StateError("step name already exists for this run")
+                raise StateError("step attempt already exists for this run")
             self._steps[step.step_id] = step
             return step
 
@@ -552,7 +577,11 @@ class InMemoryStateRepository:
     def update_step(self, step: RunStep) -> RunStep:
         with self._lock:
             current = self.get_step(step.step_id)
-            if current.run_id != step.run_id or current.step_name != step.step_name:
+            if (
+                current.run_id != step.run_id
+                or current.step_name != step.step_name
+                or current.attempt_number != step.attempt_number
+            ):
                 raise StateError("step identity cannot be changed")
             if current.status in {StepStatus.SUCCEEDED, StepStatus.CANCELLED} and current != step:
                 raise StateError("terminal step cannot be changed")

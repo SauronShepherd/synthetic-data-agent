@@ -2,18 +2,113 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sqlite3
+import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
 from sda.state import StateRepository
 from sda.state_sqlite import SQLiteStateRepository
 
+TokenProvider = Callable[[], str]
+ConnectFactory = Callable[..., Any]
+
+
+@dataclass(frozen=True, slots=True)
+class LakebaseConnectionConfig:
+    """Non-secret settings used to open a short-lived Lakebase connection."""
+
+    host: str
+    database: str
+    user: str
+    token_provider: TokenProvider
+    sslmode: str = "require"
+    connect_timeout: int = 15
+
+    def __post_init__(self) -> None:
+        for value in (self.host, self.database, self.user, self.sslmode):
+            if not value.strip():
+                raise ValueError("Lakebase connection settings must not be empty")
+        if self.connect_timeout < 1:
+            raise ValueError("connect_timeout must be positive")
+
+
+def environment_token_provider(
+    variable: str = "DATABRICKS_TOKEN", *, environ: dict[str, str] | None = None
+) -> TokenProvider:
+    """Return a lazy token provider so credentials are refreshed per connection."""
+
+    if not variable.strip():
+        raise ValueError("token environment variable must not be empty")
+    values = os.environ if environ is None else environ
+
+    def provide() -> str:
+        token = values.get(variable, "")
+        if not token:
+            raise RuntimeError(f"missing Lakebase OAuth token in {variable}")
+        return token
+
+    return provide
+
+
+def connect_lakebase(
+    config: LakebaseConnectionConfig,
+    *,
+    connect: ConnectFactory | None = None,
+    max_attempts: int = 3,
+    backoff_seconds: float = 1.0,
+    sleep: Callable[[float], None] = time.sleep,
+) -> Any:
+    """Open a Lakebase connection, refreshing the OAuth token on each retry.
+
+    The retry is limited to establishing the connection. Repository operations are
+    not retried here, so a reconnect cannot accidentally duplicate a business
+    effect. Tokens are passed only to the DB-API driver and never logged.
+    """
+
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be positive")
+    if backoff_seconds < 0:
+        raise ValueError("backoff_seconds must not be negative")
+    if connect is None:
+        try:
+            import psycopg
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError(
+                "PostgreSQL support requires the optional 'psycopg' dependency"
+            ) from exc
+        connect = psycopg.connect
+
+    last_error: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            token = config.token_provider()
+            return connect(
+                host=config.host,
+                dbname=config.database,
+                user=config.user,
+                password=token,
+                sslmode=config.sslmode,
+                connect_timeout=config.connect_timeout,
+            )
+        except Exception as exc:  # pragma: no cover - exact driver errors vary
+            last_error = exc
+            if attempt + 1 < max_attempts:
+                sleep(backoff_seconds * (2**attempt))
+    raise ConnectionError(
+        f"Lakebase connection failed after {max_attempts} attempts"
+    ) from last_error
+
 
 def _normalise(value: Any) -> Any:
     if isinstance(value, datetime | date):
         return value.isoformat()
+    if isinstance(value, list | dict):
+        return json.dumps(value, separators=(",", ":"))
     return value
 
 
@@ -59,6 +154,7 @@ class _PostgresConnection:
             ("attempts", "sda_execution_attempts"),
             ("approvals", "sda_approvals"),
             ("feedback", "sda_feedback"),
+            ("audit_events", "sda_audit_events"),
             ("transition_events", "sda_transition_events"),
             ("run_steps", "sda_run_steps"),
             ("artifact_uses", "sda_artifact_uses"),
@@ -108,3 +204,25 @@ class PostgreSQLStateRepository(SQLiteStateRepository, StateRepository):
                 ) from exc
             connect = psycopg.connect
         return cls(connect(dsn))
+
+    @classmethod
+    def connect_lakebase(
+        cls,
+        config: LakebaseConnectionConfig,
+        *,
+        connect: ConnectFactory | None = None,
+        max_attempts: int = 3,
+        backoff_seconds: float = 1.0,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> PostgreSQLStateRepository:
+        """Construct a repository using Databricks OAuth credentials."""
+
+        return cls(
+            connect_lakebase(
+                config,
+                connect=connect,
+                max_attempts=max_attempts,
+                backoff_seconds=backoff_seconds,
+                sleep=sleep,
+            )
+        )

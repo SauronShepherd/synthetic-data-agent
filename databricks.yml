@@ -7,6 +7,7 @@ experimental:
 
 include:
   - bundle/resources.yml
+  - bundle/lakebase.yml
   - bundle/targets/*.yml
 
 artifacts:
@@ -132,3 +133,27 @@ variables:
   sda_pattern_max_rows_scanned:
     description: Maximum source rows scanned by SDA 07.
     default: "100000"
+  sda_lakebase_project_id:
+    description: Lakebase Autoscaling project ID for operational SDA state.
+    default: sda-state-dev
+  sda_lakebase_display_name:
+    description: Human-readable Lakebase project name.
+    default: SDA durable state (dev)
+  sda_lakebase_branch_id:
+    description: Non-expiring Lakebase branch used by the SDA state repository.
+    default: dev
+  sda_lakebase_role_id:
+    description: Bundle-managed OAuth role ID for the SDA state database.
+    default: sda-state-app
+  sda_lakebase_identity_type:
+    description: Lakebase OAuth identity type for the operational state role.
+    default: USER
+  sda_lakebase_role_principal:
+    description: User email or service-principal application ID for the state role.
+    default: angel.alvarez.pascua@gmail.com
+  sda_lakebase_database_id:
+    description: Bundle-managed Lakebase database resource ID.
+    default: sda-state-db
+  sda_lakebase_database_name:
+    description: PostgreSQL database name for operational SDA state.
+    default: sda_state

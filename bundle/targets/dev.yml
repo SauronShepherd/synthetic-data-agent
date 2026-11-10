@@ -32,3 +32,9 @@ targets:
       sda_pattern_sample_fraction: "0.1"
       sda_pattern_sample_seed: "1729"
       sda_pattern_max_rows_scanned: "100000"
+      sda_lakebase_project_id: sda-state-dev-angel
+      sda_lakebase_display_name: SDA durable state (dev angel)
+      sda_lakebase_branch_id: dev
+      sda_lakebase_role_id: angel-alvarez-pascua
+      sda_lakebase_identity_type: USER
+      sda_lakebase_role_principal: angel.alvarez.pascua@gmail.com

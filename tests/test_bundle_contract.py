@@ -10,6 +10,17 @@ def test_bundle_contract_accepts_all_targets() -> None:
     assert main(ROOT) == 0
 
 
+def test_lakebase_bundle_declares_recovery_schedule() -> None:
+    content = (ROOT / "bundle" / "lakebase.yml").read_text(encoding="utf-8")
+    assert "postgres_snapshot_schedules:" in content
+    assert "sda_state_production_branch:" in content
+    assert "branch_id: production" in content
+    assert "is_protected: true" in content
+    assert "branch: ${resources.postgres_branches.sda_state_production_branch.id}" in content
+    assert "daily_schedule:" in content
+    assert "retention: 604800s" in content
+
+
 def test_pattern_task_receives_all_upstream_artifact_references() -> None:
     resources = (ROOT / "bundle" / "resources.yml").read_text(encoding="utf-8")
     block = resources.split("pattern_detector:", 1)[1].split("standalone_generator:", 1)[0]
@@ -21,6 +32,16 @@ def test_pattern_task_receives_all_upstream_artifact_references() -> None:
     ):
         assert f"name: {parameter}" in block
         assert f"--{parameter.replace('_', '-')}" in block
+
+
+def test_relationship_task_forwards_shared_artifact_registry() -> None:
+    resources = (ROOT / "bundle" / "resources.yml").read_text(encoding="utf-8")
+    block = resources.split("relationship_detector:", 1)[1].split(
+        "analyze_scope:", 1
+    )[0]
+    assert "name: artifact_registry_table" in block
+    assert "--artifact-registry-table" in block
+    assert '"{{job.parameters.artifact_registry_table}}"' in block
 
 
 def test_bundle_contract_rejects_target_missing_pattern_variable(tmp_path: Path) -> None:

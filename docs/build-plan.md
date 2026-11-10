@@ -21,16 +21,16 @@ design evidence; the repository is the source of truth for what is currently pre
   local contracts and tests.
 - [x] Generation-plan, validation-report, and publication artifact types are registered
   in the durable artifact taxonomy.
-- [x] The local suite passes: 191 passed, 2 skipped using the checked-in `.testdeps`
-  dependency set. CI separates the non-Spark coverage run from the dedicated Spark
-  test job.
+- [x] The local suite passes: `449 passed, 5 skipped` on the current SDA-08
+  baseline. The five skips are environment-dependent Spark tests; Databricks dev
+  evidence covers the governed Spark paths separately.
 - [x] The executable local slice includes immutable approved plans, deterministic
   standalone/relational generation, validation/privacy/publication gates, durable
   SQLite workflow state, bounded streaming replay/checkpoints, topology constraints,
   and controlled noise mutations.
-- [ ] Production readiness remains explicitly unclaimed until Lakebase/PostgreSQL,
-  governed Databricks execution, continuous Structured Streaming, distributed graph
-  generation, and workspace integration tests are delivered.
+- [ ] Production readiness remains explicitly unclaimed until target service-principal
+  permissions, governed UC grants, continuous Structured Streaming, distributed
+  graph generation, and workspace integration gates are delivered and signed off.
 
 ### Global completion gate
 
@@ -120,8 +120,12 @@ design evidence; the repository is the source of truth for what is currently pre
 
 - [x] Implement a Lakebase/PostgreSQL persistence adapter for active workflow state,
   execution attempts, leases, heartbeats, approvals, retries, and compact summaries.
-- [x] Add migrations, constraints, indexes, retention, backup/restore, and environment
-  configuration; keep analytical evidence and generated rows in Delta.
+- [x] Add migrations, constraints, indexes, retention, and environment configuration;
+  keep analytical evidence and generated rows in Delta.
+- [x] Execute dev target-platform backup/recovery acceptance for Lakebase state and
+  record `IDLE -> ACTIVE` reconnect plus point-in-time restore evidence in
+  `docs/sda08-build-and-test-plan.md`; staging/prod promotion remains a target-owner
+  gate.
 - [x] Implement lease acquisition, heartbeat renewal, stale-worker recovery, bounded
   retries, and exactly-once logical completion for stage attempts.
 - [x] Add repository interfaces with an in-memory test adapter and integration tests

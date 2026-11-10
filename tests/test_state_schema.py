@@ -18,7 +18,8 @@ def test_lakebase_schema_contains_immutable_transition_history() -> None:
     assert "CREATE TABLE IF NOT EXISTS sda_transition_events" in sql
     assert "sda_transition_events_run_time" in sql
     assert "CREATE TABLE IF NOT EXISTS sda_run_steps" in sql
-    assert "UNIQUE(run_id, step_name)" in sql
+    assert "CONSTRAINT sda_run_steps_run_step_attempt UNIQUE(run_id, step_name, attempt_number)" in sql
+    assert "request_id TEXT NOT NULL REFERENCES sda_generation_requests(request_id)" in sql
     assert "CREATE TABLE IF NOT EXISTS sda_artifact_uses" in sql
     assert "CREATE TABLE IF NOT EXISTS sda_generation_plans" in sql
 

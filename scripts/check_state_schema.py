@@ -28,7 +28,10 @@ REQUIRED_FRAGMENTS = {
     "sda_feedback": ("feedback_id TEXT PRIMARY KEY", "sda_feedback_identity_nonempty"),
     "sda_audit_events": ("metadata JSONB", "sda_audit_events_run_time"),
     "sda_transition_events": ("from_status TEXT NOT NULL", "sda_transition_events_run_time"),
-    "sda_run_steps": ("output_artifacts JSONB", "UNIQUE(run_id, step_name)"),
+    "sda_run_steps": (
+        "output_artifacts JSONB",
+        "CONSTRAINT sda_run_steps_run_step_attempt UNIQUE(run_id, step_name, attempt_number)",
+    ),
     "sda_artifact_uses": ("compatibility_fingerprint TEXT NOT NULL", "sda_artifact_uses_run_time"),
 }
 

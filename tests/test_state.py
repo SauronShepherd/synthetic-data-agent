@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from sda.operations import AuditEvent, AuditLevel
 from sda.state import (
     Approval,
     ArtifactDecision,
@@ -23,10 +24,28 @@ from sda.state import (
 )
 
 
+def create_run(repo: InMemoryStateRepository, run: RunRecord) -> RunRecord:
+    """Create the request parent required by the durable repository contract."""
+
+    try:
+        repo.get_request(run.request_id)
+    except StateError:
+        repo.create_request(
+            RequestRecord(
+                run.request_id,
+                "test-user",
+                "test",
+                f"request-{run.idempotency_key}",
+                "{}",
+            )
+        )
+    return repo.create_run(run)
+
+
 def test_idempotent_run_creation_and_legal_transitions() -> None:
     repo = InMemoryStateRepository()
     run = RunRecord("run-1", "req-1", "idem-1")
-    assert repo.create_run(run) == repo.create_run(run)
+    assert create_run(repo, run) == create_run(repo, run)
     repo.transition_run("run-1", WorkflowStatus.PLANNED, actor="agent", reason="scope accepted")
     repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     repo.transition_run("run-1", WorkflowStatus.APPROVED)
@@ -45,7 +64,7 @@ def test_idempotent_run_creation_and_legal_transitions() -> None:
 
 def test_steps_are_idempotent_and_preserve_artifact_handoffs() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     step = RunStep("step-1", "run-1", "profile", "table_profiler", input_artifacts=("meta-1",))
     assert repo.create_step(step) == repo.create_step(step)
     completed = replace(step, status=StepStatus.SUCCEEDED, output_artifacts=("profile-1",))
@@ -55,9 +74,19 @@ def test_steps_are_idempotent_and_preserve_artifact_handoffs() -> None:
         repo.update_step(replace(completed, warning_count=1))
 
 
+def test_step_retries_preserve_the_previous_attempt() -> None:
+    repo = InMemoryStateRepository()
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
+    first = RunStep("step-1", "run-1", "profile", "table_profiler", attempt_number=1)
+    second = RunStep("step-2", "run-1", "profile", "table_profiler", attempt_number=2)
+    repo.create_step(first)
+    repo.create_step(second)
+    assert [step.attempt_number for step in repo.list_steps("run-1")] == [1, 2]
+
+
 def test_artifact_use_decisions_are_idempotent_and_run_scoped() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     use = ArtifactUse("use-1", "run-1", "profile-1", ArtifactDecision.REUSED, "fp-1", "cache hit")
     assert repo.record_artifact_use(use) == repo.record_artifact_use(use)
     assert repo.list_artifact_uses("run-1") == (use,)
@@ -65,11 +94,20 @@ def test_artifact_use_decisions_are_idempotent_and_run_scoped() -> None:
         repo.record_artifact_use(ArtifactUse("use-1", "run-1", "profile-2", "rejected", "fp-2"))
 
 
+def test_audit_events_are_append_only_and_run_scoped() -> None:
+    repo = InMemoryStateRepository()
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
+    event = AuditEvent("run-1", "profile_started", AuditLevel.INFO, "Profile started", metadata={"rows": 10})
+    assert repo.record_audit_event(event) == event
+    assert repo.record_audit_event(event) == event
+    assert repo.list_audit_events("run-1") == (event, event)
+
+
 def test_idempotency_key_rejects_conflicting_run_content() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     with pytest.raises(StateError, match="different content"):
-        repo.create_run(RunRecord("run-2", "req-2", "idem-1"))
+        create_run(repo, RunRecord("run-2", "req-2", "idem-1"))
 
 
 def test_request_records_are_idempotent_and_separate_from_runs() -> None:
@@ -77,12 +115,13 @@ def test_request_records_are_idempotent_and_separate_from_runs() -> None:
     request = RequestRecord("req-1", "alice", "dev", "idem-1", '{"tables":["orders"]}')
     assert repo.create_request(request) == repo.create_request(request)
     assert repo.get_request("req-1") == request
-    repo.create_run(RunRecord("run-1", "req-1", "run-idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "run-idem-1"))
 
 
 def test_plan_versions_are_immutable_and_ordered() -> None:
     repo = InMemoryStateRepository()
     repo.create_request(RequestRecord("req-1", "alice", "dev", "idem-1", "{}"))
+    create_run(repo, RunRecord("run-1", "req-1", "run-idem-1"))
     plan = PlanRecord("plan-1", "req-1", "run-1", 1, "fp-1", "approved", "{}")
     assert repo.create_plan(plan) == repo.create_plan(plan)
     corrected = PlanRecord("plan-2", "req-1", "run-1", 2, "fp-2", "draft", "{}", supersedes_plan_id="plan-1")
@@ -107,7 +146,7 @@ def test_state_status_strings_are_normalized_and_invalid_values_rejected() -> No
 
 def test_state_rejects_illegal_transition_and_stale_version() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     with pytest.raises(StateError, match="invalid run transition"):
         repo.transition_run("run-1", WorkflowStatus.PUBLISHED)
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
@@ -161,7 +200,7 @@ def test_every_declared_workflow_branch_is_executable(
     statuses: tuple[WorkflowStatus, ...],
 ) -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-branch", "req-branch", "idem-branch"))
+    create_run(repo, RunRecord("run-branch", "req-branch", "idem-branch"))
     for expected_version, status in enumerate(statuses[1:]):
         run = repo.transition_run(
             "run-branch", status, expected_version=expected_version,
@@ -173,7 +212,7 @@ def test_every_declared_workflow_branch_is_executable(
 
 def test_failed_run_can_be_explicitly_retried() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     repo.transition_run("run-1", WorkflowStatus.PLANNED)
     repo.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
     repo.transition_run("run-1", WorkflowStatus.APPROVED)
@@ -185,7 +224,7 @@ def test_failed_run_can_be_explicitly_retried() -> None:
 
 def test_attempt_lease_is_idempotent_and_completion_is_terminal() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     attempt = repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "generate"))
     assert attempt.status is AttemptStatus.RUNNING
     assert repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "generate")) == attempt
@@ -198,7 +237,7 @@ def test_attempt_lease_is_idempotent_and_completion_is_terminal() -> None:
 
 def test_only_one_running_attempt_per_run_stage_is_allowed() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-1", "profile"))
     with pytest.raises(StateError, match="running attempt"):
         repo.acquire_attempt(ExecutionAttempt("run-1", "attempt-2", "profile"))
@@ -214,7 +253,7 @@ def test_attempt_acquisition_rejects_unknown_runs() -> None:
 
 def test_approval_is_unique_per_type() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     approval = Approval("run-1", "privacy", "approved", "reviewer", "approved for test")
     repo.record_approval(approval)
     assert repo.record_approval(approval) == approval
@@ -228,7 +267,7 @@ def test_approval_is_unique_per_type() -> None:
 
 def test_in_memory_lease_renewal_and_stale_recovery_match_durable_contract() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     attempt = repo.acquire_attempt(
         ExecutionAttempt("run-1", "attempt-1", "generate", worker_id="worker-1"),
         lease_seconds=30,
@@ -243,7 +282,7 @@ def test_in_memory_lease_renewal_and_stale_recovery_match_durable_contract() -> 
 
 def test_expired_worker_cannot_complete_an_attempt_before_recovery() -> None:
     repo = InMemoryStateRepository()
-    repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     repo.acquire_attempt(
         ExecutionAttempt("run-1", "attempt-1", "generate", worker_id="worker-1"),
         lease_seconds=1,
@@ -258,7 +297,7 @@ def test_expired_worker_cannot_complete_an_attempt_before_recovery() -> None:
 
 def test_feedback_is_idempotent_and_does_not_mutate_the_run() -> None:
     repo = InMemoryStateRepository()
-    original = repo.create_run(RunRecord("run-1", "req-1", "idem-1"))
+    original = create_run(repo, RunRecord("run-1", "req-1", "idem-1"))
     feedback = Feedback("feedback-1", "run-1", "reviewer", "correction", "Use profile v2")
     assert repo.record_feedback(feedback) == feedback
     assert repo.record_feedback(feedback) == feedback

@@ -1,0 +1,62 @@
+resources:
+  postgres_projects:
+    sda_state_project:
+      project_id: ${var.sda_lakebase_project_id}
+      display_name: ${var.sda_lakebase_display_name}
+      pg_version: 17
+      enable_pg_native_login: false
+      history_retention_duration: 604800s
+      purge_on_delete: false
+
+  postgres_branches:
+    sda_state_production_branch:
+      parent: ${resources.postgres_projects.sda_state_project.id}
+      branch_id: production
+      no_expiry: true
+      is_protected: true
+      replace_existing: true
+      lifecycle:
+        prevent_destroy: true
+
+    sda_state_branch:
+      parent: ${resources.postgres_projects.sda_state_project.id}
+      branch_id: ${var.sda_lakebase_branch_id}
+      no_expiry: true
+      replace_existing: true
+      lifecycle:
+        prevent_destroy: true
+
+  postgres_endpoints:
+    sda_state_endpoint:
+      parent: ${resources.postgres_branches.sda_state_branch.id}
+      endpoint_id: primary
+      endpoint_type: ENDPOINT_TYPE_READ_WRITE
+      autoscaling_limit_min_cu: 0.5
+      autoscaling_limit_max_cu: 1.0
+      suspend_timeout_duration: 300s
+      replace_existing: true
+
+  postgres_roles:
+    sda_state_app_role:
+      parent: ${resources.postgres_branches.sda_state_branch.id}
+      role_id: ${var.sda_lakebase_role_id}
+      identity_type: ${var.sda_lakebase_identity_type}
+      auth_method: LAKEBASE_OAUTH_V1
+      postgres_role: ${var.sda_lakebase_role_principal}
+      replace_existing: true
+
+  postgres_databases:
+    sda_state_database:
+      parent: ${resources.postgres_branches.sda_state_branch.id}
+      database_id: ${var.sda_lakebase_database_id}
+      postgres_database: ${var.sda_lakebase_database_name}
+      role: ${resources.postgres_roles.sda_state_app_role.id}
+      replace_existing: true
+
+  postgres_snapshot_schedules:
+    sda_state_backup_schedule:
+      branch: ${resources.postgres_branches.sda_state_production_branch.id}
+      schedule:
+        - daily_schedule:
+            hour: 2
+          retention: 604800s

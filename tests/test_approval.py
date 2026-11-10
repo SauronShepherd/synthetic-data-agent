@@ -4,7 +4,7 @@ import pytest
 
 from sda.approval import approve_generation_plan
 from sda.planning import ColumnGenerationSpec, GenerationPlan, PlanStatus
-from sda.state import InMemoryStateRepository, RunRecord, StateError, WorkflowStatus
+from sda.state import InMemoryStateRepository, RequestRecord, RunRecord, StateError, WorkflowStatus
 
 
 def plan() -> GenerationPlan:
@@ -23,6 +23,7 @@ def plan() -> GenerationPlan:
 
 def test_plan_approval_records_actor_and_advances_run() -> None:
     repository = InMemoryStateRepository()
+    repository.create_request(RequestRecord("r", "test-user", "test", "request-idem", "{}"))
     repository.create_run(RunRecord("run-1", "r", "idem"))
     repository.transition_run("run-1", WorkflowStatus.PLANNED)
     repository.transition_run("run-1", WorkflowStatus.AWAITING_APPROVAL)
@@ -35,6 +36,7 @@ def test_plan_approval_records_actor_and_advances_run() -> None:
 
 def test_plan_approval_requires_pending_plan_and_reason() -> None:
     repository = InMemoryStateRepository()
+    repository.create_request(RequestRecord("r", "test-user", "test", "request-idem", "{}"))
     repository.create_run(RunRecord("run-1", "r", "idem"))
     with pytest.raises(StateError, match="awaiting"):
         approve_generation_plan(
