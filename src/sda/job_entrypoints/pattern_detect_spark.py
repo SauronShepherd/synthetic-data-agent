@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import replace
 from datetime import UTC, datetime
 
@@ -14,7 +15,13 @@ from sda.runtime.identifiers import QualifiedName
 
 
 def _profile_ids(raw: str) -> tuple[str, ...]:
-    """Parse JSON IDs plus the escaped single-item form from job parameters."""
+    """Parse JSON IDs and the CLI-safe shorthand for one profile ID.
+
+    Databricks bundle parameters use CSV parsing, which makes a JSON value with
+    embedded double quotes awkward to pass from PowerShell. A single artifact
+    ID is therefore accepted directly as a compatibility shorthand; the
+    persisted contract remains the JSON list form for multiple profiles.
+    """
     try:
         value = json.loads(raw)
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
@@ -26,6 +33,8 @@ def _profile_ids(raw: str) -> tuple[str, ...]:
             item = cleaned[1:-1].strip().strip('"').strip("'")
             if item:
                 return (item,)
+        if re.fullmatch(r"[A-Za-z0-9_.:-]+", cleaned):
+            return (cleaned,)
         raise SystemExit("profile_artifact_ids_json must be a JSON string list") from exc
 
 

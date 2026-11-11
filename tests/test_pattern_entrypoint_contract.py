@@ -5,7 +5,7 @@ import types
 
 import pytest
 
-from sda.job_entrypoints.pattern_detect_spark import _bool_arg, parse_args
+from sda.job_entrypoints.pattern_detect_spark import _bool_arg, _profile_ids, parse_args
 
 
 @pytest.mark.parametrize("raw", ["true", "TRUE", "1", "yes", "on"])
@@ -37,6 +37,10 @@ def test_pattern_entrypoint_parses_databricks_boolean_flags(
     args = parse_args()
     assert args.include_spearman is True
     assert args.allow_best_effort_snapshot is False
+
+
+def test_pattern_entrypoint_accepts_cli_safe_single_profile_id() -> None:
+    assert _profile_ids("profile_abc123") == ("profile_abc123",)
 
 
 def test_pattern_entrypoint_requires_source_table(monkeypatch: pytest.MonkeyPatch) -> None:

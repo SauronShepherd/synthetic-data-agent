@@ -30,6 +30,8 @@ def persist_rows(
         raise ValueError("invalid artifact status")
     if not location or "." not in location:
         raise ValueError("location must be a qualified table name")
+    if not rows:
+        return
     try:
         values = [
             {

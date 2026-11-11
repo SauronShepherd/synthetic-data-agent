@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - SDA-08
       - codex/sda07-integration
 
 jobs:
@@ -85,12 +86,8 @@ jobs:
           } >> "$GITHUB_ENV"
       - name: Run pattern detector smoke job
         run: |
-          databricks bundle run pattern_detector -t dev --profile sda-sdg -- \
-            --metadata-artifact-id "$metadata_id" \
-            --profile-artifact-ids-json "[\"$profile_id\"]" \
-            --relationship-artifact-id "$relationship_id" \
-            --dependency-graph-artifact-id "$graph_id" \
-            --source-table "workspace.sda_integration.sda07_ci_${GITHUB_RUN_ID}_orders" \
+          databricks bundle run pattern_detector -t dev --profile sda-sdg \
+            --params="metadata_artifact_id=${metadata_id},profile_artifact_ids_json=${profile_id},relationship_artifact_id=${relationship_id},dependency_graph_artifact_id=${graph_id},source_table=workspace.sda_integration.sda07_sda07_ci_${GITHUB_RUN_ID}_orders,run_id=sda07-ci-${GITHUB_RUN_ID},min_support_rows=1,min_support_rate=0,sample_fraction=1" \
             2>&1 | tee /tmp/sda-pattern.log
           grep -q '"pattern_count": [1-9]' /tmp/sda-pattern.log
           grep -q '"family_counts"' /tmp/sda-pattern.log
@@ -103,4 +100,4 @@ jobs:
         run: |
           databricks bundle run uc_fixture -t dev --profile sda-sdg \
             --params="catalog=workspace,schema=sda_integration,suffix=sda07_ci_${GITHUB_RUN_ID},mode=cleanup" \
-            >/tmp/sda-fixture-cleanup.log 2>&1 || true
+            2>&1 | tee /tmp/sda-fixture-cleanup.log

@@ -92,3 +92,33 @@ def test_lifecycle_failure_is_typed_and_not_marked_complete() -> None:
         pass
     else:
         raise AssertionError("persistence failure must be typed")
+
+
+def test_lifecycle_allows_an_empty_evidence_batch() -> None:
+    ref = ArtifactRef(
+        artifact_id="empty",
+        artifact_type=ArtifactType.PATTERN_REGISTRY,
+        artifact_schema_version="1.0",
+        status=ArtifactStatus.WRITING,
+        tool_name="patterns",
+        tool_version="0.7",
+        run_id="run",
+        environment="dev",
+        created_at="now",
+        configuration_hash="cfg",
+        primary_location="main.evidence.patterns",
+        related_locations={},
+        source_references=(),
+        checksum="checksum",
+        summary="no findings",
+    )
+
+    completed = persist_artifact_lifecycle(
+        Spark(),
+        ref,
+        [],
+        evidence_location="main.evidence.patterns",
+        registry_location="main.evidence.registry",
+    )
+
+    assert completed.status is ArtifactStatus.COMPLETE

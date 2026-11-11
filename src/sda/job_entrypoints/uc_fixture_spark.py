@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import argparse
 import re
+from typing import Protocol
+
+
+class _SparkSessionLike(Protocol):
+    def sql(self, statement: str) -> object: ...
 
 
 def _identifier(value: str) -> str:
@@ -11,6 +16,27 @@ def _identifier(value: str) -> str:
     if not re.fullmatch(r"[a-z][a-z0-9_]{0,40}", value):
         raise SystemExit("fixture suffix must be a simple lowercase identifier")
     return value
+
+
+def _fixture_prefix(catalog: str, schema: str, suffix: str) -> str:
+    """Return the fully qualified prefix owned by one integration run."""
+
+    return f"{catalog}.{schema}.sda07_{suffix}"
+
+
+def cleanup_fixture(
+    spark: _SparkSessionLike, catalog: str, schema: str, suffix: str
+) -> None:
+    """Drop only the two tables owned by this run-scoped fixture.
+
+    The integration schema is intentionally shared by concurrent or historical
+    runs.  Dropping the schema during cleanup therefore makes an otherwise
+    successful test destructive and fails as soon as another fixture is present.
+    """
+
+    prefix = _fixture_prefix(catalog, schema, suffix)
+    for name in ("orders", "customers"):
+        spark.sql(f"DROP TABLE IF EXISTS {prefix}_{name}")
 
 
 def main() -> None:
@@ -22,14 +48,14 @@ def main() -> None:
     parser.add_argument("--suffix", required=True)
     parser.add_argument("--mode", choices=("create", "cleanup"), required=True)
     args = parser.parse_args()
+    catalog = _identifier(args.catalog)
+    schema_name = _identifier(args.schema)
     suffix = _identifier(args.suffix)
-    schema = f"{args.catalog}.{args.schema}"
-    prefix = f"{schema}.sda07_{suffix}"
+    schema = f"{catalog}.{schema_name}"
+    prefix = _fixture_prefix(catalog, schema_name, suffix)
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     if args.mode == "cleanup":
-        for name in ("orders", "customers"):
-            spark.sql(f"DROP TABLE IF EXISTS {prefix}_{name}")
-        spark.sql(f"DROP SCHEMA IF EXISTS {schema}")
+        cleanup_fixture(spark, catalog, schema_name, suffix)
         print(f"SDA07_FIXTURE_CLEANED {schema}")
         return
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema}")

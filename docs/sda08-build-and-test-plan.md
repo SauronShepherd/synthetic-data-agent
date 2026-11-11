@@ -178,7 +178,8 @@ databricks bundle run -t dev analyze_scope --profile sda --params catalog=sample
 
 ## 5. Evidence recorded on 2026-11-11
 
-- Local: `449 passed, 5 skipped`.
+- Local: `455 passed, 5 skipped` after adding regression coverage for scoped
+  fixture cleanup, empty artifact evidence, and CLI-safe single-profile input.
 - Ruff: passed.
 - mypy: passed for 198 source files.
 - Bundle contract: passed for 3 targets.
@@ -196,6 +197,13 @@ databricks bundle run -t dev analyze_scope --profile sda --params catalog=sample
 - Live Spark: `spark_contract_smoke`, `uc_metadata_reader`,
   `table_profiler`, `relationship_detector`, `pattern_detector`, and one-table `analyze_scope`
   terminated successfully.
+- Controlled Unity Catalog fixture rerun with profile `sda`: metadata selected two
+  managed tables; the profiler was forced through a fresh calculation
+  (`reuse_existing=false`); relationship detection reported one-to-many with
+  `orphan_rate=0`; `analyze_scope` produced the relationship and dependency-graph
+  artifacts; and `pattern_detector` consumed all four upstream artifact IDs and
+  produced 13 patterns across four families. Cleanup removed only the two
+  run-owned tables and left the shared integration schema intact.
 - Live recovery: after the configured five-minute idle window, the dev endpoint
   reported `IDLE`; a new OAuth connection reactivated it to `ACTIVE` and read
   the migration table successfully. A point-in-time restore from `dev` created
