@@ -162,8 +162,8 @@ with `source_branch` and the printed `source_branch_time`, reads the marker back
 and soft-deletes that temporary branch.
 
 After cleanup, `python scripts/check_sda08_live_state.py` verifies the 11-table
-schema, one migration row, and zero disposable request rows without printing the
-database credential.
+schema, the applied migration rows, and zero disposable request rows without
+printing the database credential.
 
 The Spark evidence jobs are run through the bundle, for example:
 
