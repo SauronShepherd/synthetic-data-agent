@@ -1,4 +1,5 @@
 import os
+from dataclasses import replace
 from uuid import uuid4
 
 import pytest
@@ -6,10 +7,14 @@ import pytest
 from sda.operations import AuditEvent, AuditLevel
 from sda.state import (
     Approval,
+    ArtifactDecision,
+    ArtifactUse,
     ExecutionAttempt,
     PlanRecord,
     RequestRecord,
     RunRecord,
+    RunStep,
+    StepStatus,
     WorkflowStatus,
 )
 from sda.state_postgres import PostgreSQLStateRepository
@@ -51,6 +56,41 @@ def test_postgres_state_lifecycle() -> None:
         repository.record_approval(
             Approval(run_id, "human", "approved", "integration", "integration approval")
         )
+        first_step = RunStep(
+            "step-" + uuid4().hex,
+            run_id,
+            "profile",
+            "table_profiler",
+            input_artifacts=("metadata-1",),
+            attempt_number=1,
+        )
+        repository.create_step(first_step)
+        failed_step = replace(first_step, status=StepStatus.FAILED, error_code="TIMEOUT")
+        repository.update_step(failed_step)
+        retry_step = RunStep(
+            "step-" + uuid4().hex,
+            run_id,
+            "profile",
+            "table_profiler",
+            input_artifacts=("metadata-1",),
+            output_artifacts=("profile-1",),
+            status=StepStatus.SUCCEEDED,
+            attempt_number=2,
+        )
+        repository.create_step(retry_step)
+        assert [step.attempt_number for step in repository.list_steps(run_id)] == [1, 2]
+        assert repository.get_step(first_step.step_id).status is StepStatus.FAILED
+        assert repository.get_step(retry_step.step_id).status is StepStatus.SUCCEEDED
+        artifact_use = ArtifactUse(
+            "use-" + uuid4().hex,
+            run_id,
+            "profile-1",
+            ArtifactDecision.REUSED,
+            "profile-fingerprint",
+            "compatible profile reused",
+        )
+        assert repository.record_artifact_use(artifact_use) == repository.record_artifact_use(artifact_use)
+        assert repository.list_artifact_uses(run_id) == (artifact_use,)
         claimed = repository.acquire_attempt(
             ExecutionAttempt(run_id, attempt_id, "generate", worker_id="integration")
         )
@@ -67,6 +107,12 @@ def test_postgres_state_lifecycle() -> None:
         )
         repository._connection._connection.execute(
             "DELETE FROM sda_audit_events WHERE run_id = %s", (run_id,)
+        )
+        repository._connection._connection.execute(
+            "DELETE FROM sda_artifact_uses WHERE run_id = %s", (run_id,)
+        )
+        repository._connection._connection.execute(
+            "DELETE FROM sda_run_steps WHERE run_id = %s", (run_id,)
         )
         repository._connection._connection.execute(
             "DELETE FROM sda_execution_attempts WHERE run_id = %s", (run_id,)

@@ -176,18 +176,21 @@ databricks bundle run -t dev pattern_detector --profile sda --params run_id=sda0
 databricks bundle run -t dev analyze_scope --profile sda --params catalog=samples,schema=wanderbricks,tables=users,run_id=sda08-scope,profile=false
 ```
 
-## 5. Evidence recorded on 2026-11-10
+## 5. Evidence recorded on 2026-11-11
 
 - Local: `449 passed, 5 skipped`.
 - Ruff: passed.
-- mypy: passed for 206 source files.
+- mypy: passed for 198 source files.
 - Bundle contract: passed for 3 targets.
 - Bundle deployment with profile `sda`: created/updated the Lakebase project,
   protected `production` branch, dev branch, primary endpoint, OAuth user role,
   `sda_state` database, and a daily seven-day snapshot schedule on the root
   `production` branch.
-- Migration: one content-addressed migration row and 11 `sda_*` tables verified
-  directly through PostgreSQL; no live test rows remained.
+- Migration: the versioned migration was reapplied idempotently and 11 `sda_*`
+  tables were verified directly through PostgreSQL; the reused `dev` branch
+  retains two content-addressed migration rows, one from the earlier
+  compatibility-schema run and one from the versioned migration; no live test
+  rows remained.
 - Live repository: request, run, plan, two step attempts, durable audit event,
   artifact reuse, lease renewal, and attempt completion passed.
 - Live Spark: `spark_contract_smoke`, `uc_metadata_reader`,
@@ -197,7 +200,7 @@ databricks bundle run -t dev analyze_scope --profile sda --params catalog=sample
   reported `IDLE`; a new OAuth connection reactivated it to `ACTIVE` and read
   the migration table successfully. A point-in-time restore from `dev` created
   a disposable root branch where the removed marker was present (`1` row) and
-  the migration row was still present (`1` row); the disposable branch was
+  both migration rows were still present (`2` rows); the disposable branch was
   soft-deleted and the original `dev` marker count was `0`.
 
 The five skipped local tests are environment-dependent Spark tests. They are not
