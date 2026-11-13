@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 REQUIRED_TABLES = {
-    "sda_schema_migrations",
+    "sda_schema_versions",
     "sda_generation_requests",
     "sda_generation_plans",
     "sda_runs",
@@ -19,7 +19,7 @@ REQUIRED_TABLES = {
     "sda_artifact_uses",
 }
 REQUIRED_FRAGMENTS = {
-    "sda_schema_migrations": ("migration_id TEXT PRIMARY KEY", "applied_at TIMESTAMPTZ"),
+    "sda_schema_versions": ("schema_version TEXT PRIMARY KEY", "applied_at TIMESTAMPTZ"),
     "sda_runs": ("idempotency_key TEXT NOT NULL UNIQUE", "sda_runs_status"),
     "sda_generation_requests": ("idempotency_key TEXT NOT NULL UNIQUE", "source_scope JSONB"),
     "sda_generation_plans": ("fingerprint TEXT NOT NULL", "UNIQUE(request_id, version)"),
@@ -50,7 +50,7 @@ def validate(sql: str) -> list[str]:
 
 
 def main(root: Path = Path(".")) -> int:
-    path = root / "sql" / "lakebase_state_schema.sql"
+    path = root / "schema" / "lakebase" / "001_state_schema.sql"
     if not path.is_file():
         raise SystemExit(f"state schema is missing: {path}")
     errors = validate(path.read_text(encoding="utf-8"))

@@ -4,7 +4,7 @@ from scripts.check_state_schema import validate
 
 
 def test_lakebase_state_schema_has_required_contracts() -> None:
-    sql = (Path(__file__).parents[1] / "sql" / "lakebase_state_schema.sql").read_text(
+    sql = (Path(__file__).parents[1] / "schema" / "lakebase" / "001_state_schema.sql").read_text(
         encoding="utf-8"
     )
     assert validate(sql) == []

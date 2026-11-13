@@ -1,4 +1,4 @@
-"""Inspect the disposable-row and migration invariants of a live SDA database."""
+"""Inspect the disposable-row and schema-version invariants of a live SDA database."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import os
 
 
 def inspect_state(dsn: str) -> tuple[int, int, int]:
-    """Return `(sda_tables, migrations, disposable_rows)` for a live database."""
+    """Return `(sda_tables, schema_versions, disposable_rows)` for a live database."""
 
     try:
         import psycopg
@@ -20,14 +20,14 @@ def inspect_state(dsn: str) -> tuple[int, int, int]:
             "WHERE table_schema = 'public' AND table_name LIKE 'sda_%'"
         )
         sda_tables = int(cursor.fetchone()[0])
-        cursor.execute("SELECT count(*) FROM sda_schema_migrations")
-        migrations = int(cursor.fetchone()[0])
+        cursor.execute("SELECT count(*) FROM sda_schema_versions")
+        schema_versions = int(cursor.fetchone()[0])
         cursor.execute(
             "SELECT count(*) FROM sda_generation_requests "
             "WHERE request_id LIKE 'sda08-restore-%' OR request_id LIKE 'live-%'"
         )
         disposable_rows = int(cursor.fetchone()[0])
-    return sda_tables, migrations, disposable_rows
+    return sda_tables, schema_versions, disposable_rows
 
 
 def main() -> int:
@@ -41,9 +41,9 @@ def main() -> int:
     dsn = os.environ.get(args.dsn_env, "")
     if not dsn:
         raise SystemExit(f"environment variable {args.dsn_env} is empty")
-    tables, migrations, disposable_rows = inspect_state(dsn)
+    tables, schema_versions, disposable_rows = inspect_state(dsn)
     print(f"sda_tables={tables}")
-    print(f"migrations={migrations}")
+    print(f"schema_versions={schema_versions}")
     print(f"disposable_rows={disposable_rows}")
     return 0
 

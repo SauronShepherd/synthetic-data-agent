@@ -142,6 +142,9 @@ variables:
   sda_lakebase_branch_id:
     description: Non-expiring Lakebase branch used by the SDA state repository.
     default: dev
+  sda_lakebase_suspend_timeout_duration:
+    description: Lakebase inactivity timeout before scale-to-zero suspension.
+    default: 300s
   sda_lakebase_role_id:
     description: Bundle-managed OAuth role ID for the SDA state database.
     default: sda-state-app

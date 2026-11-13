@@ -6,8 +6,8 @@ Databricks. A green local test run is not a substitute for these checks.
 ## Promotion gates
 
 - [ ] `ruff check .`, `mypy src tests`, `pytest`, wheel build, and bundle validation pass.
-- [ ] The versioned Lakebase/PostgreSQL migrations in `migrations/versions/` are applied
-  by the platform migration owner and backed up.
+- [ ] The versioned Lakebase/PostgreSQL schema in `schema/lakebase/` is applied
+  by the platform database owner and backed up.
 - [ ] The runtime service principal has only the required UC `USE CATALOG`, `USE SCHEMA`,
   `SELECT`, `MODIFY`, `CREATE TABLE`, and audit/state permissions.
 - [ ] Source and output allowlists are configured with concrete governed catalogs and
@@ -40,10 +40,10 @@ defaults, logs, artifacts, or generated manifests.
 
 1. Validate the bundle against the target workspace.
 2. Deploy the wheel and resources to staging.
-3. Install the `postgres` extra, apply the checked-in versioned migrations, and verify the
+3. Install the `postgres` extra, apply the checked-in versioned schema, and verify the
    service account can read/write state:
-   `python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN" --migrations-dir migrations/versions`. Record the
-   resulting migration ID from `sda_schema_migrations`.
+   `python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN" --schema-dir schema/lakebase`. Record the
+   resulting schema version from `sda_schema_versions`.
 4. Run metadata discovery on a one-table allowlisted scope.
 5. Reuse the resulting evidence to run profiling, relationship detection, and SDA 07
    pattern detection.
@@ -75,15 +75,15 @@ defaults, logs, artifacts, or generated manifests.
 - For a stale worker, abandon the lease, acquire a new attempt, and resume from the last
   durable checkpoint.
 - For a bad publication, revoke the dataset version and remove its aliases before repair.
-- For a failed migration, stop promotion, restore the database backup, and do not run
-  generation against a partially migrated state.
+- For a failed schema application, stop promotion, restore the database backup, and do not run
+  generation against a partially applied state.
 - For a failed checkpoint or incompatible schema transition, create a new explicitly
   versioned stream run; never silently reuse incompatible state.
 
 ## Evidence required for sign-off
 
 - Bundle validation output and deployed resource identifiers.
-- Migration version, backup confirmation, and state read/write smoke output.
+- Schema version, backup confirmation, and state read/write smoke output.
 - Run, plan, artifact, validation, privacy, publication, and audit IDs for the staging run.
 - Results of every positive and negative smoke test.
 - Output row counts, schema fingerprint, plan fingerprint, validation disposition, privacy

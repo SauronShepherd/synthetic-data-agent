@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 def test_lakebase_schema_contains_immutable_feedback_contract() -> None:
-    sql = (Path(__file__).parents[1] / "sql" / "lakebase_state_schema.sql").read_text(
+    sql = (Path(__file__).parents[1] / "schema" / "lakebase" / "001_state_schema.sql").read_text(
         encoding="utf-8"
     )
     assert "CREATE TABLE IF NOT EXISTS sda_feedback" in sql
@@ -12,7 +12,7 @@ def test_lakebase_schema_contains_immutable_feedback_contract() -> None:
 
 
 def test_lakebase_schema_contains_immutable_transition_history() -> None:
-    sql = (Path(__file__).parents[1] / "sql" / "lakebase_state_schema.sql").read_text(
+    sql = (Path(__file__).parents[1] / "schema" / "lakebase" / "001_state_schema.sql").read_text(
         encoding="utf-8"
     )
     assert "CREATE TABLE IF NOT EXISTS sda_transition_events" in sql
@@ -24,9 +24,9 @@ def test_lakebase_schema_contains_immutable_transition_history() -> None:
     assert "CREATE TABLE IF NOT EXISTS sda_generation_plans" in sql
 
 
-def test_lakebase_schema_tracks_migration_versions() -> None:
-    sql = (Path(__file__).parents[1] / "sql" / "lakebase_state_schema.sql").read_text(
+def test_lakebase_schema_tracks_schema_versions() -> None:
+    sql = (Path(__file__).parents[1] / "schema" / "lakebase" / "001_state_schema.sql").read_text(
         encoding="utf-8"
     )
-    assert "CREATE TABLE IF NOT EXISTS sda_schema_migrations" in sql
-    assert "migration_id TEXT PRIMARY KEY" in sql
+    assert "CREATE TABLE IF NOT EXISTS sda_schema_versions" in sql
+    assert "schema_version TEXT PRIMARY KEY" in sql

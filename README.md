@@ -1,4 +1,4 @@
-# Synthetic Data Agent — SDA 00–08 (`0.8.0.dev0`)
+# Synthetic Data Agent — SDA 00–09 (`0.9.0.dev0`)
 
 The implemented deterministic pipeline is metadata -> profiles -> relationships -> patterns ->
 approved-plan generation -> validation/privacy gates -> publication contracts. SDA 07 emits
@@ -29,6 +29,10 @@ This branch now supports three execution modes:
 - Controlled local noise profiles use deterministic default mutation rates of 1% (historical),
   5% (mild), 10% (QA), and 25% (stress). An explicit `budget` or `budget_rate` overrides the
   profile default; every result is immutable and carries a raw-value-free truth ledger.
+- SDA 09 records the workload-specific Lakebase decision in executable code and an ADR:
+  Lakebase owns operational coordination state, while Unity Catalog and Delta own analytical
+  evidence. `scripts/benchmark_state_store.py` provides a disposable connection and short-
+  transaction probe without claiming an apples-to-apples benchmark of unprovisioned alternatives.
 
 Bundle validation and deployment are environment-dependent; local checks cover compilation and deterministic reader contracts. A successful run may still return an empty inventory when the configured catalog/schema scope does not contain visible matching tables.
 
@@ -96,14 +100,19 @@ an injected DB-API connection, or `LakebaseConnectionConfig` plus
 an expired token can be refreshed between connection attempts. Generated rows
 and analytical evidence remain in Delta; Lakebase stores operational state.
 
+For Databricks Apps or jobs, `LakebaseConnectionConfig.from_environment` reads
+the non-secret `PGHOST`, `PGDATABASE`, `PGUSER`, `PGSSLMODE`, and optional
+`PGCONNECT_TIMEOUT` variables. The token is still resolved lazily from the
+configured token provider.
+
 ```bash
 python -m pip install -e ".[postgres]"
 ```
 
-Apply the versioned state migrations with the checked-in runner:
+Apply the versioned state schema files with the checked-in runner:
 
 ```bash
-python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN" --migrations-dir migrations/versions
+python scripts/apply_state_schema.py "$SDA_POSTGRES_DSN" --schema-dir schema/lakebase
 ```
 
 Or use:

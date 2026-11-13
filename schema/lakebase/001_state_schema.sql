@@ -1,6 +1,6 @@
 -- SDA operational state schema. Analytical evidence and generated rows remain in Delta.
-CREATE TABLE IF NOT EXISTS sda_schema_migrations (
-    migration_id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS sda_schema_versions (
+    schema_version TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

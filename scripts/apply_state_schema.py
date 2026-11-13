@@ -9,65 +9,54 @@ from pathlib import Path
 from typing import Any
 
 
-def migration_id(sql: str) -> str:
+def schema_version(sql: str) -> str:
     return "state-schema-" + hashlib.sha256(sql.encode("utf-8")).hexdigest()[:16]
 
 
-def migration_files(migrations_dir: Path) -> tuple[Path, ...]:
-    """Return ordered SQL migrations and reject an empty migration directory."""
+def schema_files(schema_dir: Path) -> tuple[Path, ...]:
+    """Return ordered SQL schema files and reject an empty schema directory."""
 
-    files = tuple(sorted(migrations_dir.glob("*.sql")))
+    files = tuple(sorted(schema_dir.glob("*.sql")))
     if not files:
-        raise ValueError(f"no SQL migrations found in {migrations_dir}")
+        raise ValueError(f"no SQL schema files found in {schema_dir}")
     return files
 
 
-def apply_schema(dsn: str, schema_path: Path) -> str:
-    try:
-        import psycopg
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError("install the 'postgres' extra to apply the state schema") from exc
-    sql = schema_path.read_text(encoding="utf-8")
-    identifier = migration_id(sql)
-    with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
-        cursor.execute(sql)
-        cursor.execute(
-            "INSERT INTO sda_schema_migrations (migration_id) VALUES (%s) "
-            "ON CONFLICT (migration_id) DO NOTHING",
-            (identifier,),
-        )
-    return identifier
-
-
-def apply_migrations(
+def apply_schema_files(
     dsn: str,
-    migrations_dir: Path,
+    schema_dir: Path,
     *,
     connect: Callable[..., Any] | None = None,
 ) -> tuple[str, ...]:
-    """Apply ordered, content-addressed migrations exactly once each."""
+    """Apply ordered, content-addressed schema files exactly once each."""
 
     if connect is None:
         try:
             import psycopg
         except ImportError as exc:  # pragma: no cover
-            raise RuntimeError("install the 'postgres' extra to apply state migrations") from exc
+            raise RuntimeError("install the 'postgres' extra to apply the state schema") from exc
         connect = psycopg.connect
 
     applied: list[str] = []
     with connect(dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
-            "CREATE TABLE IF NOT EXISTS sda_schema_migrations ("
-            "migration_id TEXT PRIMARY KEY, "
+            "CREATE TABLE IF NOT EXISTS sda_schema_versions ("
+            "schema_version TEXT PRIMARY KEY, "
             "applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)"
         )
-        for path in migration_files(migrations_dir):
+        for path in schema_files(schema_dir):
             sql = path.read_text(encoding="utf-8")
-            identifier = migration_id(f"{path.name}\n{sql}")
+            identifier = schema_version(f"{path.name}\n{sql}")
+            cursor.execute(
+                "SELECT 1 FROM sda_schema_versions WHERE schema_version = %s",
+                (identifier,),
+            )
+            if cursor.fetchone() is not None:
+                continue
             cursor.execute(sql)
             cursor.execute(
-                "INSERT INTO sda_schema_migrations (migration_id) VALUES (%s) "
-                "ON CONFLICT (migration_id) DO NOTHING",
+                "INSERT INTO sda_schema_versions (schema_version) VALUES (%s) "
+                "ON CONFLICT (schema_version) DO NOTHING",
                 (identifier,),
             )
             applied.append(identifier)
@@ -78,21 +67,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dsn", help="PostgreSQL/Lakebase connection string")
     parser.add_argument(
-        "--schema",
+        "--schema-dir",
         type=Path,
-        default=Path(__file__).parents[1] / "sql" / "lakebase_state_schema.sql",
-    )
-    parser.add_argument(
-        "--migrations-dir",
-        type=Path,
-        help="Apply ordered SQL files instead of the legacy single-schema option.",
+        required=True,
+        help="Directory containing the ordered SQL schema files.",
     )
     args = parser.parse_args()
-    if args.migrations_dir:
-        applied = apply_migrations(args.dsn, args.migrations_dir)
-        print(f"Applied state migrations: {', '.join(applied)}")
-    else:
-        print(f"Applied state schema: {apply_schema(args.dsn, args.schema)}")
+    applied = apply_schema_files(args.dsn, args.schema_dir)
+    print(f"Applied state schema files: {', '.join(applied)}")
     return 0
 
 

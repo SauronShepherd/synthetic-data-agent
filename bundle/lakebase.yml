@@ -33,7 +33,7 @@ resources:
       endpoint_type: ENDPOINT_TYPE_READ_WRITE
       autoscaling_limit_min_cu: 0.5
       autoscaling_limit_max_cu: 1.0
-      suspend_timeout_duration: 300s
+      suspend_timeout_duration: ${var.sda_lakebase_suspend_timeout_duration}
       replace_existing: true
 
   postgres_roles:

@@ -10,14 +10,13 @@ Synthetic row generation and publication remain downstream workflow stages.
 SDA-08 is complete when all of the following are true:
 
 1. Requests, runs, plans, attempts, approvals, feedback, transitions, steps,
-   artifact decisions, and migrations have durable contracts.
+   artifact decisions, and schema versions have durable contracts.
 2. The local reference repository and PostgreSQL/Lakebase adapter implement the
    same state semantics: idempotency, legal transitions, optimistic concurrency,
    leases, retries, terminal records, and append-only history.
 3. The Lakebase bundle declares a project, non-expiring branch, read/write
    endpoint, OAuth role, and operational database without embedding credentials.
-4. The migration runner applies ordered, content-addressed SQL exactly once and
-   preserves the compatibility runner for existing operators.
+4. The schema runner applies ordered, content-addressed SQL exactly once.
 5. OAuth connection establishment refreshes the token for every retry, applies
    TLS, uses bounded exponential backoff, and never retries a business effect.
 6. The workflow can hand metadata, profile, relationship, and pattern artifacts
@@ -25,7 +24,7 @@ SDA-08 is complete when all of the following are true:
    failed.
 7. Local unit, contract, static, package, and integration tests are green.
 8. A real Databricks run using profile `sda` proves bundle deployment, Lakebase
-   migration, PostgreSQL CRUD, and the SDA-04 through SDA-07 Spark jobs.
+   schema application, PostgreSQL CRUD, and the SDA-04 through SDA-07 Spark jobs.
 
 ## 2. Build work packages
 
@@ -38,20 +37,18 @@ SDA-08 is complete when all of the following are true:
   decisions rather than overwriting evidence.
 - Make step retries explicit with `attempt_number`; the uniqueness boundary is
   `(run_id, step_name, attempt_number)`.
-- Keep the schema contract in `sql/lakebase_state_schema.sql` and the deployable
-  migration in `migrations/versions/001_lakebase_state.sql`.
+- Keep the schema definition in `schema/lakebase/001_state_schema.sql`.
 
-### WP-02 — Versioned migrations
+### WP-02 — Versioned state schema
 
-- Discover migrations by ascending filename.
-- Hash the filename and SQL content into the migration identifier.
-- Create `sda_schema_migrations` before applying the first migration.
-- Apply each migration in one database transaction and record it with
+- Discover schema files by ascending filename.
+- Hash the filename and SQL content into the schema version.
+- Create `sda_schema_versions` before applying the first schema file.
+- Apply each schema file in one database transaction and record it with
   `ON CONFLICT DO NOTHING`.
 - Fail closed when the directory is empty.
-- Retain `scripts/apply_state_schema.py <dsn> --schema ...` as a compatibility
-  path; new environments use `--migrations-dir migrations/versions`.
-- Run migrations from a controlled deployment identity, never on application
+- Run `scripts/apply_state_schema.py <dsn> --schema-dir schema/lakebase`.
+- Apply schema files from a controlled deployment identity, never on application
   startup and never with a long-lived password in source control.
 
 ### WP-03 — Repository semantics
@@ -84,6 +81,10 @@ SDA-08 is complete when all of the following are true:
   `postgres_roles`, and `postgres_databases` in `bundle/lakebase.yml`.
 - Use a non-expiring branch and a read/write endpoint with a bounded autoscaling
   window and explicit scale-to-zero timeout.
+- Use the five-minute scale-to-zero timeout in dev, staging, and production;
+  this is a batch-oriented synthetic-data system rather than an always-on
+  request-serving application. Increase it only if a real latency requirement
+  appears.
 - Use the current user OAuth role in dev and a target-configured service-principal
   identity in staging/prod.
 - Make the database owner dependency explicit. If ownership changes, transfer
@@ -119,11 +120,11 @@ SDA-08 is complete when all of the following are true:
 | ST-12 | PostgreSQL translation | Exercise placeholders, table names, timestamps, JSONB | Domain results match SQLite semantics |
 | ST-13 | OAuth refresh | Fail first connect with expired token, succeed with fresh token | Provider is called again; only connection setup is retried |
 | ST-14 | Secret hygiene | Force connection failure containing a secret | Raised error does not expose the token |
-| ST-15 | Migration ordering | Apply versioned directory twice | One migration row exists; second pass is a no-op at the data level |
+| ST-15 | Schema ordering | Apply versioned directory twice | One schema-version row exists; second pass is a no-op at the data level |
 | ST-16 | Schema contract | Run `check_state_schema.py` and inspect required constraints | 11 tables, foreign keys, checks, indexes, and retry key are present |
 | ST-17 | Bundle contract | Validate dev/staging/prod and inspect resource summary | All targets resolve and all Lakebase resource types are present |
 | ST-18 | Live infrastructure | Deploy with `--profile sda`, list project/branch/endpoint/role/database, protected root, and snapshot schedule | Resources are READY/ACTIVE, the root branch is protected, and the schedule is configured |
-| ST-19 | Live migration | Generate a short-lived credential and apply `migrations/versions` | Migration recorded; all 11 operational tables exist |
+| ST-19 | Live schema deployment | Generate a short-lived credential and apply `schema/lakebase` | Schema recorded; all 11 operational tables exist |
 | ST-20 | Live repository CRUD | Connect with OAuth and execute request/run/plan/step/attempt/artifact/audit flow | Read-back matches writes; test rows are removed afterward |
 | ST-21 | Live scale behavior | Leave the endpoint idle past its five-minute timeout and reconnect with a fresh OAuth credential | The endpoint reports `IDLE` before the new connection, returns `ACTIVE` after it, and the database remains readable |
 | ST-22 | Cross-series Spark smoke | Run bundle jobs for metadata, profile, relationship, patterns, and scope | Jobs terminate successfully and produce governed evidence |
@@ -153,7 +154,7 @@ databricks postgres list-projects --profile sda -o json
 databricks postgres list-branches projects/<project> --profile sda -o json
 databricks postgres list-endpoints projects/<project>/branches/<branch> --profile sda -o json
 databricks postgres generate-database-credential <endpoint> --profile sda --ttl 600s -o json
-python scripts/apply_state_schema.py "$env:SDA_POSTGRES_DSN" --migrations-dir migrations/versions
+python scripts/apply_state_schema.py "$env:SDA_POSTGRES_DSN" --schema-dir schema/lakebase
 ```
 
 The recovery acceptance uses the same short-lived DSN. It first runs
@@ -162,7 +163,7 @@ with `source_branch` and the printed `source_branch_time`, reads the marker back
 and soft-deletes that temporary branch.
 
 After cleanup, `python scripts/check_sda08_live_state.py` verifies the 11-table
-schema, the applied migration rows, and zero disposable request rows without
+schema, the applied schema-version rows, and zero disposable request rows without
 printing the database credential.
 
 The Spark evidence jobs are run through the bundle, for example:
@@ -187,11 +188,8 @@ databricks bundle run -t dev analyze_scope --profile sda --params catalog=sample
   protected `production` branch, dev branch, primary endpoint, OAuth user role,
   `sda_state` database, and a daily seven-day snapshot schedule on the root
   `production` branch.
-- Migration: the versioned migration was reapplied idempotently and 11 `sda_*`
-  tables were verified directly through PostgreSQL; the reused `dev` branch
-  retains two content-addressed migration rows, one from the earlier
-  compatibility-schema run and one from the versioned migration; no live test
-  rows remained.
+- Schema files: the current schema was reapplied idempotently and 11 `sda_*`
+  tables were verified directly through PostgreSQL; no live test rows remained.
 - Live repository: request, run, plan, two step attempts, durable audit event,
   artifact reuse, lease renewal, and attempt completion passed.
 - Live Spark: `spark_contract_smoke`, `uc_metadata_reader`,
@@ -206,9 +204,9 @@ databricks bundle run -t dev analyze_scope --profile sda --params catalog=sample
   run-owned tables and left the shared integration schema intact.
 - Live recovery: after the configured five-minute idle window, the dev endpoint
   reported `IDLE`; a new OAuth connection reactivated it to `ACTIVE` and read
-  the migration table successfully. A point-in-time restore from `dev` created
+  the schema-version table successfully. A point-in-time restore from `dev` created
   a disposable root branch where the removed marker was present (`1` row) and
-  both migration rows were still present (`2` rows); the disposable branch was
+  the schema-version state was still present; the disposable branch was
   soft-deleted and the original `dev` marker count was `0`.
 
 The five skipped local tests are environment-dependent Spark tests. They are not

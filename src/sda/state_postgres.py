@@ -6,7 +6,7 @@ import json
 import os
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -36,9 +36,45 @@ class LakebaseConnectionConfig:
         if self.connect_timeout < 1:
             raise ValueError("connect_timeout must be positive")
 
+    @classmethod
+    def from_environment(
+        cls,
+        *,
+        environ: Mapping[str, str] | None = None,
+        token_variable: str = "DATABRICKS_TOKEN",
+    ) -> LakebaseConnectionConfig:
+        """Build non-secret connection settings from Databricks app/job variables.
+
+        Databricks Apps expose ``PGHOST``, ``PGDATABASE``, ``PGUSER``, and
+        ``PGSSLMODE`` for a Lakebase resource. The token remains lazy and is
+        supplied by ``token_variable`` so a reconnect can obtain a fresh token.
+        """
+
+        values = os.environ if environ is None else environ
+
+        def required(name: str) -> str:
+            value = values.get(name, "")
+            if not value.strip():
+                raise ValueError(f"missing Lakebase environment variable: {name}")
+            return value
+
+        timeout_text = values.get("PGCONNECT_TIMEOUT", "15")
+        try:
+            connect_timeout = int(timeout_text)
+        except ValueError as exc:
+            raise ValueError("PGCONNECT_TIMEOUT must be an integer") from exc
+        return cls(
+            host=required("PGHOST"),
+            database=required("PGDATABASE"),
+            user=required("PGUSER"),
+            token_provider=environment_token_provider(token_variable, environ=values),
+            sslmode=values.get("PGSSLMODE", "require"),
+            connect_timeout=connect_timeout,
+        )
+
 
 def environment_token_provider(
-    variable: str = "DATABRICKS_TOKEN", *, environ: dict[str, str] | None = None
+    variable: str = "DATABRICKS_TOKEN", *, environ: Mapping[str, str] | None = None
 ) -> TokenProvider:
     """Return a lazy token provider so credentials are refreshed per connection."""
 
