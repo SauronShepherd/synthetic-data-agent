@@ -10,8 +10,10 @@ This branch extends the governed Articles 04–05 foundation with relationship
 discovery, key validation, join evidence, and dependency-graph planning.
 
 The project does not yet claim a production-complete synthetic data service. Local generation
-is deterministic and bounded, while Databricks/Lakebase execution, large-scale validation,
-privacy review, and governed publication still require workspace-backed integration tests.
+is deterministic and bounded; the SDA-09 `sda` dev acceptance also verifies the Lakebase
+control plane and a disposable three-row Spark generation/validation path. Production-scale
+validation, privacy review, and governed publication still require broader workspace-backed
+integration tests.
 
 ## Current status
 
@@ -26,13 +28,16 @@ This branch now supports three execution modes:
   duplicate-row risk, with schema-versioned, raw-value-free findings.
 - Standalone Spark generation manifests containing the approved seed, output schema,
   fingerprints, receipt, and lineage; `--manifest-path` writes them atomically.
+- A bundle-deployed standalone Spark writer and Delta validation gate with bounded row-count
+  and required-column checks; the SDA-09 dev smoke removes its temporary tables after validation.
 - Controlled local noise profiles use deterministic default mutation rates of 1% (historical),
   5% (mild), 10% (QA), and 25% (stress). An explicit `budget` or `budget_rate` overrides the
   profile default; every result is immutable and carries a raw-value-free truth ledger.
 - SDA 09 records the workload-specific Lakebase decision in executable code and an ADR:
   Lakebase owns operational coordination state, while Unity Catalog and Delta own analytical
   evidence. `scripts/benchmark_state_store.py` provides a disposable connection and short-
-  transaction probe without claiming an apples-to-apples benchmark of unprovisioned alternatives.
+  transaction probe without claiming an apples-to-apples benchmark of unprovisioned alternatives;
+  the live dev acceptance records the same boundary and a bounded generator/validator smoke.
 
 Bundle validation and deployment are environment-dependent; local checks cover compilation and deterministic reader contracts. A successful run may still return an empty inventory when the configured catalog/schema scope does not contain visible matching tables.
 

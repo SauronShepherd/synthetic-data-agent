@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import re
 from dataclasses import replace
@@ -15,6 +16,7 @@ from sda.generation import (
     resolve_row_count,
     write_staging_rows,
 )
+from sda.job_entrypoints import generate_spark
 from sda.job_entrypoints.generate_spark import write_manifest
 from sda.planning import (
     ColumnGenerationSpec,
@@ -226,6 +228,12 @@ def test_generation_manifest_freezes_lineage_sequences() -> None:
     assert manifest.source_snapshot_ids == ("snapshot-1",)
     assert manifest.input_artifact_ids == ("artifact-1",)
     assert manifest.output_columns == (("id", "string", False),)
+
+
+def test_spark_generator_is_executable_as_a_databricks_entrypoint() -> None:
+    source = inspect.getsource(generate_spark)
+    assert 'if __name__ == "__main__":' in source
+    assert "delta.userMetadata" not in source
 
 
 def test_generation_manifest_writer_replaces_partial_output_atomically(tmp_path) -> None:

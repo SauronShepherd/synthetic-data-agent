@@ -280,7 +280,7 @@ def build() -> Path:
                 paragraph.paragraph_format.keep_with_next = True
                 metadata = doc.add_paragraph()
                 metadata.paragraph_format.space_after = Pt(15)
-                run = metadata.add_run("SDA series  ·  Article 09  ·  13 November 2026")
+                run = metadata.add_run("SDA series  ·  Article 09  ·  14 November 2026")
                 run.font.name = "Arial"
                 run.font.size = Pt(9)
                 run.font.bold = True

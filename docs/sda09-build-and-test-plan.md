@@ -1,9 +1,10 @@
 # SDA-09 build and test plan
 
 This plan turns the Lakebase selection into a reviewable, executable
-architecture decision. SDA-09 does not add synthetic row generation; it makes
-the storage boundary, workload probe, and revisit conditions explicit before
-the generator arrives in SDA-10.
+architecture decision. SDA-09 does not change synthetic-generation semantics;
+it makes the storage boundary, workload probe, and revisit conditions
+explicit, then verifies that the already-bounded Spark generation boundary is
+actually deployed and executable before Article 10 extends it.
 
 ## Completion contract
 
@@ -19,7 +20,9 @@ SDA-09 is complete for the dev acceptance boundary when:
 5. local contract, static, package, and bundle checks pass;
 6. the `sda` workspace verifies bundle state, schema idempotency, PostgreSQL
    CRUD, reconnect behavior, and the probe; and
-7. the article reports exactly those implemented and verified boundaries,
+7. the `sda` workspace runs the bounded standalone generator and its Delta
+   validation gate, then removes the disposable output and report tables; and
+8. the article reports exactly those implemented and verified boundaries,
    distinguishing optional product capabilities from evidence run here.
 
 ## Implementation map
@@ -31,6 +34,8 @@ SDA-09 is complete for the dev acceptance boundary when:
 | OAuth reconnect contract | `src/sda/state_postgres.py` | `tests/test_state_postgres.py` |
 | Workload probe | `scripts/benchmark_state_store.py`, `src/sda/benchmark.py` | `tests/test_benchmark.py`, live probe |
 | Full disposable lifecycle | `scripts/run_sda09_live_lifecycle.py` | live request/run/plan/step/attempt/artifact/audit/approval flow |
+| Bounded Delta generation | `src/sda/generation.py`, `src/sda/job_entrypoints/generate_spark.py` | `tests/test_generation.py`, deployed standalone generator smoke |
+| Generated-output validation | `src/sda/job_entrypoints/validate_generated_spark.py` | deployed three-row schema/count gate and disposable report cleanup |
 | Relational state boundary | `schema/lakebase/001_state_schema.sql` | `scripts/check_state_schema.py` |
 | Infrastructure boundary | `bundle/lakebase.yml` | bundle validation and contract checks |
 | Architecture record | `docs/adr/0004-lakebase-for-operational-state.md` | review against code and live evidence |
@@ -73,6 +78,14 @@ python scripts/run_sda09_live_lifecycle.py
 python scripts/benchmark_state_store.py --iterations 20 --warmup 3
 ```
 
+Run the deployed bounded generation path with an approved plan fingerprint
+computed from the same plan fields reconstructed by the job. Then validate
+the output against its expected row count and required `run_id` column. Use a
+disposable catalog/schema/table name and remove both tables after the run.
+The acceptance below used `workspace.sda_integration` and three rows bounded
+by five; the exact run parameters are recorded in the article without any
+credential material.
+
 The probe measures two operations:
 
 - `connect_and_ping`: a fresh PostgreSQL connection followed by `SELECT 1`,
@@ -87,9 +100,10 @@ measurement as fact.
 
 ## Recorded dev evidence
 
-The acceptance run used the `sda` profile on 13 November 2026. The deployed
-endpoint was observed in `IDLE` before the fresh-connection cycle and `ACTIVE`
-after it. The schema was applied twice, and the live state check reported:
+The control-plane acceptance used the `sda` profile on 13 November 2026. The
+deployed endpoint was observed in `IDLE` before the fresh-connection cycle and
+`ACTIVE` after it. The schema was applied twice, and the live state check
+reported:
 
 ```text
 sda_tables=11
@@ -109,6 +123,14 @@ These are one-run observations, not service-level objectives. They establish
 dev viability and reconnect behavior; they do not establish production
 capacity, cost, high availability, or a competitor benchmark.
 
+The follow-up `sda` generation acceptance on 14 November 2026 also completed
+the deployed standalone generator with `status=complete` and
+`generation-manifest-v1`. The validator observed 3 rows against an expected 3,
+passed the required `run_id` schema check, and returned
+`technical_disposition=PASS`. Afterward, both temporary tables were dropped
+through the SQL API; a Unity Catalog listing confirmed
+`sda09_disposable_tables=0`.
+
 ## Cross-series checks
 
 Run the existing SDA-04 through SDA-08 Databricks acceptance jobs after the
@@ -120,7 +142,8 @@ only their compact operational references.
 ## Definition of done
 
 The implementation is ready for publication when the local checks are green,
-the `sda` dev checks are recorded with timestamps and disposable-row cleanup,
+the `sda` dev checks are recorded with timestamps and disposable-row/table
+cleanup, the bounded generator and validator have passed in the workspace,
 the ADR and article agree with the live evidence, and the article explicitly
 marks Unity Catalog registration, external PostgreSQL benchmarking, production
 service-principal permissions, HA, and cross-region recovery as unverified or

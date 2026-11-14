@@ -1,4 +1,10 @@
-"""Databricks Spark entrypoint for bounded standalone generation."""
+"""Databricks Spark entrypoint for bounded standalone generation.
+
+This module is deployed as a first-class workspace file by the Databricks
+bundle. Keeping the orchestration boundary here makes the live acceptance
+test exercise the same approved-plan and Delta-output path used by the
+standalone generator job, rather than an untracked notebook-only shortcut.
+"""
 
 from __future__ import annotations
 
@@ -98,9 +104,7 @@ def main() -> None:
     frame = spark.createDataFrame([{"run_id": args.run_id, **row} for row in rows])
     frame.createOrReplaceTempView("__sda_generated_output")
     spark.sql(
-        f"CREATE OR REPLACE TABLE {output.quoted} USING DELTA "
-        "TBLPROPERTIES ('delta.userMetadata' = "
-        f"'sda-run-id={args.run_id};plan={plan.plan_fingerprint}') AS "
+        f"CREATE OR REPLACE TABLE {output.quoted} USING DELTA AS "
         "SELECT * FROM __sda_generated_output"
     )
     receipt = receipt_for(plan, rows)
@@ -118,3 +122,7 @@ def main() -> None:
     if args.manifest_path:
         write_manifest(args.manifest_path, result)
     print(json.dumps(result, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()

@@ -159,7 +159,7 @@ This is the fundamental reason for the choice. Autoscaling, scale-to-zero, branc
 
 ### Less application plumbing
 
-Databricks Apps can add a Lakebase resource. Databricks creates a service principal, a matching PostgreSQL role, and injects connection settings such as `PGHOST`, `PGDATABASE`, `PGUSER`, and `PGSSLMODE`. The [Lakebase Apps documentation](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/lakebase) describes the resource boundary and the permissions it grants.
+Databricks Apps can add a Lakebase resource. The App uses its service principal; Databricks creates a matching PostgreSQL role and injects connection settings such as `PGHOST`, `PGDATABASE`, `PGUSER`, and `PGSSLMODE`. The [Lakebase Apps documentation](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/lakebase) describes the resource boundary and the permissions it grants.
 
 The SDA’s `LakebaseConnectionConfig.from_environment` consumes those non-secret settings. Token acquisition remains lazy, so a new connection can ask for a fresh credential instead of holding a token forever.
 
@@ -227,7 +227,7 @@ The benchmark says Lakebase is fast enough for the workload we measured. The arc
 
 ## Make the decision an architectural contract
 
-An architecture decision is more useful when it can be tested. SDA-09 adds four concrete contracts around the decision.
+An architecture decision is more useful when it can be tested. SDA-09 adds five concrete contracts around the decision.
 
 ### The storage boundary is executable
 
@@ -266,6 +266,12 @@ disposable_rows=0
 
 The live lifecycle completed with `live_repository_lifecycle=OK`. The cleanup deletes child history before parent rows, including transition events. The final state check returned zero disposable request rows.
 
+### The generation boundary is bounded and testable
+
+SDA-09 does not move generated rows into Lakebase, but it does make the existing Delta generation boundary executable. `src/sda/generation.py` enforces approved plans, deterministic seeds, row-count budgets, schema contracts, receipts, and generation manifests. The Databricks bundle deploys `src/sda/job_entrypoints/generate_spark.py` as the standalone Spark writer and `src/sda/job_entrypoints/validate_generated_spark.py` as its bounded technical gate. The writer reconstructs the approved plan, verifies its fingerprint, writes a Delta table, and emits a manifest with the run, plan, source snapshot, artifact, receipt, and output fingerprint. The validation job checks the required schema and expected row count, then persists a versioned validation report in Delta.
+
+On 14 November 2026, the `sda` dev acceptance ran that path with an approved three-row plan bounded by five rows. The generator completed with `status=complete` and `generation-manifest-v1`; the validator completed with `technical_disposition=PASS`, observing 3 rows against an expected 3 and the required `run_id` column. The two temporary Delta tables were then dropped through the SQL API, and Unity Catalog confirmed `sda09_disposable_tables=0`. This is a deployment and contract smoke test, not a production-scale capacity claim or a full Article 10 relational-generation scenario.
+
 ## Honest caveats
 
 Native integration is not the same as correctness. Lakebase still has product-specific behavior and limits that must be checked against production requirements.
@@ -280,7 +286,7 @@ This branch does not claim:
 - region availability for every future deployment; or
 - a production latency or cost SLA.
 
-Those are not hidden failures. They are explicit revisit conditions in [ADR 0004](adr/0004-lakebase-for-operational-state.md): unavailable region, unsupported extension or network control, mandatory independent ownership, failed latency/availability objectives, unmet recovery objectives, consumers moving outside Databricks, or material cost and connection limits.
+Those are not hidden failures. They are explicit revisit conditions in [ADR 0004](https://github.com/SauronShepherd/synthetic-data-agent/blob/SDA-09/docs/adr/0004-lakebase-for-operational-state.md): unavailable region, unsupported extension or network control, mandatory independent ownership, failed latency/availability objectives, unmet recovery objectives, consumers moving outside Databricks, or material cost and connection limits.
 
 External PostgreSQL should win if those constraints matter more than platform integration. Delta should continue to win for analytical evidence. The decision is not a logo preference and it is not permanent by ceremony.
 
@@ -292,8 +298,4 @@ Lakebase matched that workload while staying close to the Databricks application
 
 The benchmark mattered because Lakebase still had to meet the workload’s latency and reconnect requirements. Speed established viability. The architecture established usefulness.
 
-The agent now has governed evidence, durable memory, and a database selected for the work rather than the logo.
-
-It still has not generated a synthetic row.
-
-That changes next. In Article 10, we turn the approved profiles, relationships, patterns, and plans into the first synthetic tables while preserving the distributions and null behavior that made the source data believable.
+The agent now has governed evidence, durable memory, and a database selected for the work rather than the logo. The bounded generator and validator are deployed and verified; Article 10 can extend that path into full relational generation while preserving the distributions and null behavior that make the source data believable.
