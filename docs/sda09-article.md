@@ -195,12 +195,12 @@ The repository now contains `scripts/benchmark_state_store.py`. It is intentiona
 
 The probe uses a unique request marker and deletes it in a `finally` block. It never prints the DSN or credential. The benchmark is not a synthetic-data throughput benchmark, and it is not a controlled three-way comparison because no external PostgreSQL service or Delta control-plane implementation was provisioned for the test.
 
-On 13 November 2026, against the deployed `dev` endpoint with a 0.5–1.0 CU autoscaling range and a 300-second suspend timeout, 20 measured samples followed three warm-up samples:
+On 17 November 2026, against the deployed `dev` endpoint with a 0.5–1.0 CU autoscaling range and a 300-second suspend timeout, 20 measured samples followed three warm-up samples:
 
 | Operation | Samples | p50 | p95 | Maximum |
 |---|---:|---:|---:|---:|
-| Fresh connection plus `SELECT 1` | 20 | 1,079.9 ms | 1,135.6 ms | 1,139.6 ms |
-| Request insert/select/delete transaction | 20 | 1,321.1 ms | 1,381.2 ms | 1,519.2 ms |
+| Fresh connection plus `SELECT 1` | 20 | 1,090.7 ms | 1,135.7 ms | 1,138.5 ms |
+| Request insert/select/delete transaction | 20 | 1,337.1 ms | 1,379.7 ms | 1,468.2 ms |
 
 Those figures are observations of one workspace, endpoint state, network path, and run. They are not an SLA, and they should not be compared with a number measured on another platform under different conditions.
 
@@ -270,7 +270,7 @@ The live lifecycle completed with `live_repository_lifecycle=OK`. The cleanup de
 
 SDA-09 does not move generated rows into Lakebase, but it does make the existing Delta generation boundary executable. `src/sda/generation.py` enforces approved plans, deterministic seeds, row-count budgets, schema contracts, receipts, and generation manifests. The Databricks bundle deploys `src/sda/job_entrypoints/generate_spark.py` as the standalone Spark writer and `src/sda/job_entrypoints/validate_generated_spark.py` as its bounded technical gate. The writer reconstructs the approved plan, verifies its fingerprint, writes a Delta table, and emits a manifest with the run, plan, source snapshot, artifact, receipt, and output fingerprint. The validation job checks the required schema and expected row count, then persists a versioned validation report in Delta.
 
-On 14 November 2026, the `sda` dev acceptance ran that path with an approved three-row plan bounded by five rows. The generator completed with `status=complete` and `generation-manifest-v1`; the validator completed with `technical_disposition=PASS`, observing 3 rows against an expected 3 and the required `run_id` column. The two temporary Delta tables were then dropped through the SQL API, and Unity Catalog confirmed `sda09_disposable_tables=0`. This is a deployment and contract smoke test, not a production-scale capacity claim or a full Article 10 relational-generation scenario.
+On 17 November 2026, the `sda` dev acceptance ran that path with an approved three-row plan bounded by five rows. The generator completed with `status=complete` and `generation-manifest-v1`; the validator completed with `technical_disposition=PASS`, observing 3 rows against an expected 3 and the required `run_id` column. The two temporary Delta tables were then dropped through the SQL API, and Unity Catalog confirmed `sda09_disposable_tables=0`. This is a deployment and contract smoke test, not a production-scale capacity claim or a full Article 10 relational-generation scenario.
 
 ## Honest caveats
 

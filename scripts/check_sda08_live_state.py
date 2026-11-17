@@ -5,6 +5,12 @@ from __future__ import annotations
 import argparse
 import os
 
+DISPOSABLE_REQUEST_PATTERNS = (
+    "sda08-restore-%",
+    "sda09-live-%",
+    "live-%",
+)
+
 
 def inspect_state(dsn: str) -> tuple[int, int, int]:
     """Return `(sda_tables, schema_versions, disposable_rows)` for a live database."""
@@ -24,7 +30,8 @@ def inspect_state(dsn: str) -> tuple[int, int, int]:
         schema_versions = int(cursor.fetchone()[0])
         cursor.execute(
             "SELECT count(*) FROM sda_generation_requests "
-            "WHERE request_id LIKE 'sda08-restore-%' OR request_id LIKE 'live-%'"
+            "WHERE request_id LIKE ANY(%s)",
+            (list(DISPOSABLE_REQUEST_PATTERNS),),
         )
         disposable_rows = int(cursor.fetchone()[0])
     return sda_tables, schema_versions, disposable_rows

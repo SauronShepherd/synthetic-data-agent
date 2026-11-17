@@ -100,7 +100,7 @@ measurement as fact.
 
 ## Recorded dev evidence
 
-The control-plane acceptance used the `sda` profile on 13 November 2026. The
+The control-plane acceptance used the `sda` profile on 17 November 2026. The
 deployed endpoint was observed in `IDLE` before the fresh-connection cycle and
 `ACTIVE` after it. The schema was applied twice, and the live state check
 reported:
@@ -116,14 +116,14 @@ warm-up samples and 20 measured samples, the probe reported:
 
 | Operation | p50 | p95 | Maximum |
 | --- | ---: | ---: | ---: |
-| Fresh connection plus `SELECT 1` | 1,079.9 ms | 1,135.6 ms | 1,139.6 ms |
-| Request insert/select/delete transaction | 1,321.1 ms | 1,381.2 ms | 1,519.2 ms |
+| Fresh connection plus `SELECT 1` | 1,090.7 ms | 1,135.7 ms | 1,138.5 ms |
+| Request insert/select/delete transaction | 1,337.1 ms | 1,379.7 ms | 1,468.2 ms |
 
 These are one-run observations, not service-level objectives. They establish
 dev viability and reconnect behavior; they do not establish production
 capacity, cost, high availability, or a competitor benchmark.
 
-The follow-up `sda` generation acceptance on 14 November 2026 also completed
+The follow-up `sda` generation acceptance on 17 November 2026 also completed
 the deployed standalone generator with `status=complete` and
 `generation-manifest-v1`. The validator observed 3 rows against an expected 3,
 passed the required `run_id` schema check, and returned
