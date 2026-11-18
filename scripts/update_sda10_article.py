@@ -3,7 +3,7 @@ from pathlib import Path
 from docx import Document
 
 SOURCE = Path(r"C:\ANGEL\Personal\Articles\SDA\🤖 SDA 10 Generating Synthetic Tables with Realistic Distributions and Null Behavior.docx")
-OUTPUT = SOURCE.with_name(SOURCE.stem + " - Revised v5.docx")
+OUTPUT = SOURCE.with_name(SOURCE.stem + " - Revised v6.docx")
 
 REPLACEMENTS = {
     "🤖 SDA 10: Generating Synthetic Tables with Realistic Distributions and Null Behavior":
@@ -16,6 +16,8 @@ REPLACEMENTS = {
         "11. Tested Execution Flow",
     "14. Reproducibility, Retries, and State":
         "14. Reproducibility, Reruns, and Current State",
+    "14.2 Make Retries Idempotent":
+        "14.2 Define the Current Rerun Policy",
     "In this article, we build synthetic_data_generator v1: a deterministic Spark tool that creates a standalone synthetic table at the requested scale while preserving numerical distributions, categorical frequencies, long tails, timestamp behaviour, string formats, and approved null patterns.":
         "In this article, we build synthetic_data_generator v1: a deterministic, bounded Databricks job that creates a standalone synthetic table from an approved plan. The deployed Databricks path exercises reproducible identifiers, bounded numeric ranges, simple dates and timestamps, format signatures, and deterministic prefixed strings. Local package tests additionally cover empirical samples, weighted categories, and global null masks; those hooks are not claimed as live Databricks behavior here.",
     "This is the first useful dataset—not the finished system. Matching individual distributions can still produce impossible rows, and multi-table referential integrity comes next.":
@@ -47,7 +49,7 @@ REPLACEMENTS = {
     "A retry with the same parameters is currently a new job attempt and must be treated as a rerun, not as proof of artifact reuse. The output policy is explicit replacement of the run-scoped table; cross-system repair is not implemented in v1. Append and artifact-reuse policies are not part of the tested contract. It must not append another full dataset or create unrelated tables merely because an acknowledgement failed.":
         "A retry with the same parameters is currently a new job attempt and must be treated as a rerun, not as proof of artifact reuse. The output policy is explicit replacement of the run-scoped table; cross-system repair is not implemented in v1. Append and artifact-reuse policies are not part of the tested contract.",
     "The values are new, the row count is controlled, numerical columns preserve their shape and tails, categories retain their weights, timestamps follow observed patterns, strings keep their structure, and nulls appear according to the approved plan.":
-        "The values are new, the row count is controlled, deterministic identifiers and simple formats are reproducible, bounded numeric and timestamp strategies execute, and global null masks can be applied according to the approved plan. Full distributional, temporal, conditional-null, privacy, and multi-table claims remain outside this v1 milestone.",
+        "The values are new, the row count is controlled, deterministic identifiers and simple formats are reproducible, and bounded numeric and timestamp strategies execute in the tested Databricks example. The local package can apply global null masks, but the live example did not exercise a nullable column. Full distributional, temporal, conditional-null, privacy, and multi-table claims remain outside this v1 milestone.",
     "The generated rows and detailed manifest remain in Unity Catalog and Delta. Lakebase stores the mutable run state, approval history, status, and artifact references needed to locate, explain, retry, or invalidate the result. It should not become a second analytical store.":
         "The tested job writes generated rows to the configured Unity Catalog Delta table and prints a compact receipt and manifest. It does not persist the manifest in Delta or register run state in Lakebase; those are future integrations.",
     "It may write only to configured temporary or synthetic-output schemas, preferably using run-specific targets. It must never overwrite or append to a source table, and a completed generation step must remain awaiting validation, not approved for use.":
