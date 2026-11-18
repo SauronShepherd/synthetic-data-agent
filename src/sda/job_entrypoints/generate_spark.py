@@ -66,20 +66,9 @@ def write_manifest(path: str, payload: dict[str, Any]) -> None:
         raise
 
 
-def main() -> None:
-    from pyspark.sql import SparkSession
-
-    args = parse_args()
-    if args.approved.lower() != "true":
-        raise SystemExit("generation requires approved=true")
-    if args.row_count < 0 or args.max_rows < 1 or args.row_count > args.max_rows:
-        raise SystemExit("row count exceeds generation bounds")
-    try:
-        raw_columns = json.loads(args.columns_json)
-        columns = tuple(ColumnGenerationSpec(**item) for item in raw_columns)
-    except (TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise SystemExit("columns-json must be a JSON list of valid column specifications") from exc
-    plan = GenerationPlan(
+def build_generation_plan(args: argparse.Namespace, columns: tuple[ColumnGenerationSpec, ...]) -> GenerationPlan:
+    """Reconstruct the exact approved plan represented by job parameters."""
+    return GenerationPlan(
         plan_id=args.plan_id,
         plan_version=1,
         request_id=args.request_id,
@@ -94,9 +83,26 @@ def main() -> None:
         intended_use=args.intended_use,
         privacy_policy_ref=args.privacy_policy_ref,
         budgets={"max_rows": args.max_rows},
+        requested_row_count=args.row_count,
         status=PlanStatus.APPROVED,
         plan_fingerprint=args.plan_fingerprint,
     )
+
+
+def main() -> None:
+    from pyspark.sql import SparkSession
+
+    args = parse_args()
+    if args.approved.lower() != "true":
+        raise SystemExit("generation requires approved=true")
+    if args.row_count < 0 or args.max_rows < 1 or args.row_count > args.max_rows:
+        raise SystemExit("row count exceeds generation bounds")
+    try:
+        raw_columns = json.loads(args.columns_json)
+        columns = tuple(ColumnGenerationSpec(**item) for item in raw_columns)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise SystemExit("columns-json must be a JSON list of valid column specifications") from exc
+    plan = build_generation_plan(args, columns)
     rows = generate_rows(plan, row_count=args.row_count)
     spark = SparkSession.getActiveSession() or SparkSession.builder.getOrCreate()
     output = QualifiedName.parse(args.output_table)

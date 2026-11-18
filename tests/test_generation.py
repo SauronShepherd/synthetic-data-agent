@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 import re
+from argparse import Namespace
 from dataclasses import replace
 
 import pytest
@@ -17,7 +18,7 @@ from sda.generation import (
     write_staging_rows,
 )
 from sda.job_entrypoints import generate_spark
-from sda.job_entrypoints.generate_spark import write_manifest
+from sda.job_entrypoints.generate_spark import build_generation_plan, write_manifest
 from sda.planning import (
     ColumnGenerationSpec,
     CrossColumnRule,
@@ -234,6 +235,28 @@ def test_spark_generator_is_executable_as_a_databricks_entrypoint() -> None:
     source = inspect.getsource(generate_spark)
     assert 'if __name__ == "__main__":' in source
     assert "delta.userMetadata" not in source
+
+
+def test_databricks_plan_reconstruction_includes_requested_row_count() -> None:
+    current = plan()
+    args = Namespace(
+        plan_id=current.plan_id,
+        request_id=current.request_id,
+        source_snapshot_ids=",".join(current.source_snapshot_ids),
+        input_artifact_ids=",".join(current.input_artifact_ids),
+        target_catalog=current.target_catalog,
+        target_schema=current.target_schema,
+        tables=",".join(current.tables),
+        seed=current.seed,
+        intended_use=current.intended_use,
+        privacy_policy_ref=current.privacy_policy_ref,
+        max_rows=3,
+        row_count=3,
+        plan_fingerprint=current.plan_fingerprint,
+    )
+    rebuilt = build_generation_plan(args, current.columns)
+    assert rebuilt.plan_fingerprint == current.plan_fingerprint
+    assert rebuilt.requested_row_count == 3
 
 
 def test_generation_manifest_writer_replaces_partial_output_atomically(tmp_path) -> None:
