@@ -56,6 +56,15 @@ def main() -> None:
                 run.text = ""
             if paragraph.runs:
                 paragraph.runs[0].text = replacement_text
+    for paragraph in document.paragraphs:
+        if paragraph.text == "2. Define the v1 Contract and Future Extensions":
+            note = document.add_paragraph(
+                "Reading boundary: present-tense statements in this article describe the tested v1. "
+                "Requirements expressed as should or must are explicitly design targets for later milestones "
+                "unless the validation section states that they were executed in Databricks."
+            )
+            paragraph._p.addnext(note._p)
+            break
     document.add_heading("Validation status and scope", level=1)
     document.add_paragraph(
         "The implementation was deployed and executed with the Databricks profile sda. "
