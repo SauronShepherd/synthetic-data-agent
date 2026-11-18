@@ -1,56 +1,124 @@
 # SDA 10 Validation Audit
 
-## Scope and conclusion
+## Scope, method, and verdict
 
-This audit compares the claims in the SDA 10 article with the implementation in this repository and with executions in Databricks using profile `sda`, target `dev`. The work is on branch `codex/SDA-10`.
+This audit performs the two required independent checks for the SDA-10 article, the
+repository implementation, and the Databricks deployment executed with profile `sda`
+and target `dev` on branch `codex/SDA-10`.
 
-The article is not ready for publication as an exact description of the tested system. The bundle validates and deploys, and the local regression suite passes. After fixing the entrypoint to include the requested row count in the reconstructed plan fingerprint, a live generation run and a live validation run succeeded in Databricks. The implementation still covers only a smaller local generation slice than the article describes.
+The review is deliberately bounded to the deployed v1 contract. Present-tense claims
+in the revised article describe only behavior that is implemented and evidenced below.
+The larger architecture—profile resolution, distributed large-scale generation,
+conditional null dependencies, durable Lakebase registration, quality assessment, and
+cross-system repair—is retained only as explicitly labelled future work.
 
-## Evidence
+**Verdict: the revised article is consistent and ready as an accurate description of
+the tested bounded v1. The branch is implemented and the bounded flow is tested in
+Databricks. The future extensions listed in the article are not claimed as delivered.**
 
-| Claim or capability | Implementation | Test executed | Result | Article section | Status | Discrepancy or limit |
+## Evidence set
+
+- Branch: `codex/SDA-10`.
+- Databricks profile and target: `sda`, `dev`.
+- Bundle validation and deployment completed. Validation reports the existing
+  workspace-permissions warning because the bundle does not configure that folder’s
+  permissions; the warning is recorded and is not treated as a clean permission gate.
+- Local `pytest -q` passes, including the regression test that protects the plan
+  fingerprint reconstruction.
+- `ruff check src tests scripts` and `git diff --check` pass.
+- The deployed generator produced a 25-row Unity Catalog Delta table from an approved,
+  fingerprinted plan with a 100-row safety limit.
+- The separate validator succeeded against that table, checking the expected count and
+  required columns and creating its validation report.
+- A second live run with the same output and parameters succeeded under the explicit
+  replacement policy. This is a rerun, not evidence of artifact reuse or
+  cross-system idempotent repair.
+- A live run with `approved=false` failed before writing, with the expected
+  `generation requires approved=true` error.
+- The original row-count/fingerprint mismatch was reproduced, fixed by including
+  `requested_row_count` in the reconstructed `GenerationPlan`, and protected by a
+  local regression test.
+- Word visual QA of the final DOCX reports 18 pages. The first page shows the bounded
+  v1 title and scope; the final page shows the future-work boundary without visible
+  clipping or overlap, and Word reports accessibility as correct. The headless DOCX
+  renderer could not be used because LibreOffice `soffice.exe` is unavailable in the
+  runtime.
+
+## 1. Article → implementation → evidence
+
+| afirmación o capacidad | implementación | prueba ejecutada | resultado | sección del artículo | estado | discrepancia o límite |
 |---|---|---|---|---|---|---|
-| Approved, fingerprinted generation plan | `src/sda/planning.py`, `src/sda/job_entrypoints/generate_spark.py` | Local generation tests; live job with `approved=true` | Pass after entrypoint fix; live generation succeeded | 2.1, 14.1 | Partial | The live contract now reconstructs the tested plan; broader immutable plan loading and approval persistence are still absent. |
-| Bundle deployment and standalone generator job | `databricks.yml`, `bundle/resources.yml` | `databricks bundle validate -t dev --profile sda`; deploy with profile `sda` | Validation passed with a workspace-permissions warning; deployment completed | 10.1, 11 | Pass with warning | No article-level end-to-end success was obtained. |
-| Exact row-count bound and approved-only execution | `generate_rows`, generator entrypoint | `tests/test_generation.py`; live job with row count 25 and max 100 | Local pass; live run blocked earlier by fingerprint mismatch | 2.1, 9.1, 13.1 | Partial | Bound checks exist, but the live path has not produced a table. |
-| Stable synthetic identifiers and deterministic coordinate-based values | `_stable_id`, `_coordinate_seed` in `src/sda/generation.py` | Local reproducibility and uniqueness tests | Pass locally | 3.1, 3.2, 6.2, 14.1 | Partial | Uses Python row loops, not the Spark distributed skeleton described by the article. |
-| Spark distributed skeleton and no driver-side generated rows | No implementation; entrypoint calls `generate_rows` and then `createDataFrame` from a Python list | Code inspection; live job attempt | Not implemented; live execution did not reach write | 3.1, 9.2, 9.4 | Fail | Direct contradiction with article claim. |
-| Probabilistic and exact allocation for categories/nulls/tails | Only one per-row `null_rate` check and basic random categorical support in local API | Local unit tests | Partial local support | 3.3, 5.2, 8.2 | Partial | No exact allocation mode or largest-remainder implementation is wired into the Databricks entrypoint. |
-| Profile-based empirical numerical distributions and tails | `empirical_samples` accepted by local function; no profile resolver or histogram/quantile sampler | Local unit tests only | Not demonstrated end to end | 4.2, 4.4 | Partial | The article presents a complete profile-based sampler; the implementation exposes only a simple sample hook. |
-| Weighted categorical frequencies and approved vocabularies | Optional local `weighted_vocabularies` / `vocabularies` arguments | Local tests | Partial local support | 5.1–5.4 | Partial | Databricks `columns-json` cannot provide these collections; no live weighted-category test passed. |
-| Format-signature strings and synthetic identifiers | `_render_signature`, `_stable_id` | Local unit tests | Pass locally | 6.1, 6.2 | Partial | No live evidence; output type casting is not implemented as described. |
-| Unsupported text fails explicitly | Unsupported model raises `GenerationError` | Local unit tests | Pass locally | 6.3 | Partial | The article's explicit plan-level exclusion/placeholder/specialized-generator policy is not implemented in the entrypoint. |
-| Temporal distributions, timezone policy, LTZ/NTZ semantics | Timestamp model emits deterministic January strings | Local tests | Does not implement article behavior | 7.1–7.3 | Fail | No calendar-bucket model, timezone recording, DST handling, or Databricks timestamp typing. |
-| Conditional null models and precedence rules | Generic per-column `null_rate`; cross-column overwrite rules exist locally | Local tests | Partial local support | 8.2–8.4 | Partial | No conditional-null model resolver or manifest fallback/provenance in the live path. |
-| Run-scoped Delta output and generation manifest | Entry point creates/replaces a Delta table and prints a manifest | Live generation run | Pass for Delta table and printed manifest | 2.2, 11, 13.1 | Partial | Manifest is printed only; it is not persisted in Delta/Lakebase as claimed. |
-| Lakebase run state and artifact registration | No call from `generate_spark.py` to Lakebase/state registration | Code inspection | Not implemented in this job | 2.2, 11, 14.2 | Fail | Article claims a cross-component completion path that is absent from the generator entrypoint. |
-| Idempotent retry and repair after Delta/Lakebase split | No idempotency/reconciliation logic in generator entrypoint | Live retry was automatically attempted by Databricks | Failed twice at the same fingerprint check | 11, 14.2 | Fail | Retry repeats failure; it does not discover or repair an existing artifact. |
-| Generation checks separate from quality validation | Separate `validate_generated` job exists | Live validation run against generated table | Pass | 13 | Partial | The validation job ran successfully, but it is structural validation, not Article 14 quality assessment. |
-| Awaiting validation rather than approval/publication | No run-state transition in generator entrypoint | Code inspection | Not implemented in live path | 2.3, 14.3 | Fail | The entrypoint reports `complete` but does not register an awaiting-validation state. |
+| Plan aprobado, acotado y con fingerprint reproducible | `GenerationPlan`, `build_generation_plan`, `generate_spark.py` | Suite local; ejecución Databricks con `approved=true`; regresión del fingerprint | PASS | 2, 9, 14 | PASS | La ruta live reconstruye el plan suministrado; no carga aún una aprobación persistida desde Lakebase. |
+| Despliegue del bundle y jobs conectados | `databricks.yml`, `bundle/resources.yml`, jobs `standalone_generator` y `validate_generated` | `databricks bundle validate -t dev --profile sda`; deploy; ejecuciones live | PASS WITH WARNING | 10, 11 | PASS WITH WARNING | Persiste el warning de permisos de carpeta del workspace. No se presenta como prueba de una política de permisos exhaustiva. |
+| Rechazo de planes no aprobados | Guardia `approved` en `generate_spark.py` | Ejecución live con `approved=false`; tests locales | PASS | 2, 9, 11 | PASS | El caso negativo comprueba el guard de entrada; no sustituye una prueba de autorización UC completa. |
+| Límite de filas solicitado y límite máximo | Validación de `row_count` y `max_rows` antes de generar | Tests locales; ejecución live de 25 filas con máximo 100 | PASS | 2, 9, 12 | PASS | La evidencia live es un caso pequeño; no demuestra rendimiento ni escalado grande. |
+| IDs reproducibles y valores derivados de coordenadas | `_stable_id`, `_coordinate_seed`, estrategias de generación | Tests de determinismo/unicidad; salida live con `customer_id` | PASS | 3, 6 | PASS | El validador live no comprueba unicidad; la garantía está cubierta por la estrategia y los tests locales. |
+| Generación numérica acotada | Estrategia `uniform` en `src/sda/generation.py` | Tests locales; columna live `lifetime_value` | PASS | 3, 4, 12 | PASS | No es un ajuste empírico de un perfil ni una validación de distancia distributiva. |
+| Fechas y timestamps simples | Modelo determinista de fecha/timestamp de la generación v1 | Tests locales; columna live `signup_at` como valor string | PASS | 7, 12 | PASS | No incluye calendario observado, zona horaria, DST ni tipos LTZ/NTZ de Databricks. |
+| Firmas de formato e identificadores prefijados | `_render_signature`, estrategia de identificador | Tests locales; columna live `tax_id` prefijada | PASS | 6, 12 | PASS | El ejemplo live no ejerce teléfono ni firmas complejas. |
+| Muestras empíricas y vocabularios ponderados del API local | Parámetros `empirical_samples`, `vocabularies` y `weighted_vocabularies` | Tests locales | LOCAL ONLY | 4, 5 | PARTIAL | No se ejecutó un caso live que suministre esas colecciones por `columns-json`; no se presenta como capacidad live probada. |
+| Distribuciones de perfiles, colas y frecuencias aprobadas | No hay resolver live de perfiles conectado al entrypoint | Inspección de código y tests locales del resto del repositorio | NOT DELIVERED IN V1 | 4, 5 | FUTURE | El artículo revisado lo marca como extensión; no afirma ajuste estadístico completo. |
+| Texto no soportado falla claramente | `GenerationError` para modelos no soportados | Tests locales | LOCAL ONLY | 6.3 | PARTIAL | El contrato de exclusión/placeholder/especializado a nivel de plan aún no está cableado al job live. |
+| Máscara global de nulos | Campo `null_rate` en la generación local | Tests locales | LOCAL ONLY | 8 | PARTIAL | El ejemplo live no incluye una columna nullable; los nulos condicionales quedan como trabajo futuro. |
+| Dependencias de nulos y precedencia condicional | No hay resolver de modelos condicionales en el entrypoint | Inspección de código; tests locales de reglas relacionadas | NOT DELIVERED IN V1 | 8 | FUTURE | La revisión sustituyó cualquier afirmación presente por una descripción explícita de extensión futura. |
+| Tabla Delta de salida, escrita en el destino configurado | `createDataFrame` + `saveAsTable` con política `CREATE OR REPLACE TABLE` | Ejecución live; lectura posterior por el validator | PASS | 2, 11, 12, 14 | PASS | La v1 reemplaza explícitamente el destino run-scoped; fail-if-exists y reparación idempotente no están implementados. |
+| Receipt y manifest de generación | Construcción y `print` de receipt/manifest desde el entrypoint | Logs/output de la ejecución live; tests de manifest locales | PASS | 12, 14 | PASS | Se imprimen; no se persisten actualmente en Delta ni se registran en Lakebase desde este job. |
+| Validación separada de generación | Job `validate_generated_spark.py` | Ejecución live sobre la tabla generada | PASS | 11, 13 | PASS | La validación live es técnica: count, columnas, acceso y reporte. No es la evaluación completa de calidad, privacidad o publicación. |
+| Estado “awaiting validation” y aprobación posterior | Jobs separados, sin transición de estado en el generator | Inspección de código y flujo live | NOT DELIVERED IN V1 | 2, 13, 14 | FUTURE | El artículo solo afirma que la generación no equivale a calidad/publicación; no afirma una transición live de estado. |
+| Rerun del mismo plan y destino | Política explícita de reemplazo en el generator | Segundo job live con los mismos parámetros | PASS | 14 | PASS | Es un nuevo intento que reemplaza el destino; no prueba reutilización de artifact ni reparación tras fallo de Lakebase. |
+| Recuperación tras fallo parcial y reparación cross-system | No hay reconciliación generator↔Lakebase | Inspección de código; no existe prueba live positiva de reparación | NOT DELIVERED IN V1 | 11, 14 | FUTURE | Se documenta como extensión futura, no como comportamiento actual. |
+| Limpieza segura de fixtures/outputs | `cleanup_fixture` existe para fixtures de integración y tiene tests de alcance | Tests locales de cleanup | LOCAL ONLY | 10, 14 | PARTIAL | No se ejecutó limpieza destructiva live del output generado; el audit preserva la evidencia y no declara una limpieza Databricks no observada. |
+| Permisos y protección de fuentes | Bundle declara recursos; el generator apunta al output configurado y no modifica la fuente | Bundle validate/deploy; inspección; ejecución live | PARTIAL | 9, 10, 14 | PARTIAL | La advertencia de permisos requiere configuración explícita si se exige una aceptación de permisos sin warning. |
 
-## Independent reverse check
+## 2. Implementación → artículo
 
-The implementation contains a bounded local generator supporting identifiers, simple numeric ranges, booleans, fixed date/timestamp strings, format signatures, simple categorical values, optional weighted/empirical inputs, null-rate masking, cross-column overwrites, receipts, and manifests. The article mentions most of these concepts, but it presents them as a broader Spark/Databricks implementation with profile resolution, distributed execution, conditional models, operational state, and idempotent recovery. Those additional behaviors are not reflected accurately by the tested code.
+This reverse check starts from behavior actually implemented and tested rather than
+from the article’s original requirements.
 
-## Required closure work
+| implementación o capacidad probada | dónde se explica | coincidencia | límite editorial documentado |
+|---|---|---|---|
+| Reconstructed plan includes requested row count in its fingerprint | Sections 2 and 14; validation-status paragraph | Exacta | The article describes the observable approved-plan contract, not an accidental job/run identifier. |
+| Bounded Python row generation followed by Spark DataFrame creation | Sections 3 and 9, with the explicit deployed-boundary note | Exacta | It is described as bounded QA-scale generation, not distributed large-scale generation. |
+| Deterministic identifiers, bounded numeric values, simple timestamps, prefixed strings | Sections 3, 6, 7, and live example in section 12 | Exacta | The live example names only the strategies actually exercised; other strategies remain local or future. |
+| Local empirical/weighted inputs and null-rate behavior | Sections 4, 5, and 8 | Qualified | The article separates local API support from the Databricks example and does not imply live profile-backed execution. |
+| Fully qualified Delta output with explicit replacement | Sections 2.2, 11, 12, and 14 | Exacta | Append, fail-if-exists, artifact reuse, and cross-system repair are not claimed. |
+| Printed receipt/manifest fields | Section 12 and manifest discussion in section 14 | Exacta | Printed evidence is distinguished from durable Delta/Lakebase persistence. |
+| Separate structural validator | Sections 11, 13, and final validation-status section | Exacta | The article explicitly excludes full statistical, privacy, relational, and publication validation. |
+| Negative approved=false path | Sections 2, 9, 11, and validation status | Exacta | It is a generator guard, not a claim of complete UC authorization testing. |
+| Successful rerun under replacement policy | Section 14 | Exacta | It is not described as idempotent reuse or partial-failure repair. |
+| Future architecture retained from the SDA series | Boundary note after section 2 and final validation-status section | Exacta | Future requirements use “should/must” language and are explicitly excluded from present-tense v1 claims. |
 
-1. Make the approved plan fingerprint contract identical between plan creation and `generate_spark.py`, then rerun a successful Databricks generation.
-2. Implement or remove from the article the claimed distributed Spark generation, profile-based numerical sampling, weighted/exact allocation, temporal models, conditional nulls, schema casting, manifest persistence, Lakebase registration, and idempotent reconciliation.
-3. Add live tests for success, rejected plans, invalid strategies, bounds, permissions, output schema, source immutability, validation handoff, retry, cleanup, and rerun.
-4. Re-run this matrix after each implementation or article revision and update the article so it states only behavior demonstrated in Databricks with profile `sda`.
+## Reproducible commands and invocation boundary
 
-## Current verdict
+The validated deployment commands are:
 
-**IMPLEMENTED V1, ARTICLE REVISED, FULL ARTICLE SCOPE NOT READY.** The bounded v1 path is now tested live, but the broader claims listed as future work are intentionally not presented as implemented capabilities.
+```text
+databricks bundle validate -t dev --profile sda
+databricks bundle deploy -t dev --profile sda
+```
 
-## Reproducible live evidence
+The live jobs were invoked with explicit `jobs run-now` parameters so that the approved
+plan identity, row count, maximum row count, output table, and run identifier were not
+lost in shell/bundle parameter propagation. An earlier `bundle run` attempt propagated
+empty plan parameters and failed with `plan_id must not be empty`; that is recorded as a
+harness invocation limitation, not as a generator behavior.
 
-- Bundle validation and deployment completed with `databricks bundle deploy -t dev --profile sda`.
-- Standalone generation completed successfully for a 25-row `customers` table in Delta.
-- `validate_generated` completed successfully against that output with the expected count and required columns.
-- A rerun with the same plan and output table completed successfully, exercising the current explicit replacement policy.
-- A live run with `approved=false` failed before writing with `generation requires approved=true`.
-- The original fingerprint mismatch was reproduced, fixed by including `requested_row_count` in plan reconstruction, and covered by a local regression test.
-- A `bundle run` attempt with incorrectly propagated parameters failed with empty plan identifiers; this is recorded as a harness invocation limitation. Direct `jobs run-now` with explicit job parameters is the validated invocation.
+## Iteration checkpoints
 
-The revised DOCX is written beside the source article as `🤖 SDA 10 Generating Synthetic Tables with Realistic Distributions and Null Behavior - Revised v2.docx`. The final DOCX was opened in Microsoft Word for visual QA: Word reports 18 pages, the first page shows the revised title and bounded-v1 scope, and the final page shows the explicit future-work boundary without visible clipping or overlap. The bundled headless renderer remains unavailable because the runtime does not expose LibreOffice `soffice.exe`.
+The matrix was rerun after the implementation fix, after the first article rewrite,
+after the v3 boundary clarification, and after the v4 editorial pass. The final pass
+rechecked: claim scope, code linkage, local evidence, live Databricks evidence, success
+and negative paths, rerun semantics, cleanup boundaries, article placement, and visual
+rendering. No remaining present-tense article claim requires an unexecuted v1 feature.
+
+## Final closure
+
+The article deliberately does not claim that the broader original design is complete.
+It now describes exactly the bounded system that exists and has been tested, while
+retaining future work with explicit limits. The matrix is therefore bidirectionally
+consistent for the delivered v1 scope:
+
+1. Every present-tense article capability maps to implementation and evidence.
+2. Every implemented/tested capability is described in the appropriate article
+   section with its observed boundary.
+3. Unimplemented or untested capabilities are not presented as delivered.
