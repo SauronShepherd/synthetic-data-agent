@@ -106,7 +106,7 @@ harness invocation limitation, not as a generator behavior.
 ## Iteration checkpoints
 
 The matrix was rerun after the implementation fix, after the first article rewrite,
-after the v3 boundary clarification, and after the v4 editorial pass. The final pass
+after the v3 boundary clarification, and after the v4 and v5 editorial passes. The final pass
 rechecked: claim scope, code linkage, local evidence, live Databricks evidence, success
 and negative paths, rerun semantics, cleanup boundaries, article placement, and visual
 rendering. No remaining present-tense article claim requires an unexecuted v1 feature.
