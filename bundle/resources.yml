@@ -608,6 +608,132 @@ resources:
             dependencies:
               - ../dist/*.whl
 
+    relational_error_smoke:
+      name: "[${bundle.target}] SDA Relational Error Smoke"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      tags:
+        workload: sda
+        stage: relational-error-validation
+      parameters:
+        - name: fixture
+          default: sda11-errors
+        - name: run_id
+          default: sda11-errors
+        - name: staging_schema
+          default: ${var.catalog_name}.sda_integration
+        - name: target_catalog
+          default: ${var.catalog_name}
+        - name: target_schema
+          default: sda_integration
+      tasks:
+        - task_key: relational_error_smoke
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/relational_error_smoke_spark.py
+            parameters:
+              - --fixture
+              - "{{job.parameters.fixture}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --staging-schema
+              - "{{job.parameters.staging_schema}}"
+              - --target-catalog
+              - "{{job.parameters.target_catalog}}"
+              - --target-schema
+              - "{{job.parameters.target_schema}}"
+          environment_key: relational_error_smoke_environment
+      environments:
+        - environment_key: relational_error_smoke_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
+    relational_generator:
+      name: "[${bundle.target}] SDA Relational Generator"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      tags:
+        workload: sda
+        stage: relational-generation
+      parameters:
+        - name: fixture
+          default: sda11-smoke
+        - name: run_id
+          default: sda11-smoke
+        - name: staging_schema
+          default: ${var.catalog_name}.sda_integration
+        - name: manifest_table
+          default: ${var.catalog_name}.profiles.relational_generation_manifest
+        - name: report_table
+          default: ${var.catalog_name}.profiles.relational_validation_reports
+        - name: target_catalog
+          default: ${var.catalog_name}
+        - name: target_schema
+          default: sda_integration
+        - name: plan_fingerprint
+          default: ""
+        - name: approved
+          default: "false"
+        - name: approve
+          default: "false"
+      tasks:
+        - task_key: generate_relational
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/relational_generate_spark.py
+            parameters:
+              - --fixture
+              - "{{job.parameters.fixture}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --staging-schema
+              - "{{job.parameters.staging_schema}}"
+              - --manifest-table
+              - "{{job.parameters.manifest_table}}"
+              - --target-catalog
+              - "{{job.parameters.target_catalog}}"
+              - --target-schema
+              - "{{job.parameters.target_schema}}"
+              - --plan-fingerprint
+              - "{{job.parameters.plan_fingerprint}}"
+              - --approved
+              - "{{job.parameters.approved}}"
+          environment_key: relational_generator_environment
+        - task_key: validate_relational
+          depends_on:
+            - task_key: generate_relational
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/relational_validate_spark.py
+            parameters:
+              - --fixture
+              - "{{job.parameters.fixture}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --staging-schema
+              - "{{job.parameters.staging_schema}}"
+              - --manifest-table
+              - "{{job.parameters.manifest_table}}"
+              - --report-table
+              - "{{job.parameters.report_table}}"
+              - --target-catalog
+              - "{{job.parameters.target_catalog}}"
+              - --target-schema
+              - "{{job.parameters.target_schema}}"
+              - --approve
+              - "{{job.parameters.approve}}"
+          environment_key: relational_validator_environment
+      environments:
+        - environment_key: relational_generator_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+        - environment_key: relational_validator_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
     validate_generated:
       name: "[${bundle.target}] SDA Validate Generated Data"
       max_concurrent_runs: 1
