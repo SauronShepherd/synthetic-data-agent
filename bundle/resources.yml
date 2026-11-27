@@ -734,6 +734,59 @@ resources:
             dependencies:
               - ../dist/*.whl
 
+    topology_generator:
+      name: "[${bundle.target}] SDA Topology Generator"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      tags:
+        workload: sda
+        stage: topology-generation
+      parameters:
+        - name: fixture
+          default: sda12-smoke
+        - name: run_id
+          default: sda12-smoke
+        - name: staging_schema
+          default: ${var.catalog_name}.sda_integration
+        - name: plan_fingerprint
+          default: sda12-plan
+        - name: node_count
+          default: "8"
+        - name: edge_count
+          default: "8"
+        - name: acyclic
+          default: "false"
+        - name: bipartite
+          default: "false"
+      tasks:
+        - task_key: generate_topology
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/topology_generate_spark.py
+            parameters:
+              - --fixture
+              - "{{job.parameters.fixture}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --staging-schema
+              - "{{job.parameters.staging_schema}}"
+              - --plan-fingerprint
+              - "{{job.parameters.plan_fingerprint}}"
+              - --node-count
+              - "{{job.parameters.node_count}}"
+              - --edge-count
+              - "{{job.parameters.edge_count}}"
+              - --acyclic
+              - "{{job.parameters.acyclic}}"
+              - --bipartite
+              - "{{job.parameters.bipartite}}"
+          environment_key: topology_generator_environment
+      environments:
+        - environment_key: topology_generator_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
     validate_generated:
       name: "[${bundle.target}] SDA Validate Generated Data"
       max_concurrent_runs: 1
