@@ -787,6 +787,157 @@ resources:
             dependencies:
               - ../dist/*.whl
 
+    noise_generator:
+      name: "[${bundle.target}] SDA Controlled Noise Generator"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      tags:
+        workload: sda
+        stage: noise-generation
+      parameters:
+        - name: fixture
+          default: sda13-smoke
+        - name: run_id
+          default: sda13-smoke
+        - name: staging_schema
+          default: ${var.catalog_name}.sda_integration
+        - name: noise_id
+          default: sda13-noise
+        - name: profile
+          default: qa
+        - name: defect_type
+          default: malformed_value
+        - name: budget
+          default: "0"
+        - name: rate
+          default: ""
+        - name: seed
+          default: "1729"
+        - name: row_count
+          default: "40"
+      tasks:
+        - task_key: generate_noise
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/noise_generate_spark.py
+            parameters:
+              - --fixture
+              - "{{job.parameters.fixture}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --staging-schema
+              - "{{job.parameters.staging_schema}}"
+              - --noise-id
+              - "{{job.parameters.noise_id}}"
+              - --profile
+              - "{{job.parameters.profile}}"
+              - --defect-type
+              - "{{job.parameters.defect_type}}"
+              - --budget
+              - "{{job.parameters.budget}}"
+              - --rate
+              - "{{job.parameters.rate}}"
+              - --seed
+              - "{{job.parameters.seed}}"
+              - --row-count
+              - "{{job.parameters.row_count}}"
+          environment_key: noise_generator_environment
+      environments:
+        - environment_key: noise_generator_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
+    quality_validator:
+      name: "[${bundle.target}] SDA Quality Validator"
+      max_concurrent_runs: 1
+      timeout_seconds: 7200
+      tags:
+        workload: sda
+        stage: quality-validation
+      parameters:
+        - name: fixture
+          default: sda14-smoke
+        - name: run_id
+          default: sda14-smoke
+        - name: baseline_table
+          default: sda_dev.sda_integration.sda13_clean__sda13_real_20261127
+        - name: candidate_table
+          default: sda_dev.sda_integration.sda13_noisy__sda13_real_20261127
+        - name: report_table
+          default: sda_dev.sda_integration.sda14_quality_reports
+        - name: expected_count
+          default: "40"
+        - name: expected_defects
+          default: "4"
+        - name: intended_use
+          default: qa
+      tasks:
+        - task_key: validate_quality
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/quality_validate_spark.py
+            parameters:
+              - --fixture
+              - "{{job.parameters.fixture}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --baseline-table
+              - "{{job.parameters.baseline_table}}"
+              - --candidate-table
+              - "{{job.parameters.candidate_table}}"
+              - --report-table
+              - "{{job.parameters.report_table}}"
+              - --expected-count
+              - "{{job.parameters.expected_count}}"
+              - --expected-defects
+              - "{{job.parameters.expected_defects}}"
+              - --intended-use
+              - "{{job.parameters.intended_use}}"
+          environment_key: quality_validator_environment
+      environments:
+        - environment_key: quality_validator_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
+    operational_contract_smoke:
+      name: "[${bundle.target}] SDA Operational Contract Smoke"
+      max_concurrent_runs: 1
+      timeout_seconds: 3600
+      tags:
+        workload: sda
+        stage: governance-contracts
+      parameters:
+        - name: contract
+          default: genie
+        - name: run_id
+          default: sda15-smoke
+        - name: output_table
+          default: ${var.catalog_name}.sda_integration.sda_operational_contracts
+        - name: human_approved
+          default: "true"
+      tasks:
+        - task_key: operational_contract
+          spark_python_task:
+            python_file: ../src/sda/job_entrypoints/operational_contract_smoke_spark.py
+            parameters:
+              - --contract
+              - "{{job.parameters.contract}}"
+              - --run-id
+              - "{{job.parameters.run_id}}"
+              - --output-table
+              - "{{job.parameters.output_table}}"
+              - --human-approved
+              - "{{job.parameters.human_approved}}"
+          environment_key: operational_contract_environment
+      environments:
+        - environment_key: operational_contract_environment
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
     validate_generated:
       name: "[${bundle.target}] SDA Validate Generated Data"
       max_concurrent_runs: 1
